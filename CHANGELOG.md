@@ -6,6 +6,25 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [0.4.1] — 2026-07-02
+
+The Blood Moon Rises content update — everything the game update added,
+except the quest goal itself (staged; see below).
+
+### Added
+- **Maggot King.** The quest's boss is fully trackable: a Boss Kill Count goal
+  with live KC tracking and its pet (Maggot marquess) as the card icon — plus
+  26 of its drops tagged with a *Maggot King* source, so an item goal for a
+  Venator fang or a Tarnished ring auto-carries where it comes from.
+- **Quest point total → 339.** The Blood Moon Rises awards 4 QP, so Quest Cape
+  / max-QP account goals (and the Tears of Guthix window) now target 339.
+- **The Blood Moon Rises quest goal — staged.** The quest's requirement data
+  ships in this release but stays dormant: RuneLite hasn't yet cut a client
+  release containing the quest, and the plugin now tolerates forward-declared
+  quests instead of failing. The quest becomes addable automatically once the
+  Plugin Hub builds against a RuneLite release that includes it — no plugin
+  update needed.
+
 ## [0.4.0] — 2026-06-23
 
 ### Added

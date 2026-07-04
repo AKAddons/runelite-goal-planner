@@ -90,7 +90,7 @@ Cards update from game state on their own: skills by XP, quests by completion st
 
 ### Account metrics
 
-Sixteen account-wide metrics — Quest Points, Total/Combat Level, CA Points, Slayer Points, Kudos, Collection Log Slots, Diary Tiers, Tears of Guthix PB, and more. The Collection Log ceiling is read **live from the client** (it grows as slots are added); Quest Points / ToG PB use a wiki-authoritative max (335). Targets *above* the max are allowed — they keep tracking until the game catches up. League metrics only appear on leagues profiles.
+Sixteen account-wide metrics — Quest Points, Total/Combat Level, CA Points, Slayer Points, Kudos, Collection Log Slots, Diary Tiers, Tears of Guthix PB, and more. The Collection Log ceiling is read **live from the client** (it grows as slots are added); Quest Points / ToG PB use a wiki-authoritative max (339). Targets *above* the max are allowed — they keep tracking until the game catches up. League metrics only appear on leagues profiles.
 
 ![Account goal dialog with a Max shortcut](docs/img/account-metrics.gif)
 
