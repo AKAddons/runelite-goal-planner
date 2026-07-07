@@ -462,17 +462,43 @@ class GoalContextMenuBuilder
 			menu.add(editKc);
 		}
 
-		// Loadout Lab link-in: search the gear optimizer for this boss (posts
-		// a cross-plugin message; the receiver's lookup is punctuation- and
-		// level-suffix tolerant, so the BossKillData display name goes as-is).
-		// Hidden when the plugin isn't installed/enabled.
+		// Loadout Lab link-in, install-aware (three states):
+		//   ENABLED            - "Search in Loadout Lab" posts the cross-plugin
+		//                        message (the receiver's lookup is punctuation-
+		//                        and level-suffix tolerant, so the BossKillData
+		//                        display name goes as-is).
+		//   NOT_INSTALLED      - "Get Loadout Lab..." opens its Plugin Hub page.
+		//   INSTALLED_DISABLED - grayed nudge; a hub link would be wrong advice.
+		// Hidden only when the support isn't wired (panels built in tests).
 		if (goal.getType() == GoalType.BOSS && goal.getBossName() != null
-			&& !goal.getBossName().isEmpty() && panel.canSearchLoadoutLab())
+			&& !goal.getBossName().isEmpty())
 		{
-			JMenuItem searchLab = new JMenuItem("Search in Loadout Lab", loadoutLabIcon());
-			final String monster = goal.getBossName();
-			searchLab.addActionListener(e -> panel.searchLoadoutLab(monster));
-			menu.add(searchLab);
+			GoalPanel.LoadoutLabState labState = panel.loadoutLabState();
+			if (labState == GoalPanel.LoadoutLabState.ENABLED)
+			{
+				JMenuItem searchLab = new JMenuItem("Search in Loadout Lab", loadoutLabIcon());
+				final String monster = goal.getBossName();
+				searchLab.addActionListener(e -> panel.searchLoadoutLab(monster));
+				menu.add(searchLab);
+			}
+			else if (labState == GoalPanel.LoadoutLabState.NOT_INSTALLED)
+			{
+				JMenuItem getLab = new JMenuItem("Get Loadout Lab...", loadoutLabIcon());
+				getLab.setToolTipText("Opens the Loadout Lab page on the Plugin Hub in your browser");
+				// The plugin's future hub page (internal name loadout-lab). It
+				// isn't on the hub yet, so this 404s until it ships -
+				// intentional; do not gate on it.
+				getLab.addActionListener(e -> net.runelite.client.util.LinkBrowser.browse(
+					"https://runelite.net/plugin-hub/show/loadout-lab"));
+				menu.add(getLab);
+			}
+			else if (labState == GoalPanel.LoadoutLabState.INSTALLED_DISABLED)
+			{
+				JMenuItem labDisabled = new JMenuItem("Loadout Lab is installed but disabled", loadoutLabIcon());
+				labDisabled.setEnabled(false);
+				menu.add(labDisabled);
+			}
+			// null state: support not wired - no entry.
 		}
 
 		// Tag management - routes through the shared TagPickerDialog so the

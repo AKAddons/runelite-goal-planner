@@ -207,8 +207,9 @@ public class GoalPlannerPlugin extends Plugin
 		panel.setShareSupport(shareCodec, () -> localPlayerName, savedPlanStore);
 
 		// Loadout Lab link-in: boss cards offer "Search in Loadout Lab" when
-		// that plugin is installed and enabled.
-		panel.setLoadoutLabSupport(this::isLoadoutLabEnabled, this::searchLoadoutLab);
+		// that plugin is enabled, a Plugin Hub link when it isn't installed,
+		// and a disabled nudge when it's installed but turned off.
+		panel.setLoadoutLabSupport(this::loadoutLabState, this::searchLoadoutLab);
 
 		// Wire the API's UI-refresh hooks with debouncing.
 		// Multiple rapid onGoalsChanged calls (e.g. tracker updates for
@@ -351,10 +352,19 @@ public class GoalPlannerPlugin extends Plugin
 				"source", "goal-planner"))));
 	}
 
-	/** True when the Loadout Lab plugin is installed and enabled. */
-	private boolean isLoadoutLabEnabled()
+	/**
+	 * Loadout Lab's install/enable state, resolved fresh on every call (so a
+	 * mid-session install or toggle is picked up at the next menu open).
+	 */
+	private GoalPanel.LoadoutLabState loadoutLabState()
 	{
-		return isPluginEnabled("Loadout Lab");
+		if (isPluginEnabled("Loadout Lab"))
+		{
+			return GoalPanel.LoadoutLabState.ENABLED;
+		}
+		return isPluginInstalled("Loadout Lab")
+			? GoalPanel.LoadoutLabState.INSTALLED_DISABLED
+			: GoalPanel.LoadoutLabState.NOT_INSTALLED;
 	}
 
 	private boolean isPluginEnabled(String name)
@@ -365,6 +375,19 @@ public class GoalPlannerPlugin extends Plugin
 		for (net.runelite.client.plugins.Plugin p : pluginManager.getPlugins())
 		{
 			if (name.equals(p.getName()) && pluginManager.isPluginEnabled(p))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** True when ANY plugin with this name is loaded, enabled or not. */
+	private boolean isPluginInstalled(String name)
+	{
+		for (net.runelite.client.plugins.Plugin p : pluginManager.getPlugins())
+		{
+			if (name.equals(p.getName()))
 			{
 				return true;
 			}

@@ -411,24 +411,38 @@ public class GoalPanel extends PluginPanel
 		this.savedPlanStore = savedPlanStore;
 	}
 
-	// Loadout Lab link-in - availability gate + search callback; null until
+	/** Loadout Lab's install/enable state, resolved fresh at menu-open time. */
+	public enum LoadoutLabState
+	{
+		/** Some copy of the plugin is enabled - the link-in works. */
+		ENABLED,
+		/** Installed but no copy enabled - nudge; a hub link would be wrong advice. */
+		INSTALLED_DISABLED,
+		/** No plugin named Loadout Lab at all - offer its Plugin Hub page. */
+		NOT_INSTALLED
+	}
+
+	// Loadout Lab link-in - state supplier + search callback; null until
 	// the plugin wires it (dialog-only tests leave it unset, hiding the item).
-	private java.util.function.BooleanSupplier loadoutLabAvailable;
+	private java.util.function.Supplier<LoadoutLabState> loadoutLabStateSupplier;
 	private java.util.function.Consumer<String> searchLoadoutLabCallback;
 
 	public void setLoadoutLabSupport(
-		java.util.function.BooleanSupplier loadoutLabAvailable,
+		java.util.function.Supplier<LoadoutLabState> loadoutLabState,
 		java.util.function.Consumer<String> searchLoadoutLab)
 	{
-		this.loadoutLabAvailable = loadoutLabAvailable;
+		this.loadoutLabStateSupplier = loadoutLabState;
 		this.searchLoadoutLabCallback = searchLoadoutLab;
 	}
 
-	/** True when the Loadout Lab link-in is wired and the plugin is enabled. */
-	boolean canSearchLoadoutLab()
+	/**
+	 * Loadout Lab's current state, or null when the link-in isn't wired
+	 * (panels built in tests) - null hides the menu entry entirely.
+	 */
+	LoadoutLabState loadoutLabState()
 	{
-		return loadoutLabAvailable != null && searchLoadoutLabCallback != null
-			&& loadoutLabAvailable.getAsBoolean();
+		return loadoutLabStateSupplier != null && searchLoadoutLabCallback != null
+			? loadoutLabStateSupplier.get() : null;
 	}
 
 	/** Ask Loadout Lab to search its optimizer for a monster (display name). */

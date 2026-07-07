@@ -206,7 +206,11 @@ The [goalplanner-share-mcp](https://github.com/ajkatz/goalplanner-share-mcp) ser
 
 ### Search in Loadout Lab
 
-If the [Loadout Lab](https://github.com/ajkatz/runelite-loadout-lab) plugin is installed and enabled, right-clicking a boss goal offers **Search in Loadout Lab** — it opens that boss in Loadout Lab's gear optimizer so you can plan the best-in-slot setup you already own for the kill. The item only appears when Loadout Lab is on; no setup needed.
+Right-clicking a boss goal links out to the [Loadout Lab](https://github.com/ajkatz/runelite-loadout-lab) plugin, and the menu adapts to whether you have it:
+
+- **Installed and enabled** — **Search in Loadout Lab** opens that boss in Loadout Lab's gear optimizer, so you can plan the best-in-slot setup you already own for the kill.
+- **Not installed** — **Get Loadout Lab...** opens the plugin's Plugin Hub page in your browser.
+- **Installed but disabled** — a grayed *Loadout Lab is installed but disabled* reminder appears instead (turn it back on in the plugin list).
 
 ---
 
