@@ -409,6 +409,21 @@
       "tests": [],
       "since": "0.3.0",
       "notes": "Lives in the goalplanner-share-mcp repo; its parity tests decode real plugin codes both directions."
+    },
+    {
+      "id": "loadout-lab-linkin",
+      "title": "Search in Loadout Lab",
+      "group": "Sharing",
+      "anchor": "search-in-loadout-lab",
+      "media": null,
+      "code": [
+        "GoalPlannerPlugin.java",
+        "ui/GoalContextMenuBuilder.java",
+        "ui/GoalPanel.java"
+      ],
+      "tests": [],
+      "since": "0.5.0",
+      "notes": "Outbound PluginMessage link-in: boss goal cards -> Loadout Lab (namespace loadoutlab, name search, data monster+source). Menu item hidden unless a plugin named Loadout Lab is installed+enabled (ANY same-named copy counts - hub and sideloaded dev copies coexist). Fire-and-forget; no fallback. Pure Swing menu wiring - verified manually against the receiver."
     }
   ]
 }

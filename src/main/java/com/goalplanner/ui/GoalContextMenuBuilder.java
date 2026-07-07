@@ -462,6 +462,19 @@ class GoalContextMenuBuilder
 			menu.add(editKc);
 		}
 
+		// Loadout Lab link-in: search the gear optimizer for this boss (posts
+		// a cross-plugin message; the receiver's lookup is punctuation- and
+		// level-suffix tolerant, so the BossKillData display name goes as-is).
+		// Hidden when the plugin isn't installed/enabled.
+		if (goal.getType() == GoalType.BOSS && goal.getBossName() != null
+			&& !goal.getBossName().isEmpty() && panel.canSearchLoadoutLab())
+		{
+			JMenuItem searchLab = new JMenuItem("Search in Loadout Lab", loadoutLabIcon());
+			final String monster = goal.getBossName();
+			searchLab.addActionListener(e -> panel.searchLoadoutLab(monster));
+			menu.add(searchLab);
+		}
+
 		// Tag management - routes through the shared TagPickerDialog so the
 		// single-item and bulk Add Tag flows stay in lockstep (category list,
 		// SKILLING lock, freeform/dropdown switch).
@@ -1764,5 +1777,24 @@ class GoalContextMenuBuilder
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Lazily-loaded 16px Loadout Lab menu icon - a vendored copy of that
+	 * plugin's sidebar art (the user's own art in both repos).
+	 */
+	private static javax.swing.ImageIcon loadoutLabIcon;
+
+	private static javax.swing.ImageIcon loadoutLabIcon()
+	{
+		if (loadoutLabIcon == null)
+		{
+			loadoutLabIcon = new javax.swing.ImageIcon(
+				net.runelite.client.util.ImageUtil.resizeImage(
+					net.runelite.client.util.ImageUtil.loadImageResource(
+						GoalContextMenuBuilder.class, "/icons/loadout_lab.png"),
+					16, 16));
+		}
+		return loadoutLabIcon;
 	}
 }

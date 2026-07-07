@@ -411,6 +411,32 @@ public class GoalPanel extends PluginPanel
 		this.savedPlanStore = savedPlanStore;
 	}
 
+	// Loadout Lab link-in - availability gate + search callback; null until
+	// the plugin wires it (dialog-only tests leave it unset, hiding the item).
+	private java.util.function.BooleanSupplier loadoutLabAvailable;
+	private java.util.function.Consumer<String> searchLoadoutLabCallback;
+
+	public void setLoadoutLabSupport(
+		java.util.function.BooleanSupplier loadoutLabAvailable,
+		java.util.function.Consumer<String> searchLoadoutLab)
+	{
+		this.loadoutLabAvailable = loadoutLabAvailable;
+		this.searchLoadoutLabCallback = searchLoadoutLab;
+	}
+
+	/** True when the Loadout Lab link-in is wired and the plugin is enabled. */
+	boolean canSearchLoadoutLab()
+	{
+		return loadoutLabAvailable != null && searchLoadoutLabCallback != null
+			&& loadoutLabAvailable.getAsBoolean();
+	}
+
+	/** Ask Loadout Lab to search its optimizer for a monster (display name). */
+	void searchLoadoutLab(String monsterName)
+	{
+		if (searchLoadoutLabCallback != null) searchLoadoutLabCallback.accept(monsterName);
+	}
+
 	/** Runs an action on the RuneLite client thread. Defaults to synchronous
 	 *  (direct run) until the plugin wires the real client-thread executor, so
 	 *  panels constructed in tests still function. Used by context-menu /
