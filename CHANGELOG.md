@@ -6,6 +6,20 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [0.4.2] — 2026-07-08
+
+RuneLite shipped **The Blood Moon Rises** in the `1.12.32` client release, so
+the quest goal that was staged dormant in 0.4.1 is now live.
+
+### Added
+- **The Blood Moon Rises quest goal — activated.** With the quest now in the
+  RuneLite `Quest` enum, its requirement row lights up: you can add a quest goal
+  for it and it auto-tracks completion. No action needed from 0.4.1 users beyond
+  updating.
+- **Maggot King requires The Blood Moon Rises.** Adding a Maggot King Boss Kill
+  Count goal now seeds the quest as a prerequisite, so the goal tree reflects
+  that you must finish the quest to reach the boss.
+
 ## [0.4.1] — 2026-07-02
 
 The Blood Moon Rises content update — everything the game update added,
