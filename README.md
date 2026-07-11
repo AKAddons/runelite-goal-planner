@@ -1,8 +1,8 @@
 # OSRS Goal Planner
 
 [![Discord](https://img.shields.io/discord/1494572077448040588?label=discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/CFQsA3fmh7)
-[![License](https://img.shields.io/github/license/ajkatz/runelite-goal-planner)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/ajkatz/runelite-goal-planner)](https://github.com/ajkatz/runelite-goal-planner/releases)
+[![License](https://img.shields.io/github/license/AKAddons/runelite-goal-planner)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/AKAddons/runelite-goal-planner)](https://github.com/AKAddons/runelite-goal-planner/releases)
 
 A RuneLite sidebar plugin that plans and tracks your Old School RuneScape
 goals — skills, quests, diaries, combat achievements, bosses, item grinds,
@@ -206,7 +206,7 @@ The [goalplanner-share-mcp](https://github.com/ajkatz/goalplanner-share-mcp) ser
 
 ### Search in Loadout Lab
 
-Right-clicking a boss goal links out to the [Loadout Lab](https://github.com/ajkatz/runelite-loadout-lab) plugin, and the menu adapts to whether you have it:
+Right-clicking a boss goal links out to the [Loadout Lab](https://github.com/AKAddons/runelite-loadout-lab) plugin, and the menu adapts to whether you have it:
 
 - **Installed and enabled** — **Search in Loadout Lab** opens that boss in Loadout Lab's gear optimizer, so you can plan the best-in-slot setup you already own for the kill.
 - **Installed but disabled** — a grayed *Loadout Lab is installed but disabled* reminder appears instead (turn it back on in the plugin list).
