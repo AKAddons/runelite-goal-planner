@@ -82,6 +82,12 @@ public class GoalPlannerPlugin extends Plugin
 	private GoalPlannerConfig config;
 
 	@Inject
+	private net.runelite.client.eventbus.EventBus eventBus;
+
+	@Inject
+	private net.runelite.client.plugins.PluginManager pluginManager;
+
+	@Inject
 	private ClientToolbar clientToolbar;
 
 	@Inject
@@ -199,6 +205,11 @@ public class GoalPlannerPlugin extends Plugin
 		shareCodec = new ShareCodec(gson);
 		savedPlanStore.load();
 		panel.setShareSupport(shareCodec, () -> localPlayerName, savedPlanStore);
+
+		// Loadout Lab link-in: boss cards offer "Search in Loadout Lab" when
+		// that plugin is enabled, a Plugin Hub link when it isn't installed,
+		// and a disabled nudge when it's installed but turned off.
+		panel.setLoadoutLabSupport(this::loadoutLabState, this::searchLoadoutLab);
 
 		// Wire the API's UI-refresh hooks with debouncing.
 		// Multiple rapid onGoalsChanged calls (e.g. tracker updates for
@@ -322,6 +333,66 @@ public class GoalPlannerPlugin extends Plugin
 				.append(ChatColorType.NORMAL).append(msg)
 				.build());
 		});
+	}
+
+	/**
+	 * Cross-plugin link-in (outbound): ask Loadout Lab to search its gear
+	 * optimizer for a monster, by display name (its PluginMessage contract:
+	 * namespace "loadoutlab", name "search"; the receiver's search is
+	 * punctuation-insensitive and level-suffix tolerant, so display names
+	 * like "K'ril Tsutsaroth" go as-is). Fire-and-forget - unheard if
+	 * Loadout Lab isn't installed or predates the contract.
+	 */
+	private void searchLoadoutLab(String monsterName)
+	{
+		if (monsterName == null || monsterName.isEmpty()) return;
+		clientThread.invokeLater(() -> eventBus.post(new PluginMessage(
+			"loadoutlab", "search", java.util.Map.of(
+				"monster", monsterName,
+				"source", "goal-planner"))));
+	}
+
+	/**
+	 * Loadout Lab's install/enable state, resolved fresh on every call (so a
+	 * mid-session install or toggle is picked up at the next menu open).
+	 */
+	private GoalPanel.LoadoutLabState loadoutLabState()
+	{
+		if (isPluginEnabled("Loadout Lab"))
+		{
+			return GoalPanel.LoadoutLabState.ENABLED;
+		}
+		return isPluginInstalled("Loadout Lab")
+			? GoalPanel.LoadoutLabState.INSTALLED_DISABLED
+			: GoalPanel.LoadoutLabState.NOT_INSTALLED;
+	}
+
+	private boolean isPluginEnabled(String name)
+	{
+		// Same-named plugins can coexist (a hub copy alongside a sideloaded dev
+		// copy); RuneLite runs at most one, so report enabled if ANY copy is -
+		// returning on the first match could hit the disabled loser.
+		for (net.runelite.client.plugins.Plugin p : pluginManager.getPlugins())
+		{
+			if (name.equals(p.getName()) && pluginManager.isPluginEnabled(p))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** True when ANY plugin with this name is loaded, enabled or not. */
+	private boolean isPluginInstalled(String name)
+	{
+		for (net.runelite.client.plugins.Plugin p : pluginManager.getPlugins())
+		{
+			if (name.equals(p.getName()))
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Queue a Goal Planner game-chat message, marshalled to the client thread. */

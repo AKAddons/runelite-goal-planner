@@ -411,6 +411,46 @@ public class GoalPanel extends PluginPanel
 		this.savedPlanStore = savedPlanStore;
 	}
 
+	/** Loadout Lab's install/enable state, resolved fresh at menu-open time. */
+	public enum LoadoutLabState
+	{
+		/** Some copy of the plugin is enabled - the link-in works. */
+		ENABLED,
+		/** Installed but no copy enabled - nudge; a hub link would be wrong advice. */
+		INSTALLED_DISABLED,
+		/** No plugin named Loadout Lab at all - offer its Plugin Hub page. */
+		NOT_INSTALLED
+	}
+
+	// Loadout Lab link-in - state supplier + search callback; null until
+	// the plugin wires it (dialog-only tests leave it unset, hiding the item).
+	private java.util.function.Supplier<LoadoutLabState> loadoutLabStateSupplier;
+	private java.util.function.Consumer<String> searchLoadoutLabCallback;
+
+	public void setLoadoutLabSupport(
+		java.util.function.Supplier<LoadoutLabState> loadoutLabState,
+		java.util.function.Consumer<String> searchLoadoutLab)
+	{
+		this.loadoutLabStateSupplier = loadoutLabState;
+		this.searchLoadoutLabCallback = searchLoadoutLab;
+	}
+
+	/**
+	 * Loadout Lab's current state, or null when the link-in isn't wired
+	 * (panels built in tests) - null hides the menu entry entirely.
+	 */
+	LoadoutLabState loadoutLabState()
+	{
+		return loadoutLabStateSupplier != null && searchLoadoutLabCallback != null
+			? loadoutLabStateSupplier.get() : null;
+	}
+
+	/** Ask Loadout Lab to search its optimizer for a monster (display name). */
+	void searchLoadoutLab(String monsterName)
+	{
+		if (searchLoadoutLabCallback != null) searchLoadoutLabCallback.accept(monsterName);
+	}
+
 	/** Runs an action on the RuneLite client thread. Defaults to synchronous
 	 *  (direct run) until the plugin wires the real client-thread executor, so
 	 *  panels constructed in tests still function. Used by context-menu /

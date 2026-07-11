@@ -409,6 +409,21 @@
       "tests": [],
       "since": "0.3.0",
       "notes": "Lives in the goalplanner-share-mcp repo; its parity tests decode real plugin codes both directions."
+    },
+    {
+      "id": "loadout-lab-linkin",
+      "title": "Search in Loadout Lab",
+      "group": "Sharing",
+      "anchor": "search-in-loadout-lab",
+      "media": null,
+      "code": [
+        "GoalPlannerPlugin.java",
+        "ui/GoalContextMenuBuilder.java",
+        "ui/GoalPanel.java"
+      ],
+      "tests": [],
+      "since": "0.5.0",
+      "notes": "Outbound PluginMessage link-in: boss goal cards -> Loadout Lab (namespace loadoutlab, name search, data monster+source). Install-aware, three states: enabled (ANY same-named copy counts - hub and sideloaded dev copies coexist) -> 'Search in Loadout Lab' posts the message, fire-and-forget; not installed -> 'Get Loadout Lab...' opens its Plugin Hub page via LinkBrowser (URL is the plugin's future hub page, 404s until it ships - intentional); installed but disabled -> grayed non-clickable nudge. Pure Swing menu wiring - verified manually against the receiver."
     }
   ]
 }

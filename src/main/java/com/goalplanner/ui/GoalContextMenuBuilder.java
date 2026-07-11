@@ -462,6 +462,45 @@ class GoalContextMenuBuilder
 			menu.add(editKc);
 		}
 
+		// Loadout Lab link-in, install-aware (three states):
+		//   ENABLED            - "Search in Loadout Lab" posts the cross-plugin
+		//                        message (the receiver's lookup is punctuation-
+		//                        and level-suffix tolerant, so the BossKillData
+		//                        display name goes as-is).
+		//   NOT_INSTALLED      - "Get Loadout Lab..." opens its Plugin Hub page.
+		//   INSTALLED_DISABLED - grayed nudge; a hub link would be wrong advice.
+		// Hidden only when the support isn't wired (panels built in tests).
+		if (goal.getType() == GoalType.BOSS && goal.getBossName() != null
+			&& !goal.getBossName().isEmpty())
+		{
+			GoalPanel.LoadoutLabState labState = panel.loadoutLabState();
+			if (labState == GoalPanel.LoadoutLabState.ENABLED)
+			{
+				JMenuItem searchLab = new JMenuItem("Search in Loadout Lab", loadoutLabIcon());
+				final String monster = goal.getBossName();
+				searchLab.addActionListener(e -> panel.searchLoadoutLab(monster));
+				menu.add(searchLab);
+			}
+			else if (labState == GoalPanel.LoadoutLabState.NOT_INSTALLED)
+			{
+				JMenuItem getLab = new JMenuItem("Get Loadout Lab...", loadoutLabIcon());
+				getLab.setToolTipText("Opens the Loadout Lab page on the Plugin Hub in your browser");
+				// The plugin's future hub page (internal name loadout-lab). It
+				// isn't on the hub yet, so this 404s until it ships -
+				// intentional; do not gate on it.
+				getLab.addActionListener(e -> net.runelite.client.util.LinkBrowser.browse(
+					"https://runelite.net/plugin-hub/show/loadout-lab"));
+				menu.add(getLab);
+			}
+			else if (labState == GoalPanel.LoadoutLabState.INSTALLED_DISABLED)
+			{
+				JMenuItem labDisabled = new JMenuItem("Loadout Lab is installed but disabled", loadoutLabIcon());
+				labDisabled.setEnabled(false);
+				menu.add(labDisabled);
+			}
+			// null state: support not wired - no entry.
+		}
+
 		// Tag management - routes through the shared TagPickerDialog so the
 		// single-item and bulk Add Tag flows stay in lockstep (category list,
 		// SKILLING lock, freeform/dropdown switch).
@@ -1764,5 +1803,24 @@ class GoalContextMenuBuilder
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Lazily-loaded 16px Loadout Lab menu icon - a vendored copy of that
+	 * plugin's sidebar art (the user's own art in both repos).
+	 */
+	private static javax.swing.ImageIcon loadoutLabIcon;
+
+	private static javax.swing.ImageIcon loadoutLabIcon()
+	{
+		if (loadoutLabIcon == null)
+		{
+			loadoutLabIcon = new javax.swing.ImageIcon(
+				net.runelite.client.util.ImageUtil.resizeImage(
+					net.runelite.client.util.ImageUtil.loadImageResource(
+						GoalContextMenuBuilder.class, "/icons/loadout_lab.png"),
+					16, 16));
+		}
+		return loadoutLabIcon;
 	}
 }
