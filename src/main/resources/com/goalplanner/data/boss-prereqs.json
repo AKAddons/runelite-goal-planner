@@ -875,5 +875,16 @@
     "accountReqs": [],
     "bossKills": [],
     "alternatives": []
+  },
+  "Maggot King": {
+    "skills": [],
+    "unlocks": [],
+    "quests": [
+      "THE_BLOOD_MOON_RISES"
+    ],
+    "itemReqs": [],
+    "accountReqs": [],
+    "bossKills": [],
+    "alternatives": []
   }
 }

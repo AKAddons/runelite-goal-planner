@@ -67,7 +67,7 @@ eventBus.post(new PluginMessage(
 Goal Planner decodes the code and imports the goals into a new user section.
 Build codes with the `ShareCodec` / `ShareBundle` classes in
 `com.goalplanner.share`, or with the
-[goalplanner-share-mcp](https://github.com/ajkatz/goalplanner-share-mcp)
+[goalplanner-share-mcp](https://github.com/AKAddons/goalplanner-share-mcp)
 server.
 
 ### Share wire format
@@ -92,6 +92,24 @@ service, requirement resolvers, OR-group seeding, and integration flows for
 deep prereq chains. New code that adds public API methods ships with tests in
 the same change. See [TESTING.md](../TESTING.md) for the fixture pattern,
 mock-vs-fake rules, and the MockClient thread-affinity caveat.
+
+### Testing cross-plugin link-ins locally
+
+`./gradlew run` (the dev client) also loads **companion plugin jars** dropped
+into `dev-plugins/` (gitignored): the dev main
+(`GoalPlannerPluginTest.COMPANION_PLUGINS`) reflectively loads known plugin
+classes when their jar is on the classpath. This is how a link-in can be
+tested end-to-end before (or without) a hub install — e.g. a local Loadout
+Lab build receiving our "search" PluginMessage in the same client.
+
+**Gotcha — hub copies conflict with dev-plugins copies.** The dev client uses
+your real RuneLite profile, so a plugin installed from the Plugin Hub loads
+*alongside* the same-named jar from `dev-plugins/`, and RuneLite disables one
+same-name plugin in favor of the other (hub externals start first and win).
+Symptom: the link-in menu item shows, but the click lands in the hub build
+without the inbound handler - a silent no-op. Before testing, disable (or
+uninstall) the hub copy of any plugin you're overriding in `dev-plugins/`;
+remember that hub install state is shared with your main client.
 
 ## Documentation stays in lockstep
 

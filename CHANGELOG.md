@@ -6,6 +6,27 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [0.4.2] — 2026-07-11
+
+RuneLite shipped **The Blood Moon Rises** in the `1.12.32` client release, so
+the quest goal that was staged dormant in 0.4.1 is now live — and boss cards
+now link out to Loadout Lab.
+
+### Added
+- **The Blood Moon Rises quest goal — activated.** With the quest now in the
+  RuneLite `Quest` enum, its requirement row lights up: you can add a quest goal
+  for it and it auto-tracks completion. No action needed from 0.4.1 users beyond
+  updating.
+- **Maggot King requires The Blood Moon Rises.** Adding a Maggot King Boss Kill
+  Count goal now seeds the quest as a prerequisite, so the goal tree reflects
+  that you must finish the quest to reach the boss.
+- **"Search in Loadout Lab" on boss cards.** Right-click any Boss Kill Count
+  goal to open that boss in Loadout Lab (our gear optimizer plugin): it computes
+  the best set you actually own for the fight. The menu entry is install-aware —
+  with Loadout Lab enabled it searches directly; installed but disabled, it
+  says so; and if you don't have Loadout Lab, nothing appears — your menu
+  stays clean.
+
 ## [0.4.1] — 2026-07-02
 
 The Blood Moon Rises content update — everything the game update added,

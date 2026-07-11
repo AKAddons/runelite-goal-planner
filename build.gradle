@@ -36,6 +36,11 @@ dependencies {
 
 	testImplementation group: 'net.runelite', name:'client', version: runeLiteVersion
 	testImplementation group: 'net.runelite', name:'jshell', version: runeLiteVersion
+
+	// Dev-only: hub-plugin jars dropped into dev-plugins/ (gitignored) join the
+	// `run` client, so cross-plugin integrations (Quest Helper etc.) can be
+	// tested locally. The dev main loads known plugin classes reflectively.
+	testRuntimeOnly fileTree(dir: 'dev-plugins', include: '*.jar')
 }
 
 tasks.named('test', Test) {
@@ -43,7 +48,7 @@ tasks.named('test', Test) {
 }
 
 group = 'com.goalplanner'
-version = '0.4.1'
+version = '0.4.2'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
