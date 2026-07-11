@@ -23,9 +23,9 @@ now link out to Loadout Lab.
 - **"Search in Loadout Lab" on boss cards.** Right-click any Boss Kill Count
   goal to open that boss in Loadout Lab (our gear optimizer plugin): it computes
   the best set you actually own for the fight. The menu entry is install-aware —
-  with Loadout Lab enabled it searches directly; not installed, it offers the
-  Plugin Hub page; installed but disabled, it says so instead of giving wrong
-  advice.
+  with Loadout Lab enabled it searches directly; installed but disabled, it
+  says so; and if you don't have Loadout Lab, nothing appears — your menu
+  stays clean.
 
 ## [0.4.1] — 2026-07-02
 

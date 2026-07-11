@@ -207,8 +207,8 @@ public class GoalPlannerPlugin extends Plugin
 		panel.setShareSupport(shareCodec, () -> localPlayerName, savedPlanStore);
 
 		// Loadout Lab link-in: boss cards offer "Search in Loadout Lab" when
-		// that plugin is enabled, a Plugin Hub link when it isn't installed,
-		// and a disabled nudge when it's installed but turned off.
+		// that plugin is enabled, a disabled nudge when it's installed but
+		// turned off, and nothing at all when it isn't installed (no upsell).
 		panel.setLoadoutLabSupport(this::loadoutLabState, this::searchLoadoutLab);
 
 		// Wire the API's UI-refresh hooks with debouncing.
