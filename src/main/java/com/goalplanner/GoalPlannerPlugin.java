@@ -358,13 +358,8 @@ public class GoalPlannerPlugin extends Plugin
 	 */
 	private GoalPanel.LoadoutLabState loadoutLabState()
 	{
-		if (isPluginEnabled("Loadout Lab"))
-		{
-			return GoalPanel.LoadoutLabState.ENABLED;
-		}
-		return isPluginInstalled("Loadout Lab")
-			? GoalPanel.LoadoutLabState.INSTALLED_DISABLED
-			: GoalPanel.LoadoutLabState.NOT_INSTALLED;
+		return GoalPanel.LoadoutLabState.resolve(
+			isPluginEnabled("Loadout Lab"), isPluginInstalled("Loadout Lab"));
 	}
 
 	private boolean isPluginEnabled(String name)

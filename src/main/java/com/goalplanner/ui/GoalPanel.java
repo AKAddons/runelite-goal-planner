@@ -419,7 +419,20 @@ public class GoalPanel extends PluginPanel
 		/** Installed but no copy enabled - nudge; a hub link would be wrong advice. */
 		INSTALLED_DISABLED,
 		/** No plugin named Loadout Lab at all - offer its Plugin Hub page. */
-		NOT_INSTALLED
+		NOT_INSTALLED;
+
+		/**
+		 * Maps the two plugin-manager facts to the menu state. Enabled wins
+		 * over installed (an enabled copy is necessarily installed).
+		 */
+		public static LoadoutLabState resolve(boolean anyCopyEnabled, boolean anyCopyInstalled)
+		{
+			if (anyCopyEnabled)
+			{
+				return ENABLED;
+			}
+			return anyCopyInstalled ? INSTALLED_DISABLED : NOT_INSTALLED;
+		}
 	}
 
 	// Loadout Lab link-in - state supplier + search callback; null until
