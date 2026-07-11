@@ -67,7 +67,7 @@ eventBus.post(new PluginMessage(
 Goal Planner decodes the code and imports the goals into a new user section.
 Build codes with the `ShareCodec` / `ShareBundle` classes in
 `com.goalplanner.share`, or with the
-[goalplanner-share-mcp](https://github.com/ajkatz/goalplanner-share-mcp)
+[goalplanner-share-mcp](https://github.com/AKAddons/goalplanner-share-mcp)
 server.
 
 ### Share wire format
