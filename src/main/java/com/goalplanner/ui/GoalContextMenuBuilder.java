@@ -1875,6 +1875,7 @@ class GoalContextMenuBuilder
 						api.createDerivedRepeatGoal(goal.getId(), period, chunk, null)));
 					perPeriod.add(item);
 				}
+				perPeriod.add(customItem(goal, period, null, "XP"));
 				root.add(perPeriod);
 			}
 			menu.add(root);
@@ -1913,6 +1914,7 @@ class GoalContextMenuBuilder
 							goal.getId(), period, chunk, activity.getName())));
 					perPeriod.add(item);
 				}
+				perPeriod.add(customItem(goal, period, activity.getName(), "kills"));
 				perActivity.add(perPeriod);
 			}
 			if (perActivity != root)
@@ -1921,5 +1923,51 @@ class GoalContextMenuBuilder
 			}
 		}
 		menu.add(root);
+	}
+
+	/**
+	 * "Custom..." entry: the presets cover the common sizes, but the right chunk
+	 * depends on how long the player actually plays, which no preset can know.
+	 * Rejects non-numeric and non-positive input rather than silently doing
+	 * nothing - a chunk of 0 would target the current value exactly.
+	 */
+	private JMenuItem customItem(com.goalplanner.model.Goal goal,
+		com.goalplanner.model.RepeatPeriod period, String activityName, String unit)
+	{
+		JMenuItem custom = new JMenuItem("Custom...");
+		custom.addActionListener(e -> {
+			String input = javax.swing.JOptionPane.showInputDialog(panel,
+				"How much " + unit + " per " + period.getLabel().toLowerCase(java.util.Locale.ROOT)
+					+ " period?",
+				"Bite-sized goal", javax.swing.JOptionPane.PLAIN_MESSAGE);
+			if (input == null)
+			{
+				return; // cancelled
+			}
+			// Tolerate the separators people naturally type: "300,000", "300 000".
+			String cleaned = input.trim().replace(",", "").replace(" ", "").replace("_", "");
+			final int chunk;
+			try
+			{
+				chunk = Integer.parseInt(cleaned);
+			}
+			catch (NumberFormatException ex)
+			{
+				javax.swing.JOptionPane.showMessageDialog(panel,
+					"Enter a whole number, for example 300000.",
+					"Bite-sized goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			if (chunk <= 0)
+			{
+				javax.swing.JOptionPane.showMessageDialog(panel,
+					"Enter an amount greater than zero.",
+					"Bite-sized goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			panel.runOnClientThread(() ->
+				api.createDerivedRepeatGoal(goal.getId(), period, chunk, activityName));
+		});
+		return custom;
 	}
 }

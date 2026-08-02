@@ -286,4 +286,75 @@ class RepeatResetServiceTest
 		assertEquals(0, g.getCurrentValue(), "a chunk-less repeat has nothing cumulative to keep");
 		assertFalse(g.isComplete());
 	}
+
+	@Test
+	@DisplayName("a bite-sized goal displays progress within the period, not the lifetime total")
+	void chunkGoalDisplaysPeriodProgress()
+	{
+		// 9.8M XP account, daily 10k chunk: the day's work must be visible.
+		Goal g = Goal.builder()
+			.type(GoalType.SKILL).name("Woodcutting +10,000 XP").skillName("WOODCUTTING")
+			.repeatEvery(RepeatPeriod.DAILY).repeatChunk(10_000)
+			.currentValue(9_800_000).targetValue(9_810_000)
+			.build();
+		store.addGoal(g);
+
+		assertEquals(0, g.getDisplayCurrent(), "fresh period reads 0, not 9.8M");
+		assertEquals(10_000, g.getDisplayTarget());
+
+		g.setCurrentValue(9_803_500);
+		assertEquals(3_500, g.getDisplayCurrent());
+
+		g.setCurrentValue(9_810_000);
+		assertEquals(10_000, g.getDisplayCurrent(), "a finished period reads full");
+	}
+
+	@Test
+	@DisplayName("display progress clamps rather than going negative or overflowing")
+	void chunkDisplayClamps()
+	{
+		Goal g = Goal.builder()
+			.type(GoalType.BOSS).name("General Graardor x20").bossName("General Graardor")
+			.repeatEvery(RepeatPeriod.DAILY).repeatChunk(20)
+			.currentValue(1847).targetValue(1867)
+			.build();
+		store.addGoal(g);
+
+		// Overshoot: the tracker can report past the target between ticks.
+		g.setCurrentValue(1875);
+		assertEquals(20, g.getDisplayCurrent(), "must not read above the chunk");
+
+		// Below the period start, which a stale read can produce.
+		g.setCurrentValue(1800);
+		assertEquals(0, g.getDisplayCurrent(), "must not read negative");
+	}
+
+	@Test
+	@DisplayName("a non-chunk goal displays its raw values unchanged")
+	void plainGoalDisplayUnchanged()
+	{
+		Goal g = Goal.builder()
+			.type(GoalType.SKILL).name("Woodcutting - Level 99").skillName("WOODCUTTING")
+			.currentValue(9_800_000).targetValue(13_034_431)
+			.build();
+		store.addGoal(g);
+
+		assertEquals(9_800_000, g.getDisplayCurrent());
+		assertEquals(13_034_431, g.getDisplayTarget());
+	}
+
+	@Test
+	@DisplayName("after a rollover the display resets to zero of the new chunk")
+	void displayResetsAfterRollover()
+	{
+		Goal g = chunkGoal(1847, 20);
+		run(MONDAY_NOON);
+		g.setCurrentValue(1867);
+		assertEquals(20, g.getDisplayCurrent(), "period complete");
+
+		run(MONDAY_NOON.plus(java.time.Duration.ofDays(1)));
+
+		assertEquals(0, g.getDisplayCurrent(), "new period starts empty");
+		assertEquals(20, g.getDisplayTarget());
+	}
 }
