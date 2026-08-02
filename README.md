@@ -138,13 +138,13 @@ Completed repeatable goals stay put rather than graduating to Completed, so the 
 
 Rollover happens even while you're logged out. By default it follows the in-game daily reset (00:00 UTC), so a routine you share with someone resets at the same moment for both of you — switch to local midnight or a custom hour in the config if you'd rather it matched your own day.
 
-### Bite-sized goals
+### Repeatable goals from skills and items
 
-Turn a long-term goal into a repeating slice of itself. Right-click **99 Woodcutting** → **Bite-sized goal** → *Daily* → *300,000 XP*, and you get a repeating goal that asks for 300k XP a day and re-arms every morning.
+Turn a long-term goal into a repeating slice of itself. Right-click **99 Woodcutting** → **Repeatable goal** → *Daily* → *300,000 XP*, and you get a repeating goal that asks for 300k XP a day and re-arms every morning.
 
 Item goals work backwards from the drop. Right-click a **Bandos chestplate** goal and the menu offers *General Graardor* — the plugin knows which activity drops it — so you can set yourself 20 kills a week instead of staring at a single unchecked box for a month.
 
-The chunk always measures from wherever you are now, so progress you already made counts and a day you skip doesn't pile up into a double session tomorrow. Your original goal is untouched: the bite-sized version sits alongside it, not instead of it.
+The chunk always measures from wherever you are now, so progress you already made counts and a day you skip doesn't pile up into a double session tomorrow. Your original goal is untouched: the repeatable version sits alongside it, not instead of it.
 
 Not every item has one. Roughly half come from shops or skilling rather than an activity you can farm, and those simply don't offer the menu. Minigame drops don't offer it yet either.
 

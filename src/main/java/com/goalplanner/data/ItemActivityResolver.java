@@ -14,7 +14,7 @@ import net.runelite.client.game.ItemVariationMapping;
  * ({@code itemId -> source label -> category}) and {@link BossKillData}
  * ({@code boss name -> kill-count varp}).
  *
- * <p>This is what lets an item goal spawn a bite-sized activity goal - "you
+ * <p>This is what lets an item goal spawn a repeatable activity goal - "you
  * want a Bandos chestplate, so kill General Graardor 20 times today".
  *
  * <p>Two joins are deliberately lossy and it matters which:

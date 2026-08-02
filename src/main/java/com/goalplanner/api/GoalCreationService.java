@@ -2274,7 +2274,7 @@ class GoalCreationService
 	}
 
 	/**
-	 * Create a bite-sized repeatable goal from a long-term one: "300k Woodcutting
+	 * Create a repeatable repeatable goal from a long-term one: "300k Woodcutting
 	 * XP a day" off a 99 Woodcutting goal, or "20 General Graardor kills a week"
 	 * off a Bandos chestplate goal.
 	 *

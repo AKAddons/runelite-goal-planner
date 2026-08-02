@@ -173,7 +173,7 @@ class GoalQueryService
 		v.type = g.getType().name();
 		v.name = g.getName();
 		v.description = g.getDescription();
-		// Period-relative for bite-sized goals, identical to the raw values for
+		// Period-relative for repeatable goals, identical to the raw values for
 		// everything else. Mapped here rather than in the renderers so the card
 		// text, the progress bar and the tooltip all agree without each one
 		// having to know about repeatChunk.

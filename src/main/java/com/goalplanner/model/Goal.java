@@ -136,7 +136,7 @@ public class Goal
 	private int repeatChunk;
 
 	/**
-	 * The long-term goal this bite-sized goal was derived from ("99
+	 * The long-term goal this repeatable goal was derived from ("99
 	 * Woodcutting" for a daily XP chunk), or null if it stands alone. A
 	 * reference for display and cleanup only - it is deliberately NOT a
 	 * requires-DAG edge, because a daily chunk does not gate its parent.
@@ -171,7 +171,7 @@ public class Goal
 	}
 
 	/**
-	 * Progress to show the player. For a bite-sized goal this is progress
+	 * Progress to show the player. For a repeatable goal this is progress
 	 * WITHIN the current period, not the lifetime counter: a daily 10k XP chunk
 	 * on a 9.8M account reads "0 / 10,000", not "9,800,000 / 9,810,000", which
 	 * would make the day's actual work invisible against the total.
@@ -189,7 +189,7 @@ public class Goal
 		return Math.max(0, Math.min(repeatChunk, currentValue - periodStart));
 	}
 
-	/** The denominator to show: the chunk for a bite-sized goal, else the target. */
+	/** The denominator to show: the chunk for a repeatable goal, else the target. */
 	public int getDisplayTarget()
 	{
 		return repeatChunk > 0 ? repeatChunk : targetValue;

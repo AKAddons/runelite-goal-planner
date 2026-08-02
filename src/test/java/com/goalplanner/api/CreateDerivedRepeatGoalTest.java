@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
- * Deriving a bite-sized repeatable goal from a long-term one.
+ * Deriving a repeatable repeatable goal from a long-term one.
  *
  * <p>The assertion that matters throughout: the derived goal's target is
  * {@code live + chunk}, never just {@code chunk}. Auto-tracked goals read a

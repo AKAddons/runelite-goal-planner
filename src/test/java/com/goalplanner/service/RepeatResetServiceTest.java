@@ -288,7 +288,7 @@ class RepeatResetServiceTest
 	}
 
 	@Test
-	@DisplayName("a bite-sized goal displays progress within the period, not the lifetime total")
+	@DisplayName("a repeatable goal displays progress within the period, not the lifetime total")
 	void chunkGoalDisplaysPeriodProgress()
 	{
 		// 9.8M XP account, daily 10k chunk: the day's work must be visible.

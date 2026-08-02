@@ -203,7 +203,7 @@ public interface GoalPlannerApi
 	boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period);
 
 	/**
-	 * Create a bite-sized repeatable goal from a long-term one - a daily XP
+	 * Create a repeatable repeatable goal from a long-term one - a daily XP
 	 * chunk off a skill goal, or a kill-count chunk off an item goal at the
 	 * activity that drops it.
 	 *

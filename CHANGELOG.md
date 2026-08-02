@@ -15,7 +15,7 @@ bumps.
   when the period rolls over — so a long grind becomes a rotation instead of
   one unbroken sitting. The section only appears once you have a repeatable
   goal, and rollover happens even while you're logged out.
-- **Bite-sized goals.** Right-click a long-term goal → **Bite-sized goal** →
+- **Repeatable goals from skills and items.** Right-click a long-term goal → **Repeatable goal** →
   period → size, and get a repeating slice of it. A skill goal offers XP chunks
   ("Woodcutting +300,000 XP" a day); an item goal works backwards from the drop
   and offers kill counts at whatever activity drops it ("General Graardor x20").
@@ -32,12 +32,16 @@ bumps.
   during the day and empties at reset.
 
 ### Notes
-- Repetition is currently limited to custom goals. Auto-tracked types (skills,
-  bosses, items) read an absolute lifetime counter, so repeating them needs a
-  per-period baseline to subtract against; that is the next stage.
+- Making an *existing* goal repeat in place is still custom-only: auto-tracked
+  types read an absolute lifetime counter. Deriving a repeatable goal from one
+  covers them instead, by re-basing its target each period rather than storing
+  a baseline.
+- Not yet done: deadline group headers with a live "resets in" countdown, and
+  minigame drops (their counters are varbits the plugin does not read yet).
 - Architecture decisions for this feature:
   [ADR-0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md),
-  [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md).
+  [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md),
+  [ADR-0005](docs/decisions/0005-derived-goals-re-base-their-target-instead-of-storing-a-baseline.md).
 
 ## [0.4.2] — 2026-07-11
 

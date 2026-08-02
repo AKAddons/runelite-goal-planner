@@ -366,7 +366,7 @@ class GoalContextMenuBuilder
 			menu.add(repeatMenu);
 		}
 
-		addBiteSizedMenu(menu, goal);
+		addRepeatableGoalMenu(menu, goal);
 
 		// Customize submenu - groups general property edits (optional flag,
 		// name/description for CUSTOM, color, tags, relations, restore defaults)
@@ -1842,7 +1842,7 @@ class GoalContextMenuBuilder
 	private static final int[] KILL_CHUNKS = {5, 10, 20, 50};
 
 	/**
-	 * "Bite-sized goal" submenu: turn a long grind into a repeating slice of
+	 * "Repeatable goal" submenu: turn a long grind into a repeating slice of
 	 * itself. A skill goal offers XP chunks; an item goal offers kill counts at
 	 * whatever activity drops it.
 	 *
@@ -1851,7 +1851,7 @@ class GoalContextMenuBuilder
 	 * greyed-out entry would imply the feature is broken rather than
 	 * inapplicable.
 	 */
-	private void addBiteSizedMenu(JPopupMenu menu, com.goalplanner.model.Goal goal)
+	private void addRepeatableGoalMenu(JPopupMenu menu, com.goalplanner.model.Goal goal)
 	{
 		java.util.List<com.goalplanner.model.RepeatPeriod> periods = java.util.List.of(
 			com.goalplanner.model.RepeatPeriod.DAILY,
@@ -1860,7 +1860,7 @@ class GoalContextMenuBuilder
 
 		if (goal.getType() == GoalType.SKILL && goal.getSkillName() != null)
 		{
-			JMenu root = new JMenu("Bite-sized goal");
+			JMenu root = new JMenu("Repeatable goal");
 			for (com.goalplanner.model.RepeatPeriod period : periods)
 			{
 				JMenu perPeriod = new JMenu(period.getLabel());
@@ -1893,7 +1893,7 @@ class GoalContextMenuBuilder
 			return;
 		}
 
-		JMenu root = new JMenu("Bite-sized goal");
+		JMenu root = new JMenu("Repeatable goal");
 		for (com.goalplanner.data.ItemActivityResolver.Activity activity : activities)
 		{
 			// One entry per activity: a shared collection-log slot can mean
@@ -1939,7 +1939,7 @@ class GoalContextMenuBuilder
 			String input = javax.swing.JOptionPane.showInputDialog(panel,
 				"How much " + unit + " per " + period.getLabel().toLowerCase(java.util.Locale.ROOT)
 					+ " period?",
-				"Bite-sized goal", javax.swing.JOptionPane.PLAIN_MESSAGE);
+				"Repeatable goal", javax.swing.JOptionPane.PLAIN_MESSAGE);
 			if (input == null)
 			{
 				return; // cancelled
@@ -1955,14 +1955,14 @@ class GoalContextMenuBuilder
 			{
 				javax.swing.JOptionPane.showMessageDialog(panel,
 					"Enter a whole number, for example 300000.",
-					"Bite-sized goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+					"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
 				return;
 			}
 			if (chunk <= 0)
 			{
 				javax.swing.JOptionPane.showMessageDialog(panel,
 					"Enter an amount greater than zero.",
-					"Bite-sized goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+					"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
 				return;
 			}
 			panel.runOnClientThread(() ->
