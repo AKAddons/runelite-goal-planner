@@ -171,7 +171,7 @@ class GoalMutationService
 		g.setCompletedAt(completedAt);
 		g.setStatus(com.goalplanner.model.GoalStatus.COMPLETE);
 		api.goalStore.updateGoal(g);
-		api.goalStore.reconcileCompletedSection();
+		api.goalStore.reconcileDerivedSections();
 		return true;
 	}
 
@@ -182,7 +182,52 @@ class GoalMutationService
 		g.setCompletedAt(restoredCompletedAt);
 		g.setStatus(com.goalplanner.model.GoalStatus.ACTIVE);
 		api.goalStore.updateGoal(g);
-		api.goalStore.reconcileCompletedSection();
+		api.goalStore.reconcileDerivedSections();
+		return true;
+	}
+
+	boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period)
+	{
+		log.debug("API.public setGoalRepeat(goalId={}, period={})", goalId, period);
+		if (goalId == null || period == null) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		// Stage 1 is manual repeat only. Auto-tracked types read an absolute
+		// counter, so repeating them needs a per-period baseline to subtract
+		// against - until that exists, letting them repeat would show the
+		// lifetime total every morning instead of today's progress.
+		if (g.getType() != GoalType.CUSTOM) return false;
+		if (g.getRepeatEvery() == period) return false; // no-op
+
+		final com.goalplanner.model.RepeatPeriod prevPeriod = g.getRepeatEvery();
+		final long prevKey = g.getLastPeriodKey();
+		final String name = g.getName();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply() { return applyRepeat(goalId, period, 0L); }
+			@Override public boolean revert() { return applyRepeat(goalId, prevPeriod, prevKey); }
+			@Override public String getDescription()
+			{
+				return (period.isRepeating() ? "Repeat " + period.getLabel() + ": " : "Stop repeating: ")
+					+ name;
+			}
+		});
+	}
+
+	/**
+	 * Set the repeat period and stamp state, then let reconcile move the goal
+	 * into or out of the Repeatable section. A fresh enable stamps
+	 * {@code lastPeriodKey = 0} so the next reset check adopts the current
+	 * period without reopening a goal that is already done for today.
+	 */
+	private boolean applyRepeat(String goalId, com.goalplanner.model.RepeatPeriod period, long periodKey)
+	{
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		g.setRepeatEvery(period);
+		g.setLastPeriodKey(periodKey);
+		api.goalStore.updateGoal(g);
+		api.goalStore.reconcileDerivedSections();
 		return true;
 	}
 
@@ -260,7 +305,7 @@ class GoalMutationService
 				api.goalStore.updateGoal(cg);
 				if (statusChanged)
 				{
-					api.goalStore.reconcileCompletedSection();
+					api.goalStore.reconcileDerivedSections();
 				}
 				return true;
 			}
@@ -321,7 +366,7 @@ class GoalMutationService
 		api.goalStore.updateGoal(g);
 		if (statusChanged)
 		{
-			api.goalStore.reconcileCompletedSection();
+			api.goalStore.reconcileDerivedSections();
 		}
 		return true;
 	}

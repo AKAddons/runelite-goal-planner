@@ -840,8 +840,21 @@ public class GoalStore
 			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE);
 		boolean hasCompleted = sections.stream()
 			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.COMPLETED);
+		boolean hasRepeatable = sections.stream()
+			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE);
 
 		boolean created = false;
+		if (!hasRepeatable)
+		{
+			// Always created, even for profiles with no repeatable goals - the
+			// panel hides it while empty, so there is no lifecycle to get wrong.
+			sections.add(Section.builder()
+				.name("Repeatable")
+				.order(Section.ORDER_REPEATABLE)
+				.builtInKind(Section.BuiltInKind.REPEATABLE)
+				.build());
+			created = true;
+		}
 		if (!hasIncomplete)
 		{
 			sections.add(Section.builder()
@@ -866,7 +879,13 @@ public class GoalStore
 		boolean reordered = false;
 		for (Section s : sections)
 		{
-			if (s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE
+			if (s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE
+				&& s.getOrder() != Section.ORDER_REPEATABLE)
+			{
+				s.setOrder(Section.ORDER_REPEATABLE);
+				reordered = true;
+			}
+			else if (s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE
 				&& s.getOrder() != Section.ORDER_INCOMPLETE)
 			{
 				s.setOrder(Section.ORDER_INCOMPLETE);
@@ -1327,6 +1346,27 @@ public class GoalStore
 			.name("Completed")
 			.order(Section.ORDER_COMPLETED)
 			.builtInKind(Section.BuiltInKind.COMPLETED)
+			.build();
+		sections.add(created);
+		return created;
+	}
+
+	/**
+	 * Return the Repeatable built-in section. Guaranteed non-null after load().
+	 * Unlike the other built-ins this one is hidden by the panel while empty -
+	 * most players never make a repeatable goal, and an always-visible empty
+	 * header is pure clutter for them.
+	 */
+	public Section getRepeatableSection()
+	{
+		for (Section s : sections)
+		{
+			if (s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE) return s;
+		}
+		Section created = Section.builder()
+			.name("Repeatable")
+			.order(Section.ORDER_REPEATABLE)
+			.builtInKind(Section.BuiltInKind.REPEATABLE)
 			.build();
 		sections.add(created);
 		return created;
@@ -1844,12 +1884,23 @@ public class GoalStore
 	}
 
 	/**
-	 * Scan all goals and move any that have flipped to COMPLETE into the Completed
-	 * section (unless they're already there). Returns true if any goal was moved.
-	 * Call this after tracker updates.
+	 * Assign every goal to its derived section: Repeatable if it repeats,
+	 * Completed if it has finished and its home section auto-archives, its home
+	 * section otherwise. Returns true if any goal was moved. Call this after
+	 * tracker updates and after any completion or repeat change.
+	 *
+	 * <p>Repetition is tested FIRST and short-circuits: a checked-off daily
+	 * stays in Repeatable rather than graduating to Completed, which is what
+	 * makes that section read as a checklist that fills up and empties again.
+	 * The corollary is that a repeating goal is never in Completed, which is
+	 * why both mechanisms can share {@link Goal#getArchivedFromSectionId()} to
+	 * remember the home section - the two states are mutually exclusive by
+	 * construction. Breaking that invariant corrupts placement, so it is
+	 * pinned by test rather than left to this comment.
 	 */
-	public boolean reconcileCompletedSection()
+	public boolean reconcileDerivedSections()
 	{
+		String repeatableId = getRepeatableSection().getId();
 		String completedId = getCompletedSection().getId();
 		String incompleteId = getIncompleteSection().getId();
 		boolean anyMoved = false;
@@ -1862,6 +1913,40 @@ public class GoalStore
 			String currentSid = goal.getSectionId();
 			boolean isComplete = goal.isComplete();
 			String archivedFrom = goal.getArchivedFromSectionId();
+			boolean movedThis = false;
+
+			if (goal.isRepeating())
+			{
+				if (!repeatableId.equals(currentSid))
+				{
+					// Remember where it came from so turning repeat off puts it
+					// back. Coming from Completed, the home it already recorded
+					// there is the real home - don't overwrite it with
+					// "Completed".
+					if (!completedId.equals(currentSid) && !incompleteId.equals(currentSid))
+					{
+						goal.setArchivedFromSectionId(currentSid);
+					}
+					goal.setSectionId(repeatableId);
+					anyMoved = true;
+					movedGoals.add(goal);
+				}
+				// Never graduates to Completed, however done it is.
+				continue;
+			}
+
+			if (repeatableId.equals(currentSid))
+			{
+				// Repeat was switched off → back to its remembered home, then
+				// fall through so a goal that is also complete archives in this
+				// same pass rather than needing a second one.
+				Section home = findSection(archivedFrom);
+				goal.setSectionId(home != null ? archivedFrom : incompleteId);
+				goal.setArchivedFromSectionId(null);
+				currentSid = goal.getSectionId();
+				archivedFrom = null;
+				movedThis = true;
+			}
 
 			if (completedId.equals(currentSid))
 			{
@@ -1873,8 +1958,7 @@ public class GoalStore
 					Section home = findSection(archivedFrom);
 					goal.setSectionId(home != null ? archivedFrom : incompleteId);
 					goal.setArchivedFromSectionId(null);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
 				else if (archivedFrom != null)
 				{
@@ -1883,16 +1967,14 @@ public class GoalStore
 					{
 						// Home section gone → it's now a genuine default-completed goal.
 						goal.setArchivedFromSectionId(null);
-						anyMoved = true;
-						movedGoals.add(goal);
+						movedThis = true;
 					}
 					else if (!effectiveAutoArchive(home))
 					{
 						// Home flipped to keep-inline → return the goal to it.
 						goal.setSectionId(archivedFrom);
 						goal.setArchivedFromSectionId(null);
-						anyMoved = true;
-						movedGoals.add(goal);
+						movedThis = true;
 					}
 					// else: home still auto-archives → stay archived.
 				}
@@ -1904,8 +1986,7 @@ public class GoalStore
 				if (isComplete)
 				{
 					goal.setSectionId(completedId);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
 			}
 			else
@@ -1922,9 +2003,16 @@ public class GoalStore
 				{
 					goal.setArchivedFromSectionId(currentSid);
 					goal.setSectionId(completedId);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
+			}
+
+			// One record per goal, however many hops it made this pass (a goal
+			// leaving Repeatable can also archive in the same iteration).
+			if (movedThis)
+			{
+				anyMoved = true;
+				movedGoals.add(goal);
 			}
 		}
 		if (anyMoved)
@@ -2172,7 +2260,7 @@ public class GoalStore
 	 * the global default, {@code TRUE} forces archive, {@code FALSE} forces keep.
 	 * Built-in sections can't be set. Returns false on: not found, built-in, or
 	 * no-op. Does NOT reconcile - callers wanting immediate effect call
-	 * {@link #reconcileCompletedSection()} after.
+	 * {@link #reconcileDerivedSections()} after.
 	 */
 	public boolean setSectionAutoArchiveOverride(String sectionId, Boolean value)
 	{
@@ -2208,7 +2296,7 @@ public class GoalStore
 		sectionIndex.remove(sectionId);
 		renumberUserSections();
 		normalizeOrder();
-		reconcileCompletedSection();
+		reconcileDerivedSections();
 		saveSectionsIfNotSuspended();
 		saveGoalOrderIfNotSuspended();
 		return true;
@@ -2236,7 +2324,7 @@ public class GoalStore
 		if (!moved.isEmpty())
 		{
 			normalizeOrder();
-			reconcileCompletedSection();
+			reconcileDerivedSections();
 			for (Goal g : moved) saveGoalIfNotSuspended(g);
 			saveGoalOrderIfNotSuspended();
 		}
@@ -2371,7 +2459,7 @@ public class GoalStore
 		for (String id : doomed) sectionIndex.remove(id);
 		renumberUserSections();
 		normalizeOrder();
-		reconcileCompletedSection();
+		reconcileDerivedSections();
 		// Goals may have been reassigned by both the section delete and reconcile
 		for (Goal g : getGoals()) saveGoalIfNotSuspended(g);
 		saveSectionsIfNotSuspended();

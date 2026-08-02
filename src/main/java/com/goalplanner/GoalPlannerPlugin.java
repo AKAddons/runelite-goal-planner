@@ -216,6 +216,19 @@ public class GoalPlannerPlugin extends Plugin
 		// every skill chain goal) produce exactly one rebuild.
 		rebuildDebounce = new javax.swing.Timer(200, e -> panel.rebuild());
 		rebuildDebounce.setRepeats(false);
+
+		// Repeatable-goal rollover. A clock timer, NOT onGameTick: stage-1
+		// repeatable goals are CUSTOM goals that need no client data, and the
+		// day boundary is usually crossed while logged out - when no game tick
+		// fires. One minute is deliberate: the check is idempotent so a missed
+		// run self-heals, and second-granularity would buy nothing but repaints.
+		repeatResetService = new com.goalplanner.service.RepeatResetService(goalStore);
+		repeatResetTimer = new javax.swing.Timer(60_000, e -> applyRepeatResets());
+		repeatResetTimer.setRepeats(true);
+		repeatResetTimer.start();
+		// And once now, so a plugin that was closed overnight catches up on
+		// startup rather than a minute later.
+		applyRepeatResets();
 		goalTrackerApi.setOnGoalsChanged(() ->
 		{
 			javax.swing.SwingUtilities.invokeLater(rebuildDebounce::restart);
@@ -263,6 +276,13 @@ public class GoalPlannerPlugin extends Plugin
 		if (rebuildDebounce != null)
 		{
 			rebuildDebounce.stop();
+		}
+		// A repeating timer, unlike the debounces - it must be stopped or it
+		// keeps firing at a dead panel across a disable -> re-enable cycle.
+		if (repeatResetTimer != null)
+		{
+			repeatResetTimer.stop();
+			repeatResetTimer = null;
 		}
 		if (goalTrackerApi != null)
 		{
@@ -605,7 +625,7 @@ public class GoalPlannerPlugin extends Plugin
 		if ("showDependenciesIndented".equals(event.getKey()))
 		{
 			goalStore.setIndentDependenciesDefault(config.showDependenciesIndented());
-			goalStore.reconcileCompletedSection();
+			goalStore.reconcileDerivedSections();
 			goalStore.save();
 			if (panel != null)
 			{
@@ -617,7 +637,7 @@ public class GoalPlannerPlugin extends Plugin
 		if ("autoArchiveCompleted".equals(event.getKey()))
 		{
 			goalStore.setAutoArchiveDefault(config.autoArchiveCompleted());
-			goalStore.reconcileCompletedSection();
+			goalStore.reconcileDerivedSections();
 			goalStore.save();
 			if (panel != null)
 			{
@@ -670,6 +690,29 @@ public class GoalPlannerPlugin extends Plugin
 	/** Debounce timer coalescing rapid rebuild requests. Hoisted to a field so
 	 *  shutDown() can stop it (otherwise its ActionListener pins the panel). */
 	private javax.swing.Timer rebuildDebounce;
+
+	/** Repeating one-minute rollover check for repeatable goals. */
+	private javax.swing.Timer repeatResetTimer;
+	private com.goalplanner.service.RepeatResetService repeatResetService;
+
+	/**
+	 * Roll over any repeatable goal whose period has ended, and refresh the
+	 * panel if anything actually changed. Idempotent, so the minute timer, the
+	 * startup call, and a profile switch can all invoke it freely.
+	 */
+	private void applyRepeatResets()
+	{
+		if (repeatResetService == null)
+		{
+			return;
+		}
+		int reset = repeatResetService.applyResets(
+			java.time.Instant.now(), config.resetBoundary(), config.resetHour());
+		if (reset > 0 && panel != null)
+		{
+			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+		}
+	}
 
 	/** Set by onVarbitChanged/onStatChanged (which fire many times per tick) and
 	 *  drained once per tick in onGameTick, so the tracker suite runs at most once
@@ -2037,7 +2080,7 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		if (updated)
 		{
-			boolean sectionChanged = goalStore.reconcileCompletedSection();
+			boolean sectionChanged = goalStore.reconcileDerivedSections();
 			// Snapshot dirty IDs before save clears them
 			java.util.Set<String> dirtyIds = goalStore.getDirtyGoalIds();
 			goalStore.saveDirtyGoals();

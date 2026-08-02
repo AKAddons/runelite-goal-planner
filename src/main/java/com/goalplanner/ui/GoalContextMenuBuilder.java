@@ -347,6 +347,27 @@ class GoalContextMenuBuilder
 			}
 		}
 
+		// Repeat submenu - CUSTOM only for now. Auto-tracked types read an
+		// absolute counter, so repeating them needs a per-period baseline that
+		// does not exist yet; offering it here would show the lifetime total
+		// every morning instead of today's progress.
+		if (goal.getType() == GoalType.CUSTOM)
+		{
+			JMenu repeatMenu = new JMenu("Repeat");
+			for (com.goalplanner.model.RepeatPeriod period
+				: com.goalplanner.model.RepeatPeriod.values())
+			{
+				JMenuItem item = new JMenuItem(
+					goal.getRepeatEvery() == period ? period.getLabel() + " *" : period.getLabel());
+				item.setEnabled(goal.getRepeatEvery() != period);
+				item.addActionListener(e -> api.setGoalRepeat(goal.getId(), period));
+				repeatMenu.add(item);
+			}
+			menu.add(repeatMenu);
+		}
+
+		addBiteSizedMenu(menu, goal);
+
 		// Customize submenu - groups general property edits (optional flag,
 		// name/description for CUSTOM, color, tags, relations, restore defaults)
 		// under a single hover so the top-level menu stays scannable. Mark
@@ -1812,5 +1833,88 @@ class GoalContextMenuBuilder
 					16, 16));
 		}
 		return loadoutLabIcon;
+	}
+
+	/** Chunk sizes offered per skill goal, in XP. */
+	private static final int[] XP_CHUNKS = {10_000, 50_000, 100_000, 300_000, 1_000_000};
+
+	/** Chunk sizes offered per activity goal, in kills. */
+	private static final int[] KILL_CHUNKS = {5, 10, 20, 50};
+
+	/**
+	 * "Bite-sized goal" submenu: turn a long grind into a repeating slice of
+	 * itself. A skill goal offers XP chunks; an item goal offers kill counts at
+	 * whatever activity drops it.
+	 *
+	 * <p>Absent, not disabled, when nothing can be derived - roughly half of all
+	 * items come from shops or skilling and have no activity to farm, and a
+	 * greyed-out entry would imply the feature is broken rather than
+	 * inapplicable.
+	 */
+	private void addBiteSizedMenu(JPopupMenu menu, com.goalplanner.model.Goal goal)
+	{
+		java.util.List<com.goalplanner.model.RepeatPeriod> periods = java.util.List.of(
+			com.goalplanner.model.RepeatPeriod.DAILY,
+			com.goalplanner.model.RepeatPeriod.WEEKLY,
+			com.goalplanner.model.RepeatPeriod.MONTHLY);
+
+		if (goal.getType() == GoalType.SKILL && goal.getSkillName() != null)
+		{
+			JMenu root = new JMenu("Bite-sized goal");
+			for (com.goalplanner.model.RepeatPeriod period : periods)
+			{
+				JMenu perPeriod = new JMenu(period.getLabel());
+				for (int chunk : XP_CHUNKS)
+				{
+					JMenuItem item = new JMenuItem(
+						com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP");
+					item.addActionListener(e ->
+						api.createDerivedRepeatGoal(goal.getId(), period, chunk, null));
+					perPeriod.add(item);
+				}
+				root.add(perPeriod);
+			}
+			menu.add(root);
+			return;
+		}
+
+		if (goal.getItemId() <= 0)
+		{
+			return;
+		}
+		java.util.List<com.goalplanner.data.ItemActivityResolver.Activity> activities =
+			com.goalplanner.data.ItemActivityResolver.resolve(goal.getItemId());
+		if (activities.isEmpty())
+		{
+			return;
+		}
+
+		JMenu root = new JMenu("Bite-sized goal");
+		for (com.goalplanner.data.ItemActivityResolver.Activity activity : activities)
+		{
+			// One entry per activity: a shared collection-log slot can mean
+			// several bosses (Dagannoth Kings, the Moons), and the player has to
+			// pick which one they are actually going to farm.
+			JMenu perActivity = activities.size() == 1
+				? root
+				: new JMenu(activity.getName());
+			for (com.goalplanner.model.RepeatPeriod period : periods)
+			{
+				JMenu perPeriod = new JMenu(period.getLabel());
+				for (int chunk : KILL_CHUNKS)
+				{
+					JMenuItem item = new JMenuItem(chunk + " kills");
+					item.addActionListener(e -> api.createDerivedRepeatGoal(
+						goal.getId(), period, chunk, activity.getName()));
+					perPeriod.add(item);
+				}
+				perActivity.add(perPeriod);
+			}
+			if (perActivity != root)
+			{
+				root.add(perActivity);
+			}
+		}
+		menu.add(root);
 	}
 }

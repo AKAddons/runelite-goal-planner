@@ -537,7 +537,7 @@ class GoalPlannerApiImplTest
 		assertTrue(g.isComplete());
 
 		// A keep-inline section holds its completed goal as a ticked-off item.
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(sectionId, g.getSectionId());
 	}
 
@@ -1202,7 +1202,7 @@ class GoalPlannerApiImplTest
 			g.setStatus(GoalStatus.COMPLETE);
 			g.setCompletedAt(123_456_789L);
 			store.addGoal(g);
-			store.reconcileCompletedSection(); // archive into Completed like the live flow
+			store.reconcileDerivedSections(); // archive into Completed like the live flow
 			return g;
 		}
 

@@ -58,7 +58,7 @@ class MoveToNewSectionReproTest
 			.completedAt(123L).status(GoalStatus.COMPLETE)
 			.sectionId(null).build();
 		store.addGoal(done);
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		String newId = api.createSection("Fresh");
 		assertNotNull(newId);
 		assertTrue(api.moveGoalToSection(done.getId(), newId), "completed move returned false");

@@ -297,7 +297,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * <p><b>Does NOT save, reconcile, or fire onGoalsChanged.</b> Trackers
 	 * run in batches on each game tick; the plugin's GameTick handler
-	 * performs a single {@code goalStore.save() + reconcileCompletedSection()
+	 * performs a single {@code goalStore.save() + reconcileDerivedSections()
 	 * + panel.rebuild()} once at the end of each tick if anything updated.
 	 * Firing the callback per goal would defeat the over-querying cleanup
 	 *

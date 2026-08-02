@@ -163,7 +163,7 @@ class QuestCompletionIntegrationTest
 			assertTrue(questGoal.isComplete(), "Lost City should be complete");
 
 			// Reconcile sections
-			store.reconcileCompletedSection();
+			store.reconcileDerivedSections();
 			String completedId = store.getCompletedSection().getId();
 			assertEquals(completedId, questGoal.getSectionId());
 			assertEquals(completedId, crafting.getSectionId());
@@ -271,7 +271,7 @@ class QuestCompletionIntegrationTest
 			assertTrue(mainQuest.isComplete());
 
 			// Verify section reconciliation
-			store.reconcileCompletedSection();
+			store.reconcileDerivedSections();
 			String completedId = store.getCompletedSection().getId();
 			assertEquals(completedId, mainQuest.getSectionId());
 		}
@@ -412,7 +412,7 @@ class QuestCompletionIntegrationTest
 			assertTrue(mainQuest.isComplete(), "DT1 should be complete");
 
 			// Phase 4: Reconcile
-			store.reconcileCompletedSection();
+			store.reconcileDerivedSections();
 			String completedId = store.getCompletedSection().getId();
 			assertEquals(completedId, mainQuest.getSectionId(),
 				"DT1 should be in Completed section");

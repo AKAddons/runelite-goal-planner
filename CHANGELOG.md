@@ -6,6 +6,39 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [Unreleased]
+
+### Added
+- **Repeatable goals.** Right-click a custom goal → **Repeat** → *Daily /
+  Weekly / Monthly*. It moves into a new **Repeatable** section pinned to the
+  top of the panel, stays there when you check it off, and un-checks itself
+  when the period rolls over — so a long grind becomes a rotation instead of
+  one unbroken sitting. The section only appears once you have a repeatable
+  goal, and rollover happens even while you're logged out.
+- **Bite-sized goals.** Right-click a long-term goal → **Bite-sized goal** →
+  period → size, and get a repeating slice of it. A skill goal offers XP chunks
+  ("Woodcutting +300,000 XP" a day); an item goal works backwards from the drop
+  and offers kill counts at whatever activity drops it ("General Graardor x20").
+  The chunk measures from wherever you are now, so a skipped day doesn't pile up
+  — and your original goal is left untouched. Items that come from shops or
+  skilling don't offer it, and minigame drops don't yet.
+- **Repeat reset config.** Choose where the day boundary falls: the in-game
+  daily reset (00:00 UTC, the default, so shared routines roll over at the same
+  moment for everyone), local midnight, or a custom local hour.
+
+### Changed
+- Completed repeatable goals deliberately do **not** graduate to the Completed
+  list — they stay in Repeatable so it reads as a checklist that fills up
+  during the day and empties at reset.
+
+### Notes
+- Repetition is currently limited to custom goals. Auto-tracked types (skills,
+  bosses, items) read an absolute lifetime counter, so repeating them needs a
+  per-period baseline to subtract against; that is the next stage.
+- Architecture decisions for this feature:
+  [ADR-0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md),
+  [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md).
+
 ## [0.4.2] — 2026-07-11
 
 RuneLite shipped **The Blood Moon Rises** in the `1.12.32` client release, so

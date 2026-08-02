@@ -2273,6 +2273,142 @@ class GoalCreationService
 			}
 	}
 
+	/**
+	 * Create a bite-sized repeatable goal from a long-term one: "300k Woodcutting
+	 * XP a day" off a 99 Woodcutting goal, or "20 General Graardor kills a week"
+	 * off a Bandos chestplate goal.
+	 *
+	 * <p>The derived goal is an ordinary auto-tracked SKILL or BOSS goal with a
+	 * {@code repeatChunk}, so every existing tracker handles it unchanged. Its
+	 * target starts at {@code live + chunk} and re-bases there again at each
+	 * rollover - see {@link com.goalplanner.service.RepeatResetService}.
+	 *
+	 * <p>Reads live client state (current XP / kill count), matching how
+	 * {@code GoalDialogFactory} resolves relative skill targets. If that read
+	 * fails, this returns null rather than creating a goal with a bogus target:
+	 * a BOSS goal targeting 20 when the player is already at 1,847 lifetime kills
+	 * would complete itself on the next tick.
+	 *
+	 * @param activityName boss name for an item-derived goal; ignored for SKILL parents
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createDerivedRepeatGoal(String parentGoalId, com.goalplanner.model.RepeatPeriod period,
+		int chunk, String activityName)
+	{
+		log.debug("API.public createDerivedRepeatGoal(parent={}, period={}, chunk={}, activity={})",
+			parentGoalId, period, chunk, activityName);
+		if (parentGoalId == null || period == null || !period.isRepeating() || chunk <= 0)
+		{
+			return null;
+		}
+		Goal parent = api.findGoal(parentGoalId);
+		if (parent == null)
+		{
+			return null;
+		}
+
+		Goal derived = parent.getType() == GoalType.SKILL && parent.getSkillName() != null
+			? buildSkillChunk(parent, period, chunk)
+			: buildActivityChunk(parent, period, chunk, activityName);
+		if (derived == null)
+		{
+			return null;
+		}
+
+		final String goalId = derived.getId();
+		executeAddGoal(derived, goalId, "Add " + period.getLabel().toLowerCase(java.util.Locale.ROOT)
+			+ " goal: " + derived.getName());
+		// Pull it straight into the Repeatable section rather than leaving it in
+		// the default bucket until something else triggers a reconcile.
+		api.goalStore.reconcileDerivedSections();
+		log.info("createDerivedRepeatGoal created: {} ({})", goalId, derived.getName());
+		return goalId;
+	}
+
+	/** "Woodcutting +300,000 XP", tracked as an ordinary SKILL goal. */
+	private Goal buildSkillChunk(Goal parent, com.goalplanner.model.RepeatPeriod period, int chunk)
+	{
+		final net.runelite.api.Skill skill;
+		try
+		{
+			skill = net.runelite.api.Skill.valueOf(parent.getSkillName());
+		}
+		catch (IllegalArgumentException e)
+		{
+			return null;
+		}
+		int currentXp;
+		try
+		{
+			if (api.client == null) return null;
+			currentXp = api.client.getSkillExperience(skill);
+		}
+		catch (Throwable t)
+		{
+			log.warn("createDerivedRepeatGoal: could not read {} XP: {}", skill, t.toString());
+			return null;
+		}
+		int target = com.goalplanner.ui.RelativeTargetResolver.resolveSkillXp(currentXp, chunk);
+		if (target < 0)
+		{
+			return null;
+		}
+		return Goal.builder()
+			.type(GoalType.SKILL)
+			.skillName(parent.getSkillName())
+			.name(skill.getName() + " +" + com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP")
+			.description(period.getLabel())
+			.targetValue(target)
+			.currentValue(currentXp)
+			.repeatEvery(period)
+			.repeatChunk(chunk)
+			.derivedFromGoalId(parent.getId())
+			.build();
+	}
+
+	/** "General Graardor x20", tracked as an ordinary BOSS goal. */
+	private Goal buildActivityChunk(Goal parent, com.goalplanner.model.RepeatPeriod period,
+		int chunk, String activityName)
+	{
+		if (activityName == null
+			|| !com.goalplanner.data.BossKillData.isKnownBoss(activityName))
+		{
+			return null;
+		}
+		int varpId = com.goalplanner.data.BossKillData.getVarpId(activityName);
+		if (varpId < 0)
+		{
+			return null;
+		}
+		int currentKc;
+		try
+		{
+			if (api.client == null) return null;
+			currentKc = api.client.getVarpValue(varpId);
+		}
+		catch (Throwable t)
+		{
+			log.warn("createDerivedRepeatGoal: could not read {} kill count: {}",
+				activityName, t.toString());
+			return null;
+		}
+		if (currentKc < 0)
+		{
+			return null;
+		}
+		return Goal.builder()
+			.type(GoalType.BOSS)
+			.bossName(activityName)
+			.name(activityName + " x" + chunk)
+			.description(period.getLabel() + " - " + chunk + " kills")
+			.targetValue(currentKc + chunk)
+			.currentValue(currentKc)
+			.repeatEvery(period)
+			.repeatChunk(chunk)
+			.derivedFromGoalId(parent.getId())
+			.build();
+	}
+
 	String addCustomGoal(String name, String description)
 	{
 		log.debug("API.public addCustomGoal(name={}, description={})", name, description);

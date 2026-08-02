@@ -845,7 +845,12 @@ public class GoalPanel extends PluginPanel
 			// Section action even when they're empty. User sections were
 			// always visible. When filtering, still hide empty sections so
 			// the result list stays focused.
-			if (sectionCount == 0 && filterActive) continue;
+			//
+			// Repeatable is the exception: most players never make a repeatable
+			// goal, so an always-visible empty header is pure clutter for them.
+			// Hiding it orphans no entry point - repeat is set from the GOAL
+			// right-click menu, not from this header.
+			if (sectionCount == 0 && (filterActive || "REPEATABLE".equals(section.kind))) continue;
 			final String sectionIdRef = section.id;
 			SectionHeaderRow headerRow = new SectionHeaderRow(section, sectionCount, () -> {
 				// In move-pick mode, the section title row acts as a drop

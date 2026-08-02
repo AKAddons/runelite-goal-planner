@@ -218,7 +218,7 @@ class DiaryCompletionIntegrationTest
 			"diary goal should be complete after varbit fires");
 
 		// ---- Phase 6: Reconcile sections ----
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 
 		// All completed goals should be in the Completed section
 		String completedId = completedSectionId();
@@ -409,7 +409,7 @@ class DiaryCompletionIntegrationTest
 		}
 
 		// Reconcile and verify completed goals move to Completed section
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		for (Goal g : completedGoals())
 		{
 			assertEquals(completedSectionId(), g.getSectionId(),

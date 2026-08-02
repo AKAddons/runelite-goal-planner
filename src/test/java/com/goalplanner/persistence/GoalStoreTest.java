@@ -38,24 +38,39 @@ class GoalStoreTest
 	// ====================================================================
 
 	@Test
-	@DisplayName("load() creates Incomplete + Completed sections from empty state")
+	@DisplayName("load() creates Repeatable + Incomplete + Completed sections from empty state")
 	void loadCreatesBuiltInSections()
 	{
 		List<Section> sections = store.getSections();
-		assertEquals(2, sections.size());
+		assertEquals(3, sections.size());
+		assertNotNull(store.getRepeatableSection());
 		assertNotNull(store.getIncompleteSection());
 		assertNotNull(store.getCompletedSection());
+		assertEquals(Section.BuiltInKind.REPEATABLE, store.getRepeatableSection().getBuiltInKind());
 		assertEquals(Section.BuiltInKind.INCOMPLETE, store.getIncompleteSection().getBuiltInKind());
 		assertEquals(Section.BuiltInKind.COMPLETED, store.getCompletedSection().getBuiltInKind());
 	}
 
 	@Test
-	@DisplayName("Incomplete section is pinned at MAX_VALUE - 1; Completed at MAX_VALUE")
+	@DisplayName("Repeatable pins to the top; Incomplete then Completed pin to the bottom")
 	void builtInSectionOrdering()
 	{
+		assertEquals(Section.ORDER_REPEATABLE, store.getRepeatableSection().getOrder());
 		assertEquals(Section.ORDER_INCOMPLETE, store.getIncompleteSection().getOrder());
 		assertEquals(Section.ORDER_COMPLETED, store.getCompletedSection().getOrder());
+		assertTrue(store.getRepeatableSection().getOrder() < store.getIncompleteSection().getOrder());
 		assertTrue(store.getIncompleteSection().getOrder() < store.getCompletedSection().getOrder());
+	}
+
+	@Test
+	@DisplayName("a user section sorts between Repeatable and Incomplete")
+	void userSectionSitsBetweenBuiltIns()
+	{
+		Section user = store.createUserSection("Dailies adjacent");
+		assertTrue(store.getRepeatableSection().getOrder() < user.getOrder(),
+			"Repeatable must stay above user sections");
+		assertTrue(user.getOrder() < store.getIncompleteSection().getOrder(),
+			"user sections must stay above Incomplete");
 	}
 
 	@Test
@@ -292,7 +307,7 @@ class GoalStoreTest
 
 		// The manual placement is pinned: even with auto-archive on (the
 		// default), reconcile must NOT yank the goal back to Completed.
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(custom.getId(), g.getSectionId());
 	}
 
@@ -308,17 +323,17 @@ class GoalStoreTest
 		// Completes while sitting in the section (no manual pin) → tidied away.
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 		assertEquals(custom.getId(), g.getArchivedFromSectionId());
 	}
 
 	// ====================================================================
-	// reconcileCompletedSection
+	// reconcileDerivedSections
 	// ====================================================================
 
 	@Test
-	@DisplayName("reconcileCompletedSection moves a completed goal from Incomplete to Completed")
+	@DisplayName("reconcileDerivedSections moves a completed goal from Incomplete to Completed")
 	void reconcilePullsCompleteIntoCompleted()
 	{
 		// The default Incomplete/Completed pair auto-sorts: a goal in Incomplete
@@ -329,12 +344,12 @@ class GoalStoreTest
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 	}
 
 	@Test
-	@DisplayName("reconcileCompletedSection moves un-completed goals out of Completed")
+	@DisplayName("reconcileDerivedSections moves un-completed goals out of Completed")
 	void reconcilePushesIncompleteOutOfCompleted()
 	{
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g")
@@ -342,24 +357,24 @@ class GoalStoreTest
 			.status(GoalStatus.COMPLETE)
 			.build();
 		store.addGoal(g);
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 
 		// Un-complete it
 		g.setCompletedAt(0);
 		g.setStatus(GoalStatus.ACTIVE);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getIncompleteSection().getId(), g.getSectionId());
 	}
 
 	@Test
-	@DisplayName("reconcileCompletedSection no-ops when nothing needs moving")
+	@DisplayName("reconcileDerivedSections no-ops when nothing needs moving")
 	void reconcileNoopOnSteadyState()
 	{
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g").build();
 		store.addGoal(g);
-		assertFalse(store.reconcileCompletedSection());
+		assertFalse(store.reconcileDerivedSections());
 	}
 
 	// ====================================================================
@@ -379,7 +394,7 @@ class GoalStoreTest
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
 
-		assertFalse(store.reconcileCompletedSection());
+		assertFalse(store.reconcileDerivedSections());
 		assertEquals(custom.getId(), g.getSectionId());
 	}
 
@@ -474,7 +489,7 @@ class GoalStoreTest
 		store.addGoal(f);
 		store.addGoal(k);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		String completedId = store.getCompletedSection().getId();
 		assertEquals(completedId, d.getSectionId()); // inherits default → archived
 		assertEquals(completedId, f.getSectionId()); // forced → archived
@@ -541,13 +556,13 @@ class GoalStoreTest
 		store.addGoal(g);
 
 		// Archive out to Completed, remembering its home section.
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 		assertEquals(x.getId(), g.getArchivedFromSectionId());
 
 		// Flip the section back to keep-inline → the goal returns home, memory cleared.
 		store.setSectionAutoArchiveOverride(x.getId(), false);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(x.getId(), g.getSectionId());
 		assertNull(g.getArchivedFromSectionId());
 	}
@@ -561,13 +576,13 @@ class GoalStoreTest
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g").completedAt(1L)
 			.status(GoalStatus.COMPLETE).sectionId(x.getId()).build();
 		store.addGoal(g);
-		store.reconcileCompletedSection(); // archived to Completed
+		store.reconcileDerivedSections(); // archived to Completed
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 
 		// Un-complete it → it leaves Completed back to its home section.
 		g.setCompletedAt(0);
 		g.setStatus(GoalStatus.ACTIVE);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(x.getId(), g.getSectionId());
 		assertNull(g.getArchivedFromSectionId());
 	}
@@ -593,7 +608,8 @@ class GoalStoreTest
 		reloaded.load();
 
 		assertEquals(2, reloaded.getGoals().size());
-		assertEquals(3, reloaded.getSections().size()); // Incomplete + Completed + Custom
+		// Repeatable + Incomplete + Completed + Custom
+		assertEquals(4, reloaded.getSections().size());
 		assertNotNull(reloaded.findUserSectionByName("Custom Section"));
 	}
 
@@ -636,7 +652,7 @@ class GoalStoreTest
 
 		int removed = store.removeAllUserSections();
 		assertEquals(2, removed);
-		assertEquals(2, store.getSections().size()); // built-ins remain
+		assertEquals(3, store.getSections().size()); // all three built-ins remain
 		assertEquals(store.getIncompleteSection().getId(), g.getSectionId());
 	}
 

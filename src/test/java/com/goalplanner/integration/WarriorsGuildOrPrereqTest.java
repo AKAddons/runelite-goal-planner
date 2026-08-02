@@ -211,7 +211,7 @@ class WarriorsGuildOrPrereqTest
 		assertFalse(strength99.isComplete(), "Strength 99 should not be complete at 65");
 
 		// Reconcile: completed goals move to Completed section
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		String completedId = store.getCompletedSection().getId();
 		assertEquals(completedId, combined.getSectionId());
 		assertEquals(completedId, unlock.getSectionId());
@@ -248,7 +248,7 @@ class WarriorsGuildOrPrereqTest
 		assertFalse(combined.isComplete(), "Combined should not be complete at 100");
 
 		// Reconcile
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		String completedId = store.getCompletedSection().getId();
 		assertEquals(completedId, strength99.getSectionId());
 		assertEquals(completedId, unlock.getSectionId());
@@ -284,7 +284,7 @@ class WarriorsGuildOrPrereqTest
 		assertFalse(combined.isComplete(), "Combined should not be complete at 100");
 
 		// Reconcile
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		String completedId = store.getCompletedSection().getId();
 		assertEquals(completedId, attack99.getSectionId());
 		assertEquals(completedId, unlock.getSectionId());

@@ -101,6 +101,48 @@ public class Goal
 	@Builder.Default
 	private boolean nestCollapsed = false;
 
+	// ---- Repetition ----
+	/**
+	 * How often this goal resets and becomes completable again.
+	 * {@link RepeatPeriod#NONE} is the ordinary one-shot goal.
+	 *
+	 * <p>Read through {@link #getRepeatEvery()}, never the field: goals stored
+	 * before this feature existed deserialize with a null here, because Gson
+	 * bypasses Lombok's {@code @Builder.Default} and leaves absent fields null.
+	 */
+	@Builder.Default
+	private RepeatPeriod repeatEvery = RepeatPeriod.NONE;
+
+	/**
+	 * The period key this goal last reset in - see
+	 * {@link com.goalplanner.util.RepeatSchedule#periodKey}. A reset is due
+	 * whenever the live key differs from this. Zero means "never stamped",
+	 * which the first check resolves without firing a spurious reset.
+	 */
+	private long lastPeriodKey;
+
+	/**
+	 * For a derived repeatable goal: how much to gain each period ("300k XP a
+	 * day", "20 Graardor kills a week"). Zero means a plain manual repeat,
+	 * where the goal just un-checks.
+	 *
+	 * <p>This is what lets an auto-tracked type repeat without a baseline
+	 * field. At rollover the target is re-based to {@code currentValue + chunk}
+	 * rather than the progress being reset, so the tracker keeps reporting the
+	 * same cumulative counter it always has and needs no changes at all.
+	 * Crucially the re-base reads only stored state, so it still works while
+	 * the player is logged out.
+	 */
+	private int repeatChunk;
+
+	/**
+	 * The long-term goal this bite-sized goal was derived from ("99
+	 * Woodcutting" for a daily XP chunk), or null if it stands alone. A
+	 * reference for display and cleanup only - it is deliberately NOT a
+	 * requires-DAG edge, because a daily chunk does not gate its parent.
+	 */
+	private String derivedFromGoalId;
+
 	// Integrations
 	private String wikiUrl;
 	private String inventorySetup;  // Inventory Setups loadout name
@@ -109,6 +151,24 @@ public class Goal
 	@Builder.Default
 	private long createdAt = System.currentTimeMillis();
 	private long completedAt;
+
+	/**
+	 * How often this goal repeats, never null. Lombok skips generating a getter
+	 * when one is declared, so every read - including Lombok's own
+	 * equals/hashCode/toString - routes through this null-guard. That matters
+	 * because Gson leaves the field null on any goal persisted before
+	 * repetition existed.
+	 */
+	public RepeatPeriod getRepeatEvery()
+	{
+		return repeatEvery == null ? RepeatPeriod.NONE : repeatEvery;
+	}
+
+	/** Whether this goal resets on a period boundary rather than completing once. */
+	public boolean isRepeating()
+	{
+		return getRepeatEvery().isRepeating();
+	}
 
 	public double getProgressPercent()
 	{
