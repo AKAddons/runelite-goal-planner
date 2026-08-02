@@ -1868,8 +1868,11 @@ class GoalContextMenuBuilder
 				{
 					JMenuItem item = new JMenuItem(
 						com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP");
-					item.addActionListener(e ->
-						api.createDerivedRepeatGoal(goal.getId(), period, chunk, null));
+					// Reads live XP, which is a client-thread op - the dev
+					// harness runs with -ea, so an EDT read asserts and the
+					// creation would silently return null.
+					item.addActionListener(e -> panel.runOnClientThread(() ->
+						api.createDerivedRepeatGoal(goal.getId(), period, chunk, null)));
 					perPeriod.add(item);
 				}
 				root.add(perPeriod);
@@ -1904,8 +1907,10 @@ class GoalContextMenuBuilder
 				for (int chunk : KILL_CHUNKS)
 				{
 					JMenuItem item = new JMenuItem(chunk + " kills");
-					item.addActionListener(e -> api.createDerivedRepeatGoal(
-						goal.getId(), period, chunk, activity.getName()));
+					// Reads the boss kill-count varp: client-thread only.
+					item.addActionListener(e -> panel.runOnClientThread(() ->
+						api.createDerivedRepeatGoal(
+							goal.getId(), period, chunk, activity.getName())));
 					perPeriod.add(item);
 				}
 				perActivity.add(perPeriod);
