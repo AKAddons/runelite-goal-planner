@@ -35,6 +35,11 @@ public class GoalView
 	public String description;
 	public int currentValue;
 	public int targetValue;
+
+	/** Non-zero for a repeatable goal: the gain expected each period. Renderers
+	 *  must not do absolute-value math (level lookups, thresholds) on
+	 *  currentValue/targetValue when this is set - those are period-relative. */
+	public int repeatChunk;
 	/** 0 if not complete; nonzero millis-since-epoch when the goal was marked complete. */
 	public long completedAt;
 	public String sectionId;

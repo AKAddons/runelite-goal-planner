@@ -179,6 +179,7 @@ class GoalQueryService
 		// having to know about repeatChunk.
 		v.currentValue = g.getDisplayCurrent();
 		v.targetValue = g.getDisplayTarget();
+		v.repeatChunk = g.getRepeatChunk();
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
 		v.spriteId = g.getSpriteId();

@@ -722,6 +722,16 @@ public class GoalCard extends JPanel
 			case "SKILL":
 				String skillName = (String) view.attributes.get("skillName");
 				String skillDisplay = skillName != null ? Skill.valueOf(skillName).getName() : view.name;
+				if (view.repeatChunk > 0)
+				{
+					// Period-relative values: "100,000 XP this period" is not
+					// "level 49". Running them through getLevelForXp would render
+					// "49 Prayer / Lv 1 / 49" on a level-96 account. Show the
+					// goal's own name and its period instead.
+					line1 = fitName(view.name);
+					line2 = view.description == null ? "" : view.description;
+					break;
+				}
 				int currentLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(
 					Math.max(0, view.currentValue)));
 				int targetLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(

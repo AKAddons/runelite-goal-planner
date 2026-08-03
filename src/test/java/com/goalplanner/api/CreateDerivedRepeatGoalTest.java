@@ -26,7 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
- * Deriving a repeatable repeatable goal from a long-term one.
+ * Deriving a repeatable goal from a long-term one.
  *
  * <p>The assertion that matters throughout: the derived goal's target is
  * {@code live + chunk}, never just {@code chunk}. Auto-tracked goals read a
@@ -220,6 +220,50 @@ class CreateDerivedRepeatGoalTest
 			Goal parent = addSkillGoal("WOODCUTTING");
 			assertNull(apiWith(null).createDerivedRepeatGoal(
 				parent.getId(), RepeatPeriod.DAILY, 1000, null));
+		}
+	}
+
+	@Nested
+	@DisplayName("what the panel is handed")
+	class ViewMapping
+	{
+		@Test
+		@DisplayName("the view exposes period-relative values and flags them as such")
+		void viewIsPeriodRelative()
+		{
+			Client client = MockClientFactory.createClient(
+				new MockGameState().skillXp(Skill.PRAYER, 9_800_000));
+			GoalPlannerApiImpl api = apiWith(client);
+			Goal parent = addSkillGoal("PRAYER");
+
+			String id = api.createDerivedRepeatGoal(parent.getId(), RepeatPeriod.DAILY, 100_000, null);
+			GoalView v = api.queryAllGoals().stream()
+				.filter(gv -> gv.id.equals(id)).findFirst().orElseThrow();
+
+			assertEquals(0, v.currentValue, "a fresh period reads 0, not 9.8M");
+			assertEquals(100_000, v.targetValue, "the denominator is the chunk");
+			// The flag is what stops the card running getLevelForXp over these:
+			// 100,000 XP is level 49, which would render "49 Prayer / Lv 1 / 49"
+			// on a level-96 account.
+			assertEquals(100_000, v.repeatChunk,
+				"renderers need this to know the values are not absolute XP");
+		}
+
+		@Test
+		@DisplayName("an ordinary skill goal is not flagged, so level math still applies")
+		void plainSkillViewUnflagged()
+		{
+			GoalPlannerApiImpl api = apiWith(
+				MockClientFactory.createClient(new MockGameState().skillXp(Skill.PRAYER, 9_800_000)));
+			Goal parent = addSkillGoal("PRAYER");
+			parent.setCurrentValue(9_800_000);
+
+			GoalView v = api.queryAllGoals().stream()
+				.filter(gv -> gv.id.equals(parent.getId())).findFirst().orElseThrow();
+
+			assertEquals(0, v.repeatChunk);
+			assertEquals(13_034_431, v.targetValue, "absolute target passes through untouched");
+			assertEquals(9_800_000, v.currentValue);
 		}
 	}
 }
