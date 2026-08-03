@@ -229,6 +229,7 @@ public class GoalPlannerPlugin extends Plugin
 		// And once now, so a plugin that was closed overnight catches up on
 		// startup rather than a minute later.
 		applyRepeatResets();
+		wireRepeatBoundary();
 		goalTrackerApi.setOnGoalsChanged(() ->
 		{
 			javax.swing.SwingUtilities.invokeLater(rebuildDebounce::restart);
@@ -700,6 +701,22 @@ public class GoalPlannerPlugin extends Plugin
 	 * panel if anything actually changed. Idempotent, so the minute timer, the
 	 * startup call, and a profile switch can all invoke it freely.
 	 */
+	/**
+	 * Hand the API the boundary config so goal views can carry "due by ..." for
+	 * repeating goals. The plugin owns the config; the API layer must not read
+	 * it directly.
+	 */
+	private void wireRepeatBoundary()
+	{
+		goalTrackerApi.setNextBoundaryFn(
+			period -> com.goalplanner.util.RepeatSchedule.nextBoundary(
+				period, java.time.Instant.now(),
+				com.goalplanner.util.RepeatSchedule.zoneFor(config.resetBoundary()),
+				com.goalplanner.util.RepeatSchedule.hourFor(
+					config.resetBoundary(), config.resetHour())),
+			() -> com.goalplanner.util.RepeatSchedule.zoneFor(config.resetBoundary()));
+	}
+
 	private void applyRepeatResets()
 	{
 		if (repeatResetService == null)

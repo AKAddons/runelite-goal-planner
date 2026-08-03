@@ -180,6 +180,14 @@ class GoalQueryService
 		v.currentValue = g.getDisplayCurrent();
 		v.targetValue = g.getDisplayTarget();
 		v.repeatChunk = g.getRepeatChunk();
+		v.repeatEvery = g.getRepeatEvery().name();
+		if (g.isRepeating())
+		{
+			java.time.Instant end = api.nextBoundaryFn.apply(g.getRepeatEvery());
+			v.resetsAt = end != null ? end.toEpochMilli() : 0L;
+			v.resetsAtLabel = com.goalplanner.util.RepeatSchedule.formatDeadline(
+				end, api.boundaryZoneFn.get(), g.getRepeatEvery());
+		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
 		v.spriteId = g.getSpriteId();

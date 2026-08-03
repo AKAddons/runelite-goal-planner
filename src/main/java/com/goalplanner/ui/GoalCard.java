@@ -712,6 +712,36 @@ public class GoalCard extends JPanel
 		return truncateToWidth(text, descFont(), NAME_WIDTH_PX);
 	}
 
+
+	/**
+	 * Subtitle for a repeating goal: the period plus when this one is due, e.g.
+	 * {@code "Daily - by 00:00"}.
+	 *
+	 * <p>Computed from the LIVE period every render rather than read from the
+	 * stored description. The description is written once at creation, so a goal
+	 * switched from daily to weekly kept claiming "Daily" until something else
+	 * rewrote it.
+	 */
+	private String repeatSubtitle()
+	{
+		if (view.repeatEvery == null || "NONE".equals(view.repeatEvery))
+		{
+			return view.description == null ? "" : view.description;
+		}
+		String label;
+		try
+		{
+			label = com.goalplanner.model.RepeatPeriod.valueOf(view.repeatEvery).getLabel();
+		}
+		catch (IllegalArgumentException e)
+		{
+			return view.description == null ? "" : view.description;
+		}
+		return view.resetsAtLabel == null || view.resetsAtLabel.isEmpty()
+			? label
+			: label + " - by " + view.resetsAtLabel;
+	}
+
 	private String formatNameHtml()
 	{
 		String line1;
@@ -726,10 +756,9 @@ public class GoalCard extends JPanel
 				{
 					// Period-relative values: "100,000 XP this period" is not
 					// "level 49". Running them through getLevelForXp would render
-					// "49 Prayer / Lv 1 / 49" on a level-96 account. Show the
-					// goal's own name and its period instead.
+					// "49 Prayer / Lv 1 / 49" on a level-96 account.
 					line1 = fitName(view.name);
-					line2 = view.description == null ? "" : view.description;
+					line2 = repeatSubtitle();
 					break;
 				}
 				int currentLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(

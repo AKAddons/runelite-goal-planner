@@ -167,6 +167,37 @@ public final class RepeatSchedule
 		return mins + "m";
 	}
 
+	/**
+	 * Compact "complete it by" stamp for the card, sized to the period: a daily
+	 * only needs a clock time, a weekly needs the weekday, a monthly needs the
+	 * date. ASCII only - Swing tofus symbol glyphs on macOS Tahoe.
+	 */
+	public static String formatDeadline(Instant boundary, ZoneId zone, RepeatPeriod period)
+	{
+		if (boundary == null || period == null || !period.isRepeating())
+		{
+			return "";
+		}
+		java.time.ZonedDateTime z = boundary.atZone(zone);
+		String time = String.format("%02d:%02d", z.getHour(), z.getMinute());
+		switch (period)
+		{
+			case WEEKLY:
+				return DAY_NAMES[z.getDayOfWeek().getValue() - 1] + " " + time;
+			case MONTHLY:
+				return z.getDayOfMonth() + " " + MONTH_NAMES[z.getMonthValue() - 1];
+			case DAILY:
+			default:
+				return time;
+		}
+	}
+
+	private static final String[] DAY_NAMES =
+		{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"};
+	private static final String[] MONTH_NAMES =
+		{"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+			"Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+
 	private static int clampHour(int hour)
 	{
 		return Math.max(0, Math.min(23, hour));

@@ -40,6 +40,24 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 
 	/** Optional UI-refresh hook the plugin sets after the panel is constructed. */
 	Runnable onGoalsChanged = () -> {};
+
+	/** Supplies when a period ends. Set by the plugin, which owns the boundary
+	 *  config; null-safe default so tests and headless callers just see 0. */
+	java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant>
+		nextBoundaryFn = p -> null;
+
+	/** The zone the boundary config measures days in. */
+	java.util.function.Supplier<java.time.ZoneId> boundaryZoneFn =
+		() -> java.time.ZoneOffset.UTC;
+
+	/** Plugin-internal: hand the API a way to resolve period boundaries. */
+	public void setNextBoundaryFn(
+		java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant> fn,
+		java.util.function.Supplier<java.time.ZoneId> zoneFn)
+	{
+		this.nextBoundaryFn = fn != null ? fn : p -> null;
+		this.boundaryZoneFn = zoneFn != null ? zoneFn : () -> java.time.ZoneOffset.UTC;
+	}
 	/** Lightweight selection-only refresh - avoids full rebuild for selection changes. */
 	Runnable onSelectionChanged = () -> {};
 

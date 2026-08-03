@@ -40,6 +40,15 @@ public class GoalView
 	 *  must not do absolute-value math (level lookups, thresholds) on
 	 *  currentValue/targetValue when this is set - those are period-relative. */
 	public int repeatChunk;
+
+	/** RepeatPeriod name, or "NONE". Non-NONE means this goal rolls over. */
+	public String repeatEvery = "NONE";
+
+	/** Epoch millis when the current period ends, or 0 if it never does. */
+	public long resetsAt;
+
+	/** Compact "by ..." stamp for the card, e.g. "00:00", "Wed 00:00", "1 Sep". */
+	public String resetsAtLabel = "";
 	/** 0 if not complete; nonzero millis-since-epoch when the goal was marked complete. */
 	public long completedAt;
 	public String sectionId;

@@ -406,4 +406,74 @@ class RepeatScheduleTest
 			assertTrue(s.chars().allMatch(c -> c < 128), "non-ASCII in countdown: " + s);
 		}
 	}
+
+	@Nested
+	@DisplayName("deadline stamp")
+	class Deadline
+	{
+		private Instant boundary(RepeatPeriod period, java.time.LocalDate from)
+		{
+			return RepeatSchedule.nextBoundary(period,
+				from.atTime(12, 0).atZone(ZoneOffset.UTC).toInstant(), ZoneOffset.UTC, 0);
+		}
+
+		@Test
+		@DisplayName("a daily shows only a clock time")
+		void daily()
+		{
+			assertEquals("00:00", RepeatSchedule.formatDeadline(
+				boundary(RepeatPeriod.DAILY, LocalDate.of(2026, 7, 29)),
+				ZoneOffset.UTC, RepeatPeriod.DAILY));
+		}
+
+		@Test
+		@DisplayName("a weekly names the day it is due")
+		void weekly()
+		{
+			assertEquals("Wed 00:00", RepeatSchedule.formatDeadline(
+				boundary(RepeatPeriod.WEEKLY, LocalDate.of(2026, 7, 30)),
+				ZoneOffset.UTC, RepeatPeriod.WEEKLY));
+		}
+
+		@Test
+		@DisplayName("a monthly gives the date, since a weekday would be useless a month out")
+		void monthly()
+		{
+			assertEquals("1 Aug", RepeatSchedule.formatDeadline(
+				boundary(RepeatPeriod.MONTHLY, LocalDate.of(2026, 7, 31)),
+				ZoneOffset.UTC, RepeatPeriod.MONTHLY));
+		}
+
+		@Test
+		@DisplayName("a custom boundary hour is reflected, not assumed to be midnight")
+		void customHour()
+		{
+			Instant now = LocalDate.of(2026, 7, 29).atTime(12, 0).atZone(ZoneOffset.UTC).toInstant();
+			Instant b = RepeatSchedule.nextBoundary(RepeatPeriod.DAILY, now, ZoneOffset.UTC, 18);
+			assertEquals("18:00",
+				RepeatSchedule.formatDeadline(b, ZoneOffset.UTC, RepeatPeriod.DAILY));
+		}
+
+		@Test
+		@DisplayName("a non-repeating goal has no deadline")
+		void none()
+		{
+			assertEquals("", RepeatSchedule.formatDeadline(
+				Instant.now(), ZoneOffset.UTC, RepeatPeriod.NONE));
+			assertEquals("", RepeatSchedule.formatDeadline(null, ZoneOffset.UTC, RepeatPeriod.DAILY));
+		}
+
+		@Test
+		@DisplayName("output is ASCII only")
+		void ascii()
+		{
+			for (RepeatPeriod p : new RepeatPeriod[]{
+				RepeatPeriod.DAILY, RepeatPeriod.WEEKLY, RepeatPeriod.MONTHLY})
+			{
+				String out = RepeatSchedule.formatDeadline(
+					boundary(p, LocalDate.of(2026, 7, 29)), ZoneOffset.UTC, p);
+				assertTrue(out.chars().allMatch(c -> c < 128), "non-ASCII: " + out);
+			}
+		}
+	}
 }
