@@ -2018,11 +2018,14 @@ class GoalContextMenuBuilder
 		amount.add(customAmountItem(goal, unit));
 		menu.add(amount);
 
-		// Stop repeating entirely: the goal keeps its current target and becomes
-		// an ordinary one-shot, returning to the section it came from.
+		// Stop repeating REMOVES a derived goal rather than demoting it to a
+		// one-shot. Its target is a re-based arbitrary number ("Prayer +100K XP"
+		// against whatever XP the last period happened to start at), so as a
+		// standalone goal it is meaningless - it would just land in Incomplete
+		// and clutter the real plan. Undo restores it, which is what makes the
+		// plain label safe.
 		JMenuItem stop = new JMenuItem("Stop repeating");
-		stop.addActionListener(e ->
-			api.setGoalRepeat(goal.getId(), com.goalplanner.model.RepeatPeriod.NONE));
+		stop.addActionListener(e -> api.removeGoal(goal.getId()));
 		menu.add(stop);
 	}
 
