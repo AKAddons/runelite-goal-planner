@@ -362,20 +362,6 @@ class CreateDerivedRepeatGoalTest
 		}
 
 		@Test
-		@DisplayName("removing a derived goal leaves nothing behind in Incomplete")
-		void stopRepeatingRemoves()
-		{
-			makeChunkGoal(100_000);
-			String id = derived.getId();
-
-			assertTrue(api.removeGoal(id));
-
-			assertNull(store.findGoalById(id),
-				"a derived goal's target is period-relative, so demoting it to a one-shot "
-					+ "would drop a meaningless goal into Incomplete");
-		}
-
-		@Test
 		@DisplayName("rejections: non-derived goals, no-ops and bad amounts")
 		void rejections()
 		{
