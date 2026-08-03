@@ -1858,6 +1858,16 @@ class GoalContextMenuBuilder
 			com.goalplanner.model.RepeatPeriod.WEEKLY,
 			com.goalplanner.model.RepeatPeriod.MONTHLY);
 
+		// Already a repeatable goal? Offer to change what it asks for, not to
+		// spawn a second one off it - deriving a chunk from a chunk is not a
+		// thing, and it is the wrong affordance on a card the player is looking
+		// at because they want to adjust it.
+		if (goal.getRepeatChunk() > 0)
+		{
+			addEditRepeatMenu(menu, goal, periods);
+			return;
+		}
+
 		if (goal.getType() == GoalType.SKILL && goal.getSkillName() != null)
 		{
 			JMenu root = new JMenu("Repeatable goal");
@@ -1967,6 +1977,88 @@ class GoalContextMenuBuilder
 			}
 			panel.runOnClientThread(() ->
 				api.createDerivedRepeatGoal(goal.getId(), period, chunk, activityName));
+		});
+		return custom;
+	}
+
+	/**
+	 * Edit menu for an existing repeatable goal: how often, and how much.
+	 * Replaces the "create one" menu, which would otherwise offer to derive a
+	 * chunk from a chunk.
+	 */
+	private void addEditRepeatMenu(JPopupMenu menu, com.goalplanner.model.Goal goal,
+		java.util.List<com.goalplanner.model.RepeatPeriod> periods)
+	{
+		boolean isSkill = goal.getType() == GoalType.SKILL;
+		int[] sizes = isSkill ? XP_CHUNKS : KILL_CHUNKS;
+		String unit = isSkill ? "XP" : "kills";
+
+		JMenu every = new JMenu("Repeats");
+		for (com.goalplanner.model.RepeatPeriod period : periods)
+		{
+			JMenuItem item = new JMenuItem(
+				goal.getRepeatEvery() == period ? period.getLabel() + " *" : period.getLabel());
+			item.setEnabled(goal.getRepeatEvery() != period);
+			item.addActionListener(e -> api.setGoalRepeat(goal.getId(), period));
+			every.add(item);
+		}
+		menu.add(every);
+
+		JMenu amount = new JMenu("Amount");
+		for (int size : sizes)
+		{
+			String label = isSkill
+				? com.goalplanner.util.FormatUtil.formatNumber(size) + " " + unit
+				: size + " " + unit;
+			JMenuItem item = new JMenuItem(goal.getRepeatChunk() == size ? label + " *" : label);
+			item.setEnabled(goal.getRepeatChunk() != size);
+			item.addActionListener(e -> api.setGoalRepeatChunk(goal.getId(), size));
+			amount.add(item);
+		}
+		amount.add(customAmountItem(goal, unit));
+		menu.add(amount);
+
+		// Stop repeating entirely: the goal keeps its current target and becomes
+		// an ordinary one-shot, returning to the section it came from.
+		JMenuItem stop = new JMenuItem("Stop repeating");
+		stop.addActionListener(e ->
+			api.setGoalRepeat(goal.getId(), com.goalplanner.model.RepeatPeriod.NONE));
+		menu.add(stop);
+	}
+
+	/** "Custom..." for changing an existing repeatable goal's per-period amount. */
+	private JMenuItem customAmountItem(com.goalplanner.model.Goal goal, String unit)
+	{
+		JMenuItem custom = new JMenuItem("Custom...");
+		custom.addActionListener(e -> {
+			String input = javax.swing.JOptionPane.showInputDialog(panel,
+				"How much " + unit + " per period?", "Repeatable goal",
+				javax.swing.JOptionPane.PLAIN_MESSAGE);
+			if (input == null)
+			{
+				return;
+			}
+			String cleaned = input.trim().replace(",", "").replace(" ", "").replace("_", "");
+			final int chunk;
+			try
+			{
+				chunk = Integer.parseInt(cleaned);
+			}
+			catch (NumberFormatException ex)
+			{
+				javax.swing.JOptionPane.showMessageDialog(panel,
+					"Enter a whole number, for example 300000.",
+					"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			if (chunk <= 0)
+			{
+				javax.swing.JOptionPane.showMessageDialog(panel,
+					"Enter an amount greater than zero.",
+					"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			api.setGoalRepeatChunk(goal.getId(), chunk);
 		});
 		return custom;
 	}

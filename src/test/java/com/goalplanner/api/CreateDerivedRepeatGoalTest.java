@@ -21,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -264,6 +265,115 @@ class CreateDerivedRepeatGoalTest
 			assertEquals(0, v.repeatChunk);
 			assertEquals(13_034_431, v.targetValue, "absolute target passes through untouched");
 			assertEquals(9_800_000, v.currentValue);
+		}
+	}
+
+	@Nested
+	@DisplayName("editing an existing repeatable goal")
+	class Editing
+	{
+		private GoalPlannerApiImpl api;
+		private Goal derived;
+
+		private void makeChunkGoal(int chunk)
+		{
+			api = apiWith(MockClientFactory.createClient(
+				new MockGameState().skillXp(Skill.PRAYER, 9_800_000)));
+			Goal parent = addSkillGoal("PRAYER");
+			derived = store.findGoalById(
+				api.createDerivedRepeatGoal(parent.getId(), RepeatPeriod.DAILY, chunk, null));
+		}
+
+		@Test
+		@DisplayName("changing the amount keeps the period's start, so work already done still counts")
+		void amountKeepsPeriodStart()
+		{
+			makeChunkGoal(100_000);
+			// Period ran 9.80M -> 9.90M; the player has done 30k of it.
+			derived.setCurrentValue(9_830_000);
+
+			assertTrue(api.setGoalRepeatChunk(derived.getId(), 50_000));
+
+			assertEquals(9_850_000, derived.getTargetValue(),
+				"the period still starts at 9.80M - only its end moves");
+			assertEquals(30_000, derived.getDisplayCurrent(),
+				"progress already made this period must survive the edit");
+			assertEquals(50_000, derived.getDisplayTarget());
+		}
+
+		@Test
+		@DisplayName("shrinking the amount below what is already done completes the goal")
+		void shrinkingCompletes()
+		{
+			makeChunkGoal(100_000);
+			derived.setCurrentValue(9_830_000); // 30k done
+
+			api.setGoalRepeatChunk(derived.getId(), 20_000);
+
+			assertTrue(derived.isComplete(),
+				"30k done against a 20k ask is finished, not silently reset");
+		}
+
+		@Test
+		@DisplayName("growing the amount past current progress reopens a finished goal")
+		void growingReopens()
+		{
+			makeChunkGoal(10_000);
+			derived.setCurrentValue(9_810_000);
+			derived.setCompletedAt(System.currentTimeMillis());
+			derived.setStatus(com.goalplanner.model.GoalStatus.COMPLETE);
+
+			api.setGoalRepeatChunk(derived.getId(), 50_000);
+
+			assertFalse(derived.isComplete());
+			assertEquals(10_000, derived.getDisplayCurrent(), "the 10k already earned still counts");
+		}
+
+		@Test
+		@DisplayName("the title follows the amount so the card does not lie")
+		void titleFollowsAmount()
+		{
+			makeChunkGoal(100_000);
+			api.setGoalRepeatChunk(derived.getId(), 50_000);
+			assertEquals("Prayer +50K XP", derived.getName());
+		}
+
+		@Test
+		@DisplayName("the period can be changed on a derived goal even though it is not CUSTOM")
+		void periodChangeAllowedOnDerived()
+		{
+			makeChunkGoal(100_000);
+			assertEquals(GoalType.SKILL, derived.getType());
+
+			assertTrue(api.setGoalRepeat(derived.getId(), RepeatPeriod.WEEKLY),
+				"a derived goal re-bases each period, so changing its term is well-defined");
+			assertEquals(RepeatPeriod.WEEKLY, derived.getRepeatEvery());
+		}
+
+		@Test
+		@DisplayName("a plain auto-tracked goal still cannot be made to repeat in place")
+		void plainSkillGoalStillRefused()
+		{
+			api = apiWith(MockClientFactory.createClient(new MockGameState()));
+			Goal plain = addSkillGoal("PRAYER");
+
+			assertFalse(api.setGoalRepeat(plain.getId(), RepeatPeriod.DAILY),
+				"no repeatChunk means no per-period baseline - still refused");
+		}
+
+		@Test
+		@DisplayName("rejections: non-derived goals, no-ops and bad amounts")
+		void rejections()
+		{
+			makeChunkGoal(100_000);
+			assertFalse(api.setGoalRepeatChunk(derived.getId(), 100_000), "no-op");
+			assertFalse(api.setGoalRepeatChunk(derived.getId(), 0));
+			assertFalse(api.setGoalRepeatChunk(derived.getId(), -1));
+			assertFalse(api.setGoalRepeatChunk("no-such-goal", 500));
+
+			Goal plain = addSkillGoal("MAGIC");
+			assertFalse(api.setGoalRepeatChunk(plain.getId(), 500),
+				"a goal with no chunk has no per-period amount to change");
 		}
 	}
 }

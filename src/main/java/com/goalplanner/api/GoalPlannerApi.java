@@ -214,6 +214,15 @@ public interface GoalPlannerApi
 		int chunk, String activityName);
 
 	/**
+	 * Change how much a derived repeatable goal asks for each period. Keeps the
+	 * current period's start fixed and moves only its end, so progress already
+	 * made this period still counts.
+	 *
+	 * @return true if the amount changed
+	 */
+	boolean setGoalRepeatChunk(String goalId, int newChunk);
+
+	/**
 	 * Restore a goal's tags to its default snapshot from creation. Returns false
 	 * if the goal has no defaults or doesn't exist.
 	 */

@@ -192,11 +192,14 @@ class GoalMutationService
 		if (goalId == null || period == null) return false;
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
-		// Stage 1 is manual repeat only. Auto-tracked types read an absolute
-		// counter, so repeating them needs a per-period baseline to subtract
-		// against - until that exists, letting them repeat would show the
-		// lifetime total every morning instead of today's progress.
-		if (g.getType() != GoalType.CUSTOM) return false;
+		// Manual repeat is CUSTOM-only: an auto-tracked type reads an absolute
+		// counter, so flipping one to repeat in place would show the lifetime
+		// total every morning instead of the period's progress.
+		//
+		// A goal with a repeatChunk is exempt - it is a derived repeatable goal
+		// whose target already re-bases each period, so changing its term is
+		// well-defined for any type.
+		if (g.getType() != GoalType.CUSTOM && g.getRepeatChunk() <= 0) return false;
 		if (g.getRepeatEvery() == period) return false; // no-op
 
 		final com.goalplanner.model.RepeatPeriod prevPeriod = g.getRepeatEvery();
@@ -220,6 +223,98 @@ class GoalMutationService
 	 * {@code lastPeriodKey = 0} so the next reset check adopts the current
 	 * period without reopening a goal that is already done for today.
 	 */
+	/**
+	 * Change how much a derived repeatable goal asks for each period.
+	 *
+	 * <p>Keeps the CURRENT period's start where it is and only moves its end:
+	 * the period began at {@code targetValue - oldChunk}, so the new target is
+	 * that start plus the new chunk. Re-basing off {@code currentValue} instead
+	 * would forgive whatever the player already did this period, and shrinking
+	 * the chunk below what they have already earned should complete the goal,
+	 * not silently reset it.
+	 */
+	boolean setGoalRepeatChunk(String goalId, int newChunk)
+	{
+		log.debug("API.public setGoalRepeatChunk(goalId={}, newChunk={})", goalId, newChunk);
+		if (goalId == null || newChunk <= 0) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		if (g.getRepeatChunk() <= 0) return false;      // not a derived goal
+		if (g.getRepeatChunk() == newChunk) return false; // no-op
+
+		final int prevChunk = g.getRepeatChunk();
+		final int prevTarget = g.getTargetValue();
+		final long prevCompletedAt = g.getCompletedAt();
+		final com.goalplanner.model.GoalStatus prevStatus = g.getStatus();
+		final int periodStart = prevTarget - prevChunk;
+		final String name = g.getName();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(newChunk);
+				goal.setTargetValue(periodStart + newChunk);
+				renameChunkGoal(goal, newChunk);
+				reevaluateCompletion(goal);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public boolean revert()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(prevChunk);
+				goal.setTargetValue(prevTarget);
+				renameChunkGoal(goal, prevChunk);
+				goal.setCompletedAt(prevCompletedAt);
+				goal.setStatus(prevStatus);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public String getDescription() { return "Change amount: " + name; }
+		});
+	}
+
+	/** Keep the card title honest when the amount changes ("Prayer +50K XP"). */
+	private void renameChunkGoal(Goal g, int chunk)
+	{
+		if (g.getType() == GoalType.SKILL && g.getSkillName() != null)
+		{
+			try
+			{
+				net.runelite.api.Skill skill = net.runelite.api.Skill.valueOf(g.getSkillName());
+				g.setName(skill.getName() + " +"
+					+ com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP");
+			}
+			catch (IllegalArgumentException ignored) {}
+		}
+		else if (g.getType() == GoalType.BOSS && g.getBossName() != null)
+		{
+			g.setName(g.getBossName() + " x" + chunk);
+			g.setDescription(g.getRepeatEvery().getLabel() + " - " + chunk + " kills");
+		}
+	}
+
+	/** Shrinking a chunk below what is already earned completes it; growing reopens. */
+	private void reevaluateCompletion(Goal g)
+	{
+		boolean meets = g.meetsTarget();
+		if (g.isComplete() && !meets)
+		{
+			g.setCompletedAt(0);
+			g.setStatus(com.goalplanner.model.GoalStatus.ACTIVE);
+		}
+		else if (!g.isComplete() && meets)
+		{
+			g.setCompletedAt(System.currentTimeMillis());
+			g.setStatus(com.goalplanner.model.GoalStatus.COMPLETE);
+		}
+	}
+
 	private boolean applyRepeat(String goalId, com.goalplanner.model.RepeatPeriod period, long periodKey)
 	{
 		Goal g = api.findGoal(goalId);
