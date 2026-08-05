@@ -861,7 +861,12 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		if (client == null || goalStore == null) return false;
 		long live = client.getAccountHash();
-		if (live == -1L) return false; // logged out - nothing to track against anyway
+		// Treat any non-positive value as "no account", not just the documented
+		// -1. This guard must not depend on the exact sentinel: if it ever came
+		// back as 0 instead, the == -1 form would fall through, call
+		// setBoundAccountHash(0) - which UNBINDS - and then allow tracking, which
+		// is precisely the failure this whole gate exists to prevent.
+		if (live <= 0L) return false; // logged out / unknown - nothing to track against
 
 		long bound = goalStore.getBoundAccountHash();
 		if (bound == 0L)

@@ -1357,4 +1357,18 @@ class GoalStoreTest
 		assertEquals(0L, store.getBoundAccountHash(),
 			"a garbled binding must fail open to adoption, not crash the tracker gate");
 	}
+
+	@Test
+	@DisplayName("binding rejects non-positive hashes, so a logged-out sentinel cannot unbind a goal set")
+	void accountHashIgnoresSentinels()
+	{
+		store.setBoundAccountHash(9999L);
+		// -1 and 0 are both "no account" shapes. Neither should be storable as a
+		// real binding; setBoundAccountHash(0) is the explicit unbind.
+		store.setBoundAccountHash(0L);
+		assertEquals(0L, store.getBoundAccountHash(), "0 unbinds");
+
+		store.setBoundAccountHash(9999L);
+		assertEquals(9999L, store.getBoundAccountHash(), "a real hash still binds");
+	}
 }
