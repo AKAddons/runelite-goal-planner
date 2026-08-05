@@ -1300,4 +1300,61 @@ class GoalStoreTest
 		}
 		assertTrue(atLeastOneAcyclicAdd);
 	}
+
+	// ====================================================================
+	// Account binding — the guard against goals completing themselves
+	// against the wrong account
+	// ====================================================================
+
+	@Test
+	@DisplayName("a fresh goal set is unbound, so it can adopt whoever logs in first")
+	void accountHashStartsUnbound()
+	{
+		assertEquals(0L, store.getBoundAccountHash());
+	}
+
+	@Test
+	@DisplayName("a bound account round-trips through config")
+	void accountHashRoundTrips()
+	{
+		store.setBoundAccountHash(1234567890123L);
+		assertEquals(1234567890123L, store.getBoundAccountHash());
+
+		GoalStore reloaded = new GoalStore(configManager, new com.google.gson.Gson());
+		reloaded.load();
+		assertEquals(1234567890123L, reloaded.getBoundAccountHash(),
+			"the binding must survive a restart or it guards nothing");
+	}
+
+	@Test
+	@DisplayName("binding is per profile, so two accounts on one machine do not share it")
+	void accountHashIsPerProfile()
+	{
+		store.setBoundAccountHash(1111L);
+		store.setProfile("leagues");
+		assertEquals(0L, store.getBoundAccountHash(),
+			"a different profile must not inherit another account's binding");
+
+		store.setBoundAccountHash(2222L);
+		store.setProfile("main");
+		assertEquals(1111L, store.getBoundAccountHash(), "and the original must survive");
+	}
+
+	@Test
+	@DisplayName("unbinding clears it rather than storing zero")
+	void accountHashUnbinds()
+	{
+		store.setBoundAccountHash(4242L);
+		store.setBoundAccountHash(0L);
+		assertEquals(0L, store.getBoundAccountHash());
+	}
+
+	@Test
+	@DisplayName("a corrupt stored value reads as unbound rather than throwing")
+	void accountHashCorruptValue()
+	{
+		configManager.setConfiguration("goalplanner", "main.accountHash", "not-a-number");
+		assertEquals(0L, store.getBoundAccountHash(),
+			"a garbled binding must fail open to adoption, not crash the tracker gate");
+	}
 }

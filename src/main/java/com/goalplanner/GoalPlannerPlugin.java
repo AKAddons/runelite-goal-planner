@@ -833,7 +833,64 @@ public class GoalPlannerPlugin extends Plugin
 
 	private boolean isTrackingSuspended()
 	{
-		return System.currentTimeMillis() < trackingSuspendedUntil;
+		return System.currentTimeMillis() < trackingSuspendedUntil || !accountMatchesGoalSet();
+	}
+
+	/** True once we have told the user about the current mismatch; reset on match. */
+	private boolean accountMismatchAnnounced = false;
+
+	/**
+	 * Whether the loaded goal set actually belongs to the logged-in account.
+	 *
+	 * <p>Profiles scope where goals are STORED; nothing in RuneLite guarantees
+	 * the active profile matches the account at the keyboard. Trackers score
+	 * whatever goals are in memory against whatever account is live, and
+	 * completion is terminal for auto-tracked types - so a single drain with the
+	 * wrong pairing permanently completes every goal the other account
+	 * satisfies, and config sync spreads it to the user's other machines. That
+	 * is the "goals complete themselves on my alt" report.
+	 *
+	 * <p>{@link #PROFILE_SWITCH_SUSPEND_MS} does not cover this: it waits for
+	 * client state to settle after a switch, which delays a wrong pairing by
+	 * five seconds rather than preventing it.
+	 *
+	 * <p>An unbound goal set adopts the current account, so existing users and
+	 * new profiles migrate with no action.
+	 */
+	private boolean accountMatchesGoalSet()
+	{
+		if (client == null || goalStore == null) return false;
+		long live = client.getAccountHash();
+		if (live == -1L) return false; // logged out - nothing to track against anyway
+
+		long bound = goalStore.getBoundAccountHash();
+		if (bound == 0L)
+		{
+			goalStore.setBoundAccountHash(live);
+			log.info("Goal set for profile {} bound to the logged-in account",
+				goalStore.getActiveProfile());
+			return true;
+		}
+		if (bound == live)
+		{
+			accountMismatchAnnounced = false;
+			return true;
+		}
+
+		// Loud on purpose. Silently freezing tracking just becomes a different
+		// bug report ("my goals stopped updating"), and the user is the only one
+		// who can tell us which pairing is the wrong one.
+		if (!accountMismatchAnnounced)
+		{
+			accountMismatchAnnounced = true;
+			log.warn("Goal tracking paused: profile {} is bound to a different account",
+				goalStore.getActiveProfile());
+			postGameMessage("<col=ff3333>Goal Planner:</col> this profile's goals belong to a "
+				+ "different account, so tracking is paused - otherwise they would complete "
+				+ "themselves against the wrong account. Switch to this account's RuneLite "
+				+ "profile to resume.");
+		}
+		return false;
 	}
 
 	/**

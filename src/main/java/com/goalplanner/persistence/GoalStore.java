@@ -45,6 +45,7 @@ public class GoalStore
 	private static final String SECTIONS_KEY = "sections";
 	private static final String TAGS_KEY = "tags";
 	private static final String CATEGORY_COLORS_KEY = "categoryColors";
+	private static final String ACCOUNT_HASH_KEY = "accountHash";
 
 	// V2 per-entity persistence keys
 	private static final String SCHEMA_KEY = "schema";
@@ -105,6 +106,43 @@ public class GoalStore
 	private void unsetCfg(String key) { configManager.unsetConfiguration(CONFIG_GROUP, profileKey(key)); }
 
 	public String getActiveProfile() { return activeProfile; }
+
+	/**
+	 * The account this profile's goals belong to ({@code client.getAccountHash()}),
+	 * or 0 when the goal set has never been bound.
+	 *
+	 * <p>Goals are stored per config profile, but a profile is only a FILE - it
+	 * carries no guarantee about who is logged in. Trackers evaluate whatever
+	 * goal set is in memory against whatever account is live, so without an
+	 * identity to check, one drain with the wrong pairing silently completes
+	 * every goal the other account happens to satisfy. Completion is terminal
+	 * for auto-tracked types, so that damage is permanent, and config sync then
+	 * carries it to the user's other machines.
+	 */
+	public long getBoundAccountHash()
+	{
+		String raw = getCfg(ACCOUNT_HASH_KEY);
+		if (raw == null || raw.trim().isEmpty()) return 0L;
+		try
+		{
+			return Long.parseLong(raw.trim());
+		}
+		catch (NumberFormatException e)
+		{
+			return 0L;
+		}
+	}
+
+	/** Bind this profile's goals to an account. Pass 0 to unbind. */
+	public void setBoundAccountHash(long accountHash)
+	{
+		if (accountHash == 0L)
+		{
+			unsetCfg(ACCOUNT_HASH_KEY);
+			return;
+		}
+		setCfg(ACCOUNT_HASH_KEY, Long.toString(accountHash));
+	}
 
 	/** When true, granular saves are deferred. Call resumeSave() to persist. */
 	private boolean saveSuspended = false;
