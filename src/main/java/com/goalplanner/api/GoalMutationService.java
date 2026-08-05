@@ -141,7 +141,16 @@ class GoalMutationService
 		if (goalId == null) return false;
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
-		if (g.getType() != GoalType.CUSTOM && g.getType() != GoalType.ITEM_GRIND) return false;
+		// Deliberately allowed for EVERY type, not just manually-toggled ones.
+		// This is the recovery path when a goal was completed against the wrong
+		// account: clearing completedAt lets the trackers re-derive the truth on
+		// the next drain, so a genuinely-finished goal re-completes within a tick
+		// and a falsely-completed one simply stays open. Refusing here would
+		// leave users with no way out but deleting and rebuilding their plan.
+		//
+		// The cost: re-completion stamps a fresh completedAt, so a legitimately
+		// completed goal loses its original date. Acceptable for an action the
+		// user takes explicitly on a goal they believe is wrong.
 		if (g.getStatus() != com.goalplanner.model.GoalStatus.COMPLETE) return false;
 		final long prevCompletedAt = g.getCompletedAt();
 		final String name = g.getName();
@@ -157,6 +166,47 @@ class GoalMutationService
 			}
 			@Override public String getDescription() { return "Mark incomplete: " + name; }
 		});
+	}
+
+	/**
+	 * Clear completion on every goal in the selection, as one undoable step.
+	 *
+	 * <p>The bulk form of the recovery above: after goals were completed against
+	 * the wrong account, select them and reset. Trackers re-derive from the
+	 * correct account on the next drain, so the plan is rebuilt from live state
+	 * rather than by hand.
+	 *
+	 * @return how many goals were actually reopened
+	 */
+	int bulkMarkIncomplete(java.util.Set<String> goalIds)
+	{
+		log.debug("API.internal bulkMarkIncomplete(goalIds={})", goalIds == null ? 0 : goalIds.size());
+		if (goalIds == null || goalIds.isEmpty()) return 0;
+
+		java.util.List<String> targets = new java.util.ArrayList<>();
+		for (String id : goalIds)
+		{
+			Goal g = api.findGoal(id);
+			if (g != null && g.getStatus() == com.goalplanner.model.GoalStatus.COMPLETE)
+			{
+				targets.add(id);
+			}
+		}
+		if (targets.isEmpty()) return 0;
+
+		api.beginCompound("Reset completion on " + targets.size() + " goal(s)");
+		try
+		{
+			for (String id : targets)
+			{
+				markGoalIncomplete(id);
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+		return targets.size();
 	}
 
 	boolean markCompleteInternal(String goalId)

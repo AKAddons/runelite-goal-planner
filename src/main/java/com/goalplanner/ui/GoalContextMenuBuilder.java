@@ -331,13 +331,21 @@ class GoalContextMenuBuilder
 		// manually mark the goal incomplete to let the tracker re-evaluate.
 		boolean manuallyToggleable = goal.getType() == GoalType.CUSTOM
 			|| goal.getType() == GoalType.ITEM_GRIND;
+		// Reopening is offered for EVERY completed goal, not just manually-toggled
+		// types: it is the recovery path when something completed itself against
+		// the wrong account. Trackers re-derive on the next drain, so a genuinely
+		// finished goal comes straight back.
+		if (goal.isComplete())
+		{
+			JMenuItem reopen = new JMenuItem("Mark Incomplete");
+			reopen.addActionListener(e -> api.markGoalIncomplete(goal.getId()));
+			menu.add(reopen);
+		}
 		if (manuallyToggleable)
 		{
 			if (goal.isComplete())
 			{
-				JMenuItem reopen = new JMenuItem("Mark Incomplete");
-				reopen.addActionListener(e -> api.markGoalIncomplete(goal.getId()));
-				menu.add(reopen);
+				// handled above
 			}
 			else
 			{

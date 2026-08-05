@@ -452,6 +452,15 @@ public interface GoalPlannerInternalApi
 	int bulkRemoveGoals(java.util.Set<String> goalIds);
 
 	/**
+	 * Clear completion on every completed goal in the selection, as one undoable
+	 * step. Recovery for goals completed against the wrong account: trackers
+	 * re-derive from live state on the next drain.
+	 *
+	 * @return how many goals were reopened
+	 */
+	int bulkMarkIncomplete(java.util.Set<String> goalIds);
+
+	/**
 	 * Move a batch of goals into the same target section as a single atomic
 	 * command. Captures every goal's original section + priority upfront so
 	 * undo restores them to their exact original positions.

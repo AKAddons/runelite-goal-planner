@@ -2705,4 +2705,84 @@ class GoalPlannerApiImplTest
 			assertEquals(b, result.get(1).id);
 		}
 	}
+
+	@org.junit.jupiter.api.Nested
+	@DisplayName("recovery: reopening goals completed against the wrong account")
+	class ReopenRecovery
+	{
+		private Goal completed(GoalType type, String name)
+		{
+			Goal g = Goal.builder().type(type).name(name)
+				.targetValue(100).currentValue(100)
+				.status(GoalStatus.COMPLETE).completedAt(1_000L).build();
+			store.addGoal(g);
+			return g;
+		}
+
+		@Test
+		@DisplayName("an auto-tracked goal can now be reopened, not just CUSTOM and ITEM_GRIND")
+		void autoTrackedTypesReopen()
+		{
+			for (GoalType type : new GoalType[]{
+				GoalType.SKILL, GoalType.BOSS, GoalType.QUEST,
+				GoalType.DIARY, GoalType.COMBAT_ACHIEVEMENT, GoalType.ACCOUNT})
+			{
+				Goal g = completed(type, "Wrongly complete " + type);
+				assertTrue(api.markGoalIncomplete(g.getId()),
+					type + " must be reopenable - it is the only recovery from a bad completion");
+				assertFalse(g.isComplete());
+			}
+		}
+
+		@Test
+		@DisplayName("reopening an already-open goal is a no-op")
+		void openGoalIsNoOp()
+		{
+			Goal g = Goal.builder().type(GoalType.SKILL).name("Open").targetValue(100).build();
+			store.addGoal(g);
+			assertFalse(api.markGoalIncomplete(g.getId()));
+		}
+
+		@Test
+		@DisplayName("bulk reset reopens every completed goal in the selection and counts them")
+		void bulkReopens()
+		{
+			Goal a = completed(GoalType.SKILL, "A");
+			Goal b = completed(GoalType.BOSS, "B");
+			Goal open = Goal.builder().type(GoalType.SKILL).name("C").targetValue(100).build();
+			store.addGoal(open);
+
+			int reopened = api.bulkMarkIncomplete(
+				new java.util.LinkedHashSet<>(java.util.List.of(a.getId(), b.getId(), open.getId())));
+
+			assertEquals(2, reopened, "only the completed ones count");
+			assertFalse(a.isComplete());
+			assertFalse(b.isComplete());
+		}
+
+		@Test
+		@DisplayName("bulk reset is one undo step, so a mistaken wipe is recoverable")
+		void bulkIsSingleUndo()
+		{
+			Goal a = completed(GoalType.SKILL, "A");
+			Goal b = completed(GoalType.BOSS, "B");
+
+			api.bulkMarkIncomplete(new java.util.LinkedHashSet<>(
+				java.util.List.of(a.getId(), b.getId())));
+			assertFalse(a.isComplete());
+
+			api.undo();
+
+			assertTrue(a.isComplete(), "one undo must restore the whole reset");
+			assertTrue(b.isComplete());
+		}
+
+		@Test
+		@DisplayName("empty and null selections do nothing")
+		void bulkEmpty()
+		{
+			assertEquals(0, api.bulkMarkIncomplete(null));
+			assertEquals(0, api.bulkMarkIncomplete(new java.util.LinkedHashSet<>()));
+		}
+	}
 }
