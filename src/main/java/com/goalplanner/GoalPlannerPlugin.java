@@ -836,66 +836,55 @@ public class GoalPlannerPlugin extends Plugin
 		return System.currentTimeMillis() < trackingSuspendedUntil || !accountMatchesGoalSet();
 	}
 
-	/** True once we have told the user about the current mismatch; reset on match. */
-	private boolean accountMismatchAnnounced = false;
+	private final com.goalplanner.util.AccountBindingGate accountGate =
+		new com.goalplanner.util.AccountBindingGate();
 
 	/**
-	 * Whether the loaded goal set actually belongs to the logged-in account.
+	 * Whether the loaded goal set belongs to the logged-in account. The decision
+	 * logic lives in {@link com.goalplanner.util.AccountBindingGate} so it can be
+	 * tested without a client - this method is only the client/store plumbing
+	 * around it.
 	 *
-	 * <p>Profiles scope where goals are STORED; nothing in RuneLite guarantees
-	 * the active profile matches the account at the keyboard. Trackers score
-	 * whatever goals are in memory against whatever account is live, and
-	 * completion is terminal for auto-tracked types - so a single drain with the
-	 * wrong pairing permanently completes every goal the other account
-	 * satisfies, and config sync spreads it to the user's other machines. That
-	 * is the "goals complete themselves on my alt" report.
-	 *
-	 * <p>{@link #PROFILE_SWITCH_SUSPEND_MS} does not cover this: it waits for
-	 * client state to settle after a switch, which delays a wrong pairing by
+	 * <p>{@link #PROFILE_SWITCH_SUSPEND_MS} does not cover this case: it waits
+	 * for client state to settle after a switch, which delays a wrong pairing by
 	 * five seconds rather than preventing it.
-	 *
-	 * <p>An unbound goal set adopts the current account, so existing users and
-	 * new profiles migrate with no action.
 	 */
 	private boolean accountMatchesGoalSet()
 	{
 		if (client == null || goalStore == null) return false;
+
 		long live = client.getAccountHash();
-		// Treat any non-positive value as "no account", not just the documented
-		// -1. This guard must not depend on the exact sentinel: if it ever came
-		// back as 0 instead, the == -1 form would fall through, call
-		// setBoundAccountHash(0) - which UNBINDS - and then allow tracking, which
-		// is precisely the failure this whole gate exists to prevent.
-		if (live <= 0L) return false; // logged out / unknown - nothing to track against
-
 		long bound = goalStore.getBoundAccountHash();
-		if (bound == 0L)
-		{
-			goalStore.setBoundAccountHash(live);
-			log.info("Goal set for profile {} bound to the logged-in account",
-				goalStore.getActiveProfile());
-			return true;
-		}
-		if (bound == live)
-		{
-			accountMismatchAnnounced = false;
-			return true;
-		}
+		com.goalplanner.util.AccountBindingGate.Decision decision =
+			accountGate.evaluate(live, bound);
 
-		// Loud on purpose. Silently freezing tracking just becomes a different
-		// bug report ("my goals stopped updating"), and the user is the only one
-		// who can tell us which pairing is the wrong one.
-		if (!accountMismatchAnnounced)
+		switch (decision)
 		{
-			accountMismatchAnnounced = true;
-			log.warn("Goal tracking paused: profile {} is bound to a different account",
-				goalStore.getActiveProfile());
-			postGameMessage("<col=ff3333>Goal Planner:</col> this profile's goals belong to a "
-				+ "different account, so tracking is paused - otherwise they would complete "
-				+ "themselves against the wrong account. Switch to this account's RuneLite "
-				+ "profile to resume.");
+			case ADOPT:
+				goalStore.setBoundAccountHash(live);
+				log.info("Goal set for profile {} bound to the logged-in account",
+					goalStore.getActiveProfile());
+				return true;
+			case PAUSE:
+				// Loud on purpose. Silently freezing tracking just becomes a
+				// different bug report ("my goals stopped updating"), and the
+				// user is the only one who can tell which pairing is wrong.
+				if (accountGate.shouldAnnounceMismatch())
+				{
+					log.warn("Goal tracking paused: profile {} is bound to a different account",
+						goalStore.getActiveProfile());
+					postGameMessage("<col=ff3333>Goal Planner:</col> this profile's goals belong "
+						+ "to a different account, so tracking is paused - otherwise they would "
+						+ "complete themselves against the wrong account. Switch to this "
+						+ "account's RuneLite profile to resume.");
+				}
+				return false;
+			case TRACK:
+				return true;
+			case NO_ACCOUNT:
+			default:
+				return false;
 		}
-		return false;
 	}
 
 	/**
