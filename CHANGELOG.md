@@ -6,7 +6,7 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
-## [Unreleased]
+## [0.5.0] — 2026-08-06
 
 ### Added
 - **Repeatable goals.** Right-click a custom goal → **Repeat** → *Daily /

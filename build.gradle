@@ -48,7 +48,7 @@ tasks.named('test', Test) {
 }
 
 group = 'com.goalplanner'
-version = '0.4.2'
+version = '0.5.0'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
