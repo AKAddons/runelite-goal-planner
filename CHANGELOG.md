@@ -26,6 +26,23 @@ bumps.
   daily reset (00:00 UTC, the default, so shared routines roll over at the same
   moment for everyone), local midnight, or a custom local hour.
 
+### Fixed
+- **Goals no longer complete themselves against the wrong account.** If you play
+  more than one account, a goal set could be scored against whichever account
+  happened to be logged in — silently completing everything that account had
+  already done, permanently, and syncing that to your other machines. Goals were
+  stored per RuneLite profile, but nothing checked the profile matched the
+  account, so separate profiles didn't prevent it. A goal set is now bound to
+  the account that first tracks it, and tracking pauses with a chat warning if a
+  different account logs in. Existing plans bind themselves on next login — no
+  action needed.
+- **Any completed goal can now be reopened.** Right-click → **Mark Incomplete**
+  works on skill, boss, quest, diary and CA goals, not just custom ones, and
+  bulk selections can be reset in one undoable step. Clearing a completion lets
+  tracking re-derive the truth: a goal you really did finish comes straight
+  back, a wrongly-completed one stays open. This is the recovery path for plans
+  corrupted by the bug above — no need to delete and rebuild.
+
 ### Changed
 - Completed repeatable goals deliberately do **not** graduate to the Completed
   list — they stay in Repeatable so it reads as a checklist that fills up
