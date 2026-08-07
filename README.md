@@ -148,6 +148,8 @@ The chunk always measures from wherever you are now, so progress you already mad
 
 Not every item has one. Roughly half come from shops or skilling rather than an activity you can farm, and those simply don't offer the menu. Minigame drops don't offer it yet either.
 
+Repeatable goals travel in [share codes](#share-codes), so you can hand someone your whole daily routine. What crosses is the *shape* — daily, weekly, 300k XP — never your numbers: their copy sizes itself against their own progress on import.
+
 ### Dependency nesting (guide view)
 
 Turn a section into an outline: each goal indents under the prerequisite it unlocks, with a thin file-tree guide — your plan reads top-to-bottom like a quest guide. Per section: header right-click → **Dependency nesting** → *Nested / Not nested* (or set the global default in config). Completed steps stay visible in place.
@@ -196,7 +198,7 @@ Right-click any multi-selection: Move/Duplicate to Section, Add/Remove Tag, Chan
 
 ### Share codes
 
-Right-click a section header (or a multi-selection) → **Share** → *Copy share code*. You get a compact `GPSHARE…` string that carries the goal *definitions* — types, targets, colors, tags, relations — never your progress. Paste it anywhere: Discord, clan chat, a wiki page.
+Right-click a section header (or a multi-selection) → **Share** → *Copy share code*. You get a compact `GPSHARE…` string that carries the goal *definitions* — types, targets, colors, tags, relations, and how often a goal repeats — never your progress. Paste it anywhere: Discord, clan chat, a wiki page.
 
 ![Copying a section's share code](docs/img/share-codes.gif)
 
