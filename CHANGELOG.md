@@ -22,6 +22,8 @@ bumps.
   The chunk measures from wherever you are now, so a skipped day doesn't pile up
   — and your original goal is left untouched. Items that come from shops or
   skilling don't offer it, and minigame drops don't yet.
+- **Live "resets in" countdown.** Every repeatable card shows how long is left
+  in the current period — *Daily - resets in 3h 42m* — ticking once a minute.
 - **Repeat reset config.** Choose where the day boundary falls: the in-game
   daily reset (00:00 UTC, the default, so shared routines roll over at the same
   moment for everyone), local midnight, or a custom local hour.
@@ -53,8 +55,9 @@ bumps.
   types read an absolute lifetime counter. Deriving a repeatable goal from one
   covers them instead, by re-basing its target each period rather than storing
   a baseline.
-- Not yet done: deadline group headers with a live "resets in" countdown, and
-  minigame drops (their counters are varbits the plugin does not read yet).
+- Not yet done: grouping the Repeatable section by deadline (daily/weekly/
+  monthly sub-headers), and minigame drops (their counters are varbits the
+  plugin does not read yet).
 - Architecture decisions for this feature:
   [ADR-0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md),
   [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md),

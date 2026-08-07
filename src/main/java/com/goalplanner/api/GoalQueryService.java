@@ -185,8 +185,12 @@ class GoalQueryService
 		{
 			java.time.Instant end = api.nextBoundaryFn.apply(g.getRepeatEvery());
 			v.resetsAt = end != null ? end.toEpochMilli() : 0L;
-			v.resetsAtLabel = com.goalplanner.util.RepeatSchedule.formatDeadline(
-				end, api.boundaryZoneFn.get(), g.getRepeatEvery());
+			// Time REMAINING, not the wall-clock deadline. "by 00:00" says when
+			// the period ends but not whether you have ten minutes or ten hours,
+			// which is the only part you act on.
+			v.resetsAtLabel = end == null ? ""
+				: com.goalplanner.util.RepeatSchedule.formatCountdown(
+					end.toEpochMilli() - System.currentTimeMillis());
 		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
