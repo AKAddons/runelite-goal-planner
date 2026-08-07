@@ -476,4 +476,29 @@ class RepeatScheduleTest
 			}
 		}
 	}
+
+	@Nested
+	@DisplayName("deadline stamp zone")
+	class DeadlineZone
+	{
+		/**
+		 * The bug behind "the resets timer seems wrong": a bare clock time reads
+		 * as local, so rendering a UTC-defined boundary in UTC told a western
+		 * player "00:00" when their day actually rolls at 17:00 or 20:00. The
+		 * instant is identical - only the display zone was wrong.
+		 */
+		@Test
+		@DisplayName("the same boundary shows a different clock time per zone")
+		void zoneChangesTheClock()
+		{
+			Instant midnightUtc = LocalDate.of(2026, 8, 8)
+				.atStartOfDay(ZoneOffset.UTC).toInstant();
+
+			assertEquals("00:00", RepeatSchedule.formatDeadline(
+				midnightUtc, ZoneOffset.UTC, RepeatPeriod.DAILY));
+			assertEquals("20:00", RepeatSchedule.formatDeadline(
+				midnightUtc, NEW_YORK, RepeatPeriod.DAILY),
+				"a New York player's daily returns at 20:00, not 00:00");
+		}
+	}
 }

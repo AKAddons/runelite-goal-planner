@@ -191,8 +191,13 @@ class GoalQueryService
 			v.resetsAtLabel = end == null ? ""
 				: com.goalplanner.util.RepeatSchedule.formatCountdown(
 					end.toEpochMilli() - System.currentTimeMillis());
+			// Rendered in the PLAYER'S zone, not the boundary's. The default
+			// boundary is 00:00 UTC, so formatting it in the boundary zone shows
+			// "00:00" to someone whose daily actually returns at 17:00 local - a
+			// bare clock time reads as local, so that is just wrong. The instant
+			// is identical either way; only the zone it is displayed in changes.
 			v.resetsAtClock = com.goalplanner.util.RepeatSchedule.formatDeadline(
-				end, api.boundaryZoneFn.get(), g.getRepeatEvery());
+				end, java.time.ZoneId.systemDefault(), g.getRepeatEvery());
 		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
