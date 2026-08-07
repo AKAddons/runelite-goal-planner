@@ -191,6 +191,8 @@ class GoalQueryService
 			v.resetsAtLabel = end == null ? ""
 				: com.goalplanner.util.RepeatSchedule.formatCountdown(
 					end.toEpochMilli() - System.currentTimeMillis());
+			v.resetsAtClock = com.goalplanner.util.RepeatSchedule.formatDeadline(
+				end, api.boundaryZoneFn.get(), g.getRepeatEvery());
 		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();

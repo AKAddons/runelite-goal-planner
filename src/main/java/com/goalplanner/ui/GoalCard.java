@@ -722,6 +722,19 @@ public class GoalCard extends JPanel
 	 * switched from daily to weekly kept claiming "Daily" until something else
 	 * rewrote it.
 	 */
+	/**
+	 * Subtitle for a repeatable goal that is DONE for this period. It stays in
+	 * the Repeatable section rather than graduating, so the useful fact is when
+	 * it comes back - a wall-clock time, not a countdown. You are not working on
+	 * it, so "how long is left" no longer means anything to act on.
+	 */
+	private String completedRepeatSubtitle()
+	{
+		return view.resetsAtClock == null || view.resetsAtClock.isEmpty()
+			? ""
+			: "resets - " + view.resetsAtClock;
+	}
+
 	private String repeatSubtitle()
 	{
 		if (view.repeatEvery == null || "NONE".equals(view.repeatEvery))
@@ -841,7 +854,7 @@ public class GoalCard extends JPanel
 		// than the date you finished it.
 		if (view.repeatEvery != null && !"NONE".equals(view.repeatEvery))
 		{
-			line2 = repeatSubtitle();
+			line2 = isComplete() ? completedRepeatSubtitle() : repeatSubtitle();
 		}
 
 		if (line2.isEmpty())

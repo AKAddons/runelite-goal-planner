@@ -41,6 +41,11 @@ public class GoalView
 	 *  currentValue/targetValue when this is set - those are period-relative. */
 	public int repeatChunk;
 
+	/** Wall-clock form of the same boundary ("00:00", "Wed 00:00", "1 Sep").
+	 *  Completed repeatables show this instead of the countdown: you are not
+	 *  working on it, so "when does it come back" beats "how long is left". */
+	public String resetsAtClock;
+
 	/** RepeatPeriod name, or "NONE". Non-NONE means this goal rolls over. */
 	public String repeatEvery = "NONE";
 
