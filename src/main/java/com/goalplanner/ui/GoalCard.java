@@ -752,7 +752,7 @@ public class GoalCard extends JPanel
 		}
 		return view.resetsAtLabel == null || view.resetsAtLabel.isEmpty()
 			? label
-			: label + " - resets in " + view.resetsAtLabel;
+			: label + " - " + view.resetsAtLabel;
 	}
 
 	private String formatNameHtml()
@@ -864,7 +864,7 @@ public class GoalCard extends JPanel
 
 		return "<html>" + FormatUtil.escapeHtml(line1)
 			+ "<br><span style='font-size:9px; color:#a0a0a0'>"
-			+ FormatUtil.escapeHtml(line2) + "</span></html>";
+			+ FormatUtil.escapeHtml(fitDescription(line2)) + "</span></html>";
 	}
 
 	private static String formatCompletionDate(long epochMillis)
