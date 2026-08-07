@@ -321,6 +321,8 @@ class ShareImportService
 			.spriteId(spriteId)
 			.tooltip(clamp(dto.getTooltip(), MAX_TEXT))
 			.caTaskId(dto.getCaTaskId())
+			.repeatEvery(parseRepeatPeriod(dto.getRepeatEvery()))
+			.repeatChunk(Math.max(0, dto.getRepeatChunk()))
 			.customColorRgb(dto.getCustomColorRgb())
 			.optional(dto.isOptional())
 			.autoSeeded(dto.isAutoSeeded())
@@ -427,5 +429,28 @@ class ShareImportService
 		}
 		String t = s.trim();
 		return t.length() <= max ? t : t.substring(0, max);
+	}
+
+	/**
+	 * Read a shared repeat period. Anything unrecognised - absent (an older
+	 * sender), misspelled, or a period a future version adds - imports as a
+	 * plain one-shot rather than failing the whole bundle. A share code is
+	 * untrusted input from another client.
+	 */
+	private static com.goalplanner.model.RepeatPeriod parseRepeatPeriod(String raw)
+	{
+		if (raw == null || raw.trim().isEmpty())
+		{
+			return com.goalplanner.model.RepeatPeriod.NONE;
+		}
+		try
+		{
+			return com.goalplanner.model.RepeatPeriod.valueOf(raw.trim());
+		}
+		catch (IllegalArgumentException e)
+		{
+			log.warn("share import: unknown repeat period {} - importing as one-shot", raw);
+			return com.goalplanner.model.RepeatPeriod.NONE;
+		}
 	}
 }

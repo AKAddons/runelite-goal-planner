@@ -15,6 +15,7 @@ in the frontmatter carries the real ordering.
 | [0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md) | Repeatable goals live in a derived built-in section | accepted |
 | [0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md) | Reset repeatable goals from a period key on a clock timer | accepted |
 | [0005](docs/decisions/0005-derived-goals-re-base-their-target-instead-of-storing-a-baseline.md) | Bite-sized goals re-base their target each period instead of storing a baseline | accepted |
+| [0006](docs/decisions/0006-repeat-fields-are-additive-to-gpshare2.md) | Repeat fields ride GPSHARE2 additively; the chunk travels, the target does not | accepted |
 
 Decisions that bind both this repo and `goalplanner-share-mcp` are recorded
 here and cited by number from the MCP repo.
