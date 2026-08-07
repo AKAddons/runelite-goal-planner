@@ -739,7 +739,7 @@ public class GoalCard extends JPanel
 		}
 		return view.resetsAtLabel == null || view.resetsAtLabel.isEmpty()
 			? label
-			: label + " - by " + view.resetsAtLabel;
+			: label + " - resets in " + view.resetsAtLabel;
 	}
 
 	private String formatNameHtml()
@@ -758,7 +758,7 @@ public class GoalCard extends JPanel
 					// "level 49". Running them through getLevelForXp would render
 					// "49 Prayer / Lv 1 / 49" on a level-96 account.
 					line1 = fitName(view.name);
-					line2 = repeatSubtitle();
+					line2 = "";
 					break;
 				}
 				int currentLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(
@@ -832,6 +832,16 @@ public class GoalCard extends JPanel
 				line1 = fitName(FormatUtil.formatNumber(view.targetValue) + "x " + view.name);
 			}
 			line2 = "Completed " + formatCompletionDate(view.completedAt);
+		}
+
+		// Every repeating goal shows its period and countdown, whatever its type.
+		// This lived in the SKILL branch only, so boss/item/custom repeatables
+		// silently had no timer. Applied after the completed-date override on
+		// purpose: for something that comes back, "resets in 3h" is more useful
+		// than the date you finished it.
+		if (view.repeatEvery != null && !"NONE".equals(view.repeatEvery))
+		{
+			line2 = repeatSubtitle();
 		}
 
 		if (line2.isEmpty())

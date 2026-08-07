@@ -725,10 +725,36 @@ public class GoalPlannerPlugin extends Plugin
 		}
 		int reset = repeatResetService.applyResets(
 			java.time.Instant.now(), config.resetBoundary(), config.resetHour());
-		if (reset > 0 && panel != null)
+		if (panel == null)
+		{
+			return;
+		}
+		// A rollover always needs a repaint. Otherwise repaint only to advance the
+		// "resets in" countdowns, and only when a goal is actually showing one, so
+		// a player with no repeatable goals pays nothing. Once a minute is ~600x
+		// rarer than the per-event rebuilds the 0.4.0 perf pass removed. It is
+		// still a full rebuild: if this ever needs to tick faster than a minute it
+		// must mutate the label directly instead.
+		if (reset > 0 || hasRepeatingGoal())
 		{
 			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
 		}
+	}
+
+	private boolean hasRepeatingGoal()
+	{
+		if (goalStore == null)
+		{
+			return false;
+		}
+		for (Goal g : goalStore.getGoals())
+		{
+			if (g.isRepeating())
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** Set by onVarbitChanged/onStatChanged (which fire many times per tick) and
