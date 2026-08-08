@@ -1653,8 +1653,18 @@ public class GoalPanel extends PluginPanel
 				}
 				top.add(new com.goalplanner.ui.dock.ActionDock.Item(
 					g.isOptional() ? "Required" : "Optional",
-					g.isOptional() ? "Mark required" : "Mark optional",
+					g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
 					() -> api.setGoalOptional(gid, !g.isOptional())));
+
+				// Edit cluster (separator = Item with a null action).
+				final Goal editGoal = g;
+				if (g.getType() == com.goalplanner.model.GoalType.SKILL)
+				{
+					bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("edit", null, null));
+					bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Amount",
+						"Change the target XP / level",
+						() -> dialogFactory.showChangeSkillTargetDialog(editGoal)));
+				}
 				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Deselect",
 					"Clear the selection",
 					() -> api.clearGoalSelection()));

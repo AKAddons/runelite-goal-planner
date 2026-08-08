@@ -135,35 +135,79 @@ public class ActionDock extends JPanel
 		return sp;
 	}
 
+	private static final java.awt.Color BTN_BG = new java.awt.Color(0x3B, 0x3B, 0x3B);
+	private static final java.awt.Color BTN_HOVER = new java.awt.Color(0x4C, 0x4C, 0x52);
+	private static final java.awt.Color BTN_FG = new java.awt.Color(0xDC, 0xDC, 0xDC);
+	private static final java.awt.Color BTN_FG_OFF = new java.awt.Color(0x77, 0x77, 0x77);
+	private static final java.awt.Color HINT_FG = new java.awt.Color(0x9A, 0x9A, 0x9A);
+
 	private void rebuildStrip(JPanel row, String hint, List<Item> items)
 	{
 		row.removeAll();
 		if (hint != null && !hint.isEmpty())
 		{
-			JLabel l = new JLabel(hint);
-			l.setForeground(new java.awt.Color(160, 160, 160));
+			JLabel l = new JLabel(hint.toUpperCase(java.util.Locale.ROOT));
+			l.setForeground(HINT_FG);
+			l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD, 10f));
+			l.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 6));
 			row.add(l);
 		}
 		for (Item item : items)
 		{
-			JButton b = new JButton(item.label);
-			b.setToolTipText(item.tooltip);
-			b.setEnabled(item.enabled);
-			b.setFocusPainted(false);
-			b.setMargin(new java.awt.Insets(2, 7, 2, 7));
-			b.setPreferredSize(new Dimension(
-				b.getPreferredSize().width, ROW_H - 4));
-			b.addActionListener(e -> item.action.run());
-			row.add(b);
+			// An item with no action is a group separator: a faint small-caps
+			// label, so a scrolled strip still reads as clusters.
+			if (item.action == null)
+			{
+				JLabel sep = new JLabel(item.label.toUpperCase(java.util.Locale.ROOT));
+				sep.setForeground(HINT_FG);
+				sep.setFont(sep.getFont().deriveFont(java.awt.Font.BOLD, 9f));
+				sep.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 2));
+				row.add(sep);
+				continue;
+			}
+			row.add(makeButton(item));
 		}
+	}
+
+	private JButton makeButton(Item item)
+	{
+		JButton b = new JButton(item.label);
+		b.setToolTipText(item.tooltip);
+		b.setEnabled(item.enabled);
+		b.setFocusPainted(false);
+		b.setBorderPainted(false);
+		b.setContentAreaFilled(false);
+		b.setOpaque(true);
+		b.setBackground(BTN_BG);
+		b.setForeground(item.enabled ? BTN_FG : BTN_FG_OFF);
+		b.setFont(b.getFont().deriveFont(11f));
+		b.setBorder(BorderFactory.createEmptyBorder(3, 9, 3, 9));
+		b.setCursor(java.awt.Cursor.getPredefinedCursor(
+			item.enabled ? java.awt.Cursor.HAND_CURSOR : java.awt.Cursor.DEFAULT_CURSOR));
+		b.setPreferredSize(new Dimension(
+			b.getPreferredSize().width + 2, ROW_H - 2));
+		if (item.enabled)
+		{
+			b.addMouseListener(new java.awt.event.MouseAdapter()
+			{
+				@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(BTN_HOVER); }
+				@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(BTN_BG); }
+			});
+			b.addActionListener(e -> item.action.run());
+		}
+		return b;
 	}
 
 	private void styleCollapse()
 	{
 		collapseBtn.setFocusPainted(false);
 		collapseBtn.setBorderPainted(false);
-		collapseBtn.setContentAreaFilled(false);
+		collapseBtn.setContentAreaFilled(true);
+		collapseBtn.setOpaque(true);
+		collapseBtn.setBackground(new java.awt.Color(0x2A, 0x2A, 0x2A));
+		collapseBtn.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
 		collapseBtn.setPreferredSize(new Dimension(0, HANDLE_H));
+		collapseBtn.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 		collapseBtn.addActionListener(e -> {
 			collapsed = !collapsed;
 			applyCollapsed();
