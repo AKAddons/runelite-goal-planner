@@ -75,6 +75,38 @@ The suggestion resolver (query -> ranked create-suggestions) is pure and
 unit-tested - the ranking is exactly what must not silently degrade. The dock
 rendering is screenshot-verified.
 
+## Refined vision (the 1.0.0 target)
+
+The panel is **moded**, not selection-inferred - explicit `Select` / `Create`
+tabs. This fixes the "janky" scattered-chip read and reconciles with
+ADR-0007's anti-jitter rule: height changing on a MODE switch is a deliberate
+drawer-open; the rule only ever forbade height jumping around WITHIN a mode.
+
+**Create mode fully replaces GoalDialogFactory** - the 1.0.0 thesis is "drive
+the plugin without knowing a right-click exists." Flow:
+
+1. Type grid (Skill/Quest/Diary/Combat/Boss/Item/Account/Custom).
+2. Type-specific sub-view - navigation depth varies by type: Item = search +
+   results grid + qty; Skill = skill pick + level/xp toggle; Account = metric
+   list + target; Custom = name field. This is the "navigation and
+   subnavigation" ask and the bulk of the build.
+3. Parameters live in the form and it GROWS to fit them: toggle Repeatable and
+   the period pills + per-period amount appear inline. The form reflects
+   consequences (turn on Repeatable -> Section auto-locks to Repeatable).
+
+Create mode is tall (~340px) and should TAKE OVER the panel (overlay the list)
+when active, not split it - creating is a focused act.
+
+Search-to-create (this ADR's original subject) becomes: typing in Select mode
+surfaces matching goals AND a "create these" affordance that hands off into
+Create mode pre-seeded with the query and its connected goals.
+
+Confirmed as the **1.0.0** milestone (user, 2026-08-08). Mockups: three
+show_widget passes this session (states; type grid + item sub-flow; skill form
+repeat off/on). Build is per-type, screenshot-loop, one sub-view at a time.
+The moded shell + Skill sub-view first (most parameters), then Item (richest
+navigation), then the rest.
+
 ## More Information
 
 Depends on the dock (ADR-0007) reaching section-selection first, so the
