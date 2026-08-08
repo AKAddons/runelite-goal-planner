@@ -578,10 +578,16 @@ class GoalMutationService
 		{
 			Goal parent = api.findGoal(parentId);
 			if (parent == null || parent.isComplete()) continue;
+			// Any OR-unlock parent gets re-evaluated, whichever edge just
+			// completed. The old skip ("this parent uses AND-edge, not OR")
+			// made the cascade order-dependent: if the LAST prerequisite to
+			// finish was an AND-edge (quest tracker runs after skill tracker,
+			// so a quest AND-prereq often is), the parent was never rechecked
+			// and sat incomplete with every requirement met.
 			if (parent.getOrRequiredGoalIds() == null
-				|| !parent.getOrRequiredGoalIds().contains(completedGoalId))
+				|| parent.getOrRequiredGoalIds().isEmpty())
 			{
-				continue; // this parent uses AND-edge, not OR
+				continue; // not an OR-unlock - completing prereqs never auto-completes it
 			}
 
 			// Check: any OR-prereq complete?

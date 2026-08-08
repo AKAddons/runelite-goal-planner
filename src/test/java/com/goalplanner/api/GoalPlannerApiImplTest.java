@@ -2785,4 +2785,48 @@ class GoalPlannerApiImplTest
 			assertEquals(0, api.bulkMarkIncomplete(new java.util.LinkedHashSet<>()));
 		}
 	}
+
+	@org.junit.jupiter.api.Nested
+	@DisplayName("OR-unlock cascade is order-independent")
+	class OrCascadeOrder
+	{
+		@Test
+		@DisplayName("the parent completes even when the AND-prereq finishes last")
+		void andPrereqLastStillCascades()
+		{
+			// Warriors-style: unlock requires quest AND (99 Attack OR 99 Strength).
+			Goal quest = Goal.builder().type(GoalType.QUEST).name("Bone Voyage")
+				.questName("BONE_VOYAGE").targetValue(1).build();
+			Goal att = Goal.builder().type(GoalType.SKILL).name("99 Attack")
+				.skillName("ATTACK").targetValue(13_034_431).build();
+			Goal unlock = Goal.builder().type(GoalType.CUSTOM).name("Unlock").build();
+			store.addGoal(quest); store.addGoal(att); store.addGoal(unlock);
+			api.addRequirement(unlock.getId(), quest.getId());
+			api.addOrRequirement(unlock.getId(), att.getId());
+
+			// Tracker order in the real drain: skills BEFORE quests.
+			api.recordGoalProgress(att.getId(), 13_034_431);
+			assertFalse(unlock.isComplete(), "AND-prereq still open - must not complete yet");
+			api.recordGoalProgress(quest.getId(), 1);
+
+			assertTrue(unlock.isComplete(),
+				"the AND-prereq finishing last must still trigger the OR-unlock cascade");
+		}
+
+		@Test
+		@DisplayName("a plain AND-only parent never auto-completes from its prereqs")
+		void andOnlyParentUntouched()
+		{
+			Goal quest = Goal.builder().type(GoalType.QUEST).name("Q")
+				.questName("BONE_VOYAGE").targetValue(1).build();
+			Goal parent = Goal.builder().type(GoalType.CUSTOM).name("Manual step").build();
+			store.addGoal(quest); store.addGoal(parent);
+			api.addRequirement(parent.getId(), quest.getId());
+
+			api.recordGoalProgress(quest.getId(), 1);
+
+			assertFalse(parent.isComplete(),
+				"completing prerequisites must never auto-complete a non-OR goal");
+		}
+	}
 }

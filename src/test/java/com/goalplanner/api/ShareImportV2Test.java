@@ -337,4 +337,40 @@ class ShareImportV2Test
 		assertEquals("Inferno Prep", userSections().get(0).getName());
 		assertEquals(2, goalsInSection(landed).size());
 	}
+
+	@org.junit.jupiter.api.Test
+	@org.junit.jupiter.api.DisplayName("an imported section keeps its completed goals inline - it is a checklist")
+	void importedSectionKeepsCompletedInline()
+	{
+		com.goalplanner.share.ShareBundle bundle = new com.goalplanner.share.ShareBundle();
+		com.goalplanner.share.SectionShareDto sec = new com.goalplanner.share.SectionShareDto();
+		sec.setName("Imported");
+		com.goalplanner.share.GoalShareDto dto = new com.goalplanner.share.GoalShareDto();
+		dto.setRef(0);
+		dto.setType("QUEST");
+		dto.setName("Bone Voyage");
+		dto.setQuestName("BONE_VOYAGE");
+		dto.setTargetValue(1);
+		sec.setGoals(java.util.List.of(dto));
+		bundle.setSections(java.util.List.of(sec));
+		bundle.setV(com.goalplanner.share.ShareBundle.SCHEMA_VERSION);
+
+		api.importShareBundle(bundle);
+		com.goalplanner.model.Goal imported = store.getGoals().stream()
+			.filter(g -> "Bone Voyage".equals(g.getName())).findFirst().orElseThrow();
+
+		// The recipient has the quest done: first tracker read completes it.
+		api.recordGoalProgress(imported.getId(), 1);
+		store.reconcileDerivedSections();
+
+		// DELIBERATE (ShareImportService sets autoArchiveOverride=false on the
+		// new section): the recipient sees the shared set as a checklist, with
+		// what they have already done ticked in place - even when the global
+		// auto-archive default is on. First surprised a user during 0.5.0
+		// stress testing; pinned here so the next surprise reads this instead.
+		org.junit.jupiter.api.Assertions.assertNotEquals(
+			store.getCompletedSection().getId(), imported.getSectionId(),
+			"imported sections keep completed goals inline by design");
+		org.junit.jupiter.api.Assertions.assertTrue(imported.isComplete());
+	}
 }
