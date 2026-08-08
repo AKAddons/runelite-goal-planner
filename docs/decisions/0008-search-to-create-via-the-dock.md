@@ -86,12 +86,20 @@ principle from the user: too much navigation is an anti-pattern - keep the
 user inside their goal list whenever possible, so create navigates INSIDE the
 dock, never at panel level.
 
-Height tension (create needs room; the dock shares the panel with the list):
-resolved three ways together - (a) the dock is RESIZABLE via a top grab
-handle, user owns the split; (b) the create form uses PROGRESSIVE DISCLOSURE,
-minimal by default (type + primary field + Add), Repeat/Section/Tags behind a
-"more" expander; (c) the list stays visible/scrollable at every dock height -
-"unobstructed" means never-covered, not never-shorter.
+Height tension resolved by PEEK-AND-EXPAND (user, 2026-08-08): the dock's
+resting state is a single-line bar - a green "+ Add a goal" invitation when
+nothing is selected, or a "<N> selected" peek when something is. The list gets
+nearly the whole panel at rest. Tapping the bar expands the dock upward into
+the full contextual surface (create grid/form, or the action grid); tapping
+again collapses it. The bar is the persistent handle - chevron-up = expand,
+chevron-down = collapse. Drag stays as a bonus for a custom split. So the
+DEFAULT footprint is one line; the dock only claims height while actively in
+use and hands it back after. One pattern for both create and act.
+
+Within the expanded create surface: PROGRESSIVE DISCLOSURE keeps the form
+minimal (type + primary field + Add), with Repeat/Section/Tags behind a
+"more options" row that names what it hides. The type GRID is the create
+entry (the 8 type tiles), not a mid-flow landing.
 
 **The create surface fully replaces GoalDialogFactory** - the 1.0.0 thesis is
 "drive the plugin without knowing a right-click exists." Flow (all inside the
