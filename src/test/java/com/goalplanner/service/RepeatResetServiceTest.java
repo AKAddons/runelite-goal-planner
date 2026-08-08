@@ -357,4 +357,79 @@ class RepeatResetServiceTest
 		assertEquals(0, g.getDisplayCurrent(), "new period starts empty");
 		assertEquals(20, g.getDisplayTarget());
 	}
+
+	// ====================================================================
+	// An imported repeatable sizes itself against the RECIPIENT
+	// ====================================================================
+
+	@Test
+	@DisplayName("an imported repeatable sizes itself off the recipient's progress, not the sender's")
+	void importedRepeatableSizesToRecipient()
+	{
+		// Shape a share code from someone at 9.8M Prayer with a 10k daily
+		// produces: chunk travels, target arrives as 0 ("not yet sized").
+		Goal imported = Goal.builder()
+			.type(GoalType.SKILL).name("Prayer +10K XP").skillName("PRAYER")
+			.repeatEvery(RepeatPeriod.DAILY).repeatChunk(10_000)
+			.targetValue(0).currentValue(0)
+			.build();
+		store.addGoal(imported);
+		assertFalse(imported.meetsTarget(), "an unsized goal must never look complete");
+
+		// The recipient has 2M Prayer XP. First tracker read sizes it.
+		com.goalplanner.api.GoalPlannerApiImpl api = new com.goalplanner.api.GoalPlannerApiImpl(
+			store, new com.goalplanner.service.GoalReorderingService(store),
+			org.mockito.Mockito.mock(net.runelite.client.game.ItemManager.class),
+			org.mockito.Mockito.mock(com.goalplanner.data.WikiCaRepository.class));
+		api.recordGoalProgress(imported.getId(), 2_000_000);
+
+		assertEquals(2_010_000, imported.getTargetValue(),
+			"must be THEIR 2M + 10k, never the sender's 9,810,000");
+		assertEquals(10_000, imported.getDisplayTarget());
+		assertEquals(0, imported.getDisplayCurrent(), "they start the period at zero");
+		assertFalse(imported.isComplete());
+	}
+
+	@Test
+	@DisplayName("a boss repeatable imported at zero kills sizes to the chunk itself")
+	void importedBossFromZero()
+	{
+		Goal imported = Goal.builder()
+			.type(GoalType.BOSS).name("General Graardor x20").bossName("General Graardor")
+			.repeatEvery(RepeatPeriod.DAILY).repeatChunk(20)
+			.targetValue(0).currentValue(0)
+			.build();
+		store.addGoal(imported);
+
+		com.goalplanner.api.GoalPlannerApiImpl api = new com.goalplanner.api.GoalPlannerApiImpl(
+			store, new com.goalplanner.service.GoalReorderingService(store),
+			org.mockito.Mockito.mock(net.runelite.client.game.ItemManager.class),
+			org.mockito.Mockito.mock(com.goalplanner.data.WikiCaRepository.class));
+		api.recordGoalProgress(imported.getId(), 0);
+
+		assertEquals(20, imported.getTargetValue(), "never killed it: the next 20 is just 20");
+		assertFalse(imported.isComplete());
+	}
+
+	@Test
+	@DisplayName("sizing happens once - a later read does not re-size and wipe progress")
+	void sizingIsOneShot()
+	{
+		Goal imported = Goal.builder()
+			.type(GoalType.SKILL).name("Prayer +10K XP").skillName("PRAYER")
+			.repeatEvery(RepeatPeriod.DAILY).repeatChunk(10_000)
+			.targetValue(0).currentValue(0)
+			.build();
+		store.addGoal(imported);
+
+		com.goalplanner.api.GoalPlannerApiImpl api = new com.goalplanner.api.GoalPlannerApiImpl(
+			store, new com.goalplanner.service.GoalReorderingService(store),
+			org.mockito.Mockito.mock(net.runelite.client.game.ItemManager.class),
+			org.mockito.Mockito.mock(com.goalplanner.data.WikiCaRepository.class));
+		api.recordGoalProgress(imported.getId(), 2_000_000);
+		api.recordGoalProgress(imported.getId(), 2_004_000);
+
+		assertEquals(2_010_000, imported.getTargetValue(), "the target must not chase the progress");
+		assertEquals(4_000, imported.getDisplayCurrent(), "and the period's progress accrues");
+	}
 }

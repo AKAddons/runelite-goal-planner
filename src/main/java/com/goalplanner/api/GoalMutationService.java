@@ -520,7 +520,25 @@ class GoalMutationService
 	{
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
-		if (g.getCurrentValue() == newValue) return false;
+		// An imported repeatable goal arrives unsized (targetValue 0) because the
+		// sender's target was computed against THEIR progress. This is the first
+		// moment the recipient's own value is known, so size it here: the next
+		// `chunk` from wherever they actually are. meetsTarget() is false while
+		// targetValue is 0, so an unsized goal can never complete by accident.
+		//
+		// Deliberately BEFORE the no-op guard below. A player who has never
+		// killed the boss reports 0, which equals the stored 0, so the guard
+		// would return early and leave the goal unsized forever.
+		boolean justSized = false;
+		if (g.getRepeatChunk() > 0 && g.getTargetValue() <= 0)
+		{
+			g.setTargetValue(newValue + g.getRepeatChunk());
+			justSized = true;
+			log.info("API.internal recordGoalProgress: sized imported repeatable {} to {}",
+				g.getId(), g.getTargetValue());
+		}
+
+		if (g.getCurrentValue() == newValue && !justSized) return false;
 
 		g.setCurrentValue(newValue);
 
