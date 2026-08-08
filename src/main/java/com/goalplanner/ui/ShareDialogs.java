@@ -80,19 +80,40 @@ public final class ShareDialogs
 				return;
 			}
 		}
-		doImport(parent, api, bundle, onDone);
+		doImport(parent, api, bundle, codec.encode(bundle), onDone);
 	}
 
 	/** Import an already-decoded bundle, with the standard "imported N goal(s)"
 	 *  confirmation. Shared by the import dialog and the Saved Plans library. */
-	static void doImport(Component parent, GoalPlannerApiImpl api, ShareBundle bundle, Runnable onDone)
+	static void doImport(Component parent, GoalPlannerApiImpl api, ShareBundle bundle,
+		String canonicalCode, Runnable onDone)
 	{
+		// Re-import protection: pasting the same code twice silently duplicated
+		// every goal outside the default plan (named-section imports have no
+		// dedup). The history is per character, so a code you gave YOUR alt is
+		// still fresh for the alt. Confirming still allows the duplicate -
+		// sometimes two copies is what you want.
+		if (canonicalCode != null && api.wasCodeImported(canonicalCode))
+		{
+			int again = JOptionPane.showConfirmDialog(parent,
+				"You've imported this code before - goals outside your Default plan "
+					+ "will be duplicated.\nImport again anyway?",
+				"Already imported", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (again != JOptionPane.YES_OPTION)
+			{
+				return;
+			}
+		}
 		String sectionId = api.importShareBundle(bundle);
 		if (sectionId == null)
 		{
 			JOptionPane.showMessageDialog(parent, "Nothing to import.", "Import",
 				JOptionPane.INFORMATION_MESSAGE);
 			return;
+		}
+		if (canonicalCode != null)
+		{
+			api.rememberImportedCode(canonicalCode);
 		}
 		if (onDone != null)
 		{

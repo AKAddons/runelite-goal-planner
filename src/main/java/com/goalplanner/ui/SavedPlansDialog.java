@@ -174,7 +174,7 @@ public final class SavedPlansDialog extends JDialog
 			return;
 		}
 		SavedPlanSections.applySectionNames(bundle, plan.getSectionNames());
-		ShareDialogs.doImport(this, api, bundle, onImported);
+		ShareDialogs.doImport(this, api, bundle, codec.encode(bundle), onImported);
 		dispose();
 	}
 

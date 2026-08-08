@@ -46,6 +46,7 @@ public class GoalStore
 	private static final String TAGS_KEY = "tags";
 	private static final String CATEGORY_COLORS_KEY = "categoryColors";
 	private static final String ACCOUNT_HASH_KEY = "accountHash";
+	private static final String IMPORTED_CODES_KEY = "importedCodes";
 
 	// V2 per-entity persistence keys
 	private static final String SCHEMA_KEY = "schema";
@@ -461,6 +462,65 @@ public class GoalStore
 	}
 
 	public long getActiveAccount() { return activeAccount; }
+
+	/** Cap on remembered import hashes; oldest fall off. Bounds config growth. */
+	private static final int MAX_IMPORTED_CODES = 50;
+
+	/**
+	 * Whether this exact share code was imported into THIS character's plan
+	 * before. Keyed by SHA-1 of the canonical encoding, stored in the
+	 * profile+account namespace - so each character has its own import history
+	 * and re-import protection follows the plan it protects.
+	 */
+	public boolean wasCodeImported(String canonicalCode)
+	{
+		if (canonicalCode == null || canonicalCode.isEmpty()) return false;
+		return importedCodeHashes().contains(sha1(canonicalCode));
+	}
+
+	/** Record a successful import of this code for the active character. */
+	public void rememberImportedCode(String canonicalCode)
+	{
+		if (canonicalCode == null || canonicalCode.isEmpty()) return;
+		java.util.List<String> hashes = importedCodeHashes();
+		String h = sha1(canonicalCode);
+		if (hashes.contains(h)) return;
+		hashes.add(h);
+		while (hashes.size() > MAX_IMPORTED_CODES) hashes.remove(0);
+		setCfg(IMPORTED_CODES_KEY, gson.toJson(hashes));
+	}
+
+	private java.util.List<String> importedCodeHashes()
+	{
+		String raw = getCfg(IMPORTED_CODES_KEY);
+		if (raw == null || raw.trim().isEmpty()) return new ArrayList<>();
+		try
+		{
+			java.util.List<String> hashes = gson.fromJson(raw, STRING_LIST_TYPE);
+			return hashes != null ? hashes : new ArrayList<>();
+		}
+		catch (Exception e)
+		{
+			return new ArrayList<>(); // corrupt history fails open: worst case is one missed warning
+		}
+	}
+
+	private static String sha1(String text)
+	{
+		try
+		{
+			byte[] d = java.security.MessageDigest.getInstance("SHA-1")
+				.digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			StringBuilder sb = new StringBuilder(d.length * 2);
+			for (byte b : d) sb.append(String.format("%02x", b));
+			return sb.toString();
+		}
+		catch (java.security.NoSuchAlgorithmException e)
+		{
+			// SHA-1 is mandatory on every JVM; fall back to something stable anyway.
+			return Integer.toHexString(text.hashCode());
+		}
+	}
 
 	/** The last character seen on this profile, or 0 if none recorded. */
 	public long getLastAccount()

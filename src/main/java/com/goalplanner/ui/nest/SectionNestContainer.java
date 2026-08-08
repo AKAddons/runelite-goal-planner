@@ -63,6 +63,14 @@ public final class SectionNestContainer extends JPanel
 	private final List<Row> rows;
 	private final int deepestLevel; // deepest capped level present, for indent bookkeeping
 	private final int indentW; // widest indent at full step, for preferred-size bookkeeping
+	/**
+	 * Left gutter before level-0 cards. LEFT_PAD when anything actually nests
+	 * (the gutter holds collapse chevrons and guide lines); 0 when the whole
+	 * section is level-0 - a degenerate outline, common since repeatable goals
+	 * auto-move out of their import section and can leave only flat cards
+	 * behind. Without this, those cards render inset for no visible reason.
+	 */
+	private final int basePad;
 	private int stepPx = INDENT_STEP; // effective per-level indent, width-adapted each doLayout()
 	/** Collapse chevron per parent row id, positioned in the gutter in doLayout(). */
 	private final java.util.Map<String, javax.swing.JLabel> chevrons = new java.util.HashMap<>();
@@ -76,7 +84,8 @@ public final class SectionNestContainer extends JPanel
 		int maxLevel = 0;
 		for (Row r : rows) maxLevel = Math.max(maxLevel, capped(r.level));
 		this.deepestLevel = maxLevel;
-		this.indentW = LEFT_PAD + maxLevel * INDENT_STEP;
+		this.basePad = maxLevel > 0 ? LEFT_PAD : 0;
+		this.indentW = basePad + maxLevel * INDENT_STEP;
 
 		for (Row r : rows)
 		{
@@ -107,10 +116,10 @@ public final class SectionNestContainer extends JPanel
 	private static int capped(int level) { return Math.min(level, MAX_LEVEL); }
 
 	/** Left x of a card at the given (capped) level. */
-	private int cardX(int level) { return LEFT_PAD + capped(level) * stepPx; }
+	private int cardX(int level) { return basePad + capped(level) * stepPx; }
 
 	/** X of the vertical guide for ancestor level k (1-based). */
-	private int guideX(int k) { return LEFT_PAD + (k - 1) * stepPx + stepPx / 2; }
+	private int guideX(int k) { return basePad + (k - 1) * stepPx + stepPx / 2; }
 
 	/** Per-level indent that fits the current panel width: full {@link #INDENT_STEP}
 	 *  when there's room, shrinking toward {@link #MIN_STEP} so the deepest card keeps
@@ -121,7 +130,7 @@ public final class SectionNestContainer extends JPanel
 		// Reserve more card width at larger font scales (the card content grows with
 		// the font); the MIN_STEP floor keeps the hierarchy legible regardless.
 		int minCard = Math.round(MIN_CARD_W * com.goalplanner.ui.PanelFonts.scale());
-		int budget = width - LEFT_PAD - minCard;
+		int budget = width - basePad - minCard;
 		int fit = budget / deepestLevel;
 		return Math.max(MIN_STEP, Math.min(INDENT_STEP, fit));
 	}

@@ -1477,4 +1477,60 @@ class GoalStoreTest
 		store.setProfile("main");
 		assertNotNull(store.findGoalById(mainGoal.getId()));
 	}
+
+	// ====================================================================
+	// Re-import protection — per-character import history
+	// ====================================================================
+
+	@Test
+	@DisplayName("an imported code is remembered; an unseen one is not")
+	void importHistoryRemembers()
+	{
+		assertFalse(store.wasCodeImported("GPSHARE2:abc"));
+		store.rememberImportedCode("GPSHARE2:abc");
+		assertTrue(store.wasCodeImported("GPSHARE2:abc"));
+		assertFalse(store.wasCodeImported("GPSHARE2:other"));
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		assertTrue(fresh.wasCodeImported("GPSHARE2:abc"), "history must survive a restart");
+	}
+
+	@Test
+	@DisplayName("import history is per character - your alt has not seen your main's codes")
+	void importHistoryIsPerCharacter()
+	{
+		store.setAccount(111L);
+		store.rememberImportedCode("GPSHARE2:routine");
+		assertTrue(store.wasCodeImported("GPSHARE2:routine"));
+
+		store.setAccount(222L);
+		assertFalse(store.wasCodeImported("GPSHARE2:routine"),
+			"a code imported on the main is fresh for the alt - its plan never saw it");
+
+		store.setAccount(111L);
+		assertTrue(store.wasCodeImported("GPSHARE2:routine"));
+	}
+
+	@Test
+	@DisplayName("history is capped, oldest first out")
+	void importHistoryCapped()
+	{
+		for (int i = 0; i < 55; i++) store.rememberImportedCode("code-" + i);
+		assertFalse(store.wasCodeImported("code-0"), "oldest must have fallen off the cap");
+		assertTrue(store.wasCodeImported("code-54"));
+	}
+
+	@Test
+	@DisplayName("null, empty, and corrupt stored history all fail open")
+	void importHistoryFailsOpen()
+	{
+		assertFalse(store.wasCodeImported(null));
+		assertFalse(store.wasCodeImported(""));
+		store.rememberImportedCode(null); // no-op, no throw
+
+		configManager.setConfiguration("goalplanner", "main.importedCodes", "not-json[");
+		assertFalse(store.wasCodeImported("GPSHARE2:abc"),
+			"corrupt history means one missed warning, never a crash");
+	}
 }
