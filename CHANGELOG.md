@@ -6,7 +6,7 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
-## [0.5.0] — 2026-08-06
+## [0.5.0] — 2026-08-08
 
 ### Added
 - **Repeatable goals.** Right-click a custom goal → **Repeat** → *Daily /
@@ -38,6 +38,10 @@ bumps.
   characters start fresh. Before login the panel shows the last character seen.
 
 ### Fixed
+- **Re-importing a share code now warns first.** Pasting the same code twice
+  silently duplicated every goal outside your Default plan. The plugin now
+  remembers what each character has imported and asks before duplicating —
+  confirming still allows it, for when two copies is what you want.
 - **Goals no longer complete themselves against the wrong account.** If you play
   more than one account, a goal set could be scored against whichever account
   happened to be logged in — silently completing everything that account had
