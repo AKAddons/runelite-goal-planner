@@ -28,6 +28,15 @@ bumps.
   daily reset (00:00 UTC, the default, so shared routines roll over at the same
   moment for everyone), local midnight, or a custom local hour.
 
+### Added (multi-character)
+- **Every character keeps its own plan.** Goals are now keyed by profile
+  **and** character — the same split that already kept leagues separate from
+  main, one level down. Two accounts sharing a RuneLite profile no longer
+  share (or endanger) each other's goals; a world hop to Leagues or **Deadman**
+  switches the profile axis while the character axis stays put. Your existing
+  plan is adopted by the first character to log in after updating; other
+  characters start fresh. Before login the panel shows the last character seen.
+
 ### Fixed
 - **Goals no longer complete themselves against the wrong account.** If you play
   more than one account, a goal set could be scored against whichever account

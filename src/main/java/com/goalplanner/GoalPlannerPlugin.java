@@ -180,6 +180,11 @@ public class GoalPlannerPlugin extends Plugin
 		com.goalplanner.data.BossKillData.init(gson);
 
 		goalStore.load();
+		// Pre-login the panel shows the LAST character seen on this profile -
+		// the same answer the main/leagues split gives for the same question.
+		// setAccount no-ops at 0 (fresh install), which leaves the pre-account
+		// namespace visible exactly as before this feature existed.
+		goalStore.setAccount(goalStore.getLastAccount());
 		goalStore.setAutoArchiveDefault(config.autoArchiveCompleted());
 		goalStore.setIndentDependenciesDefault(config.showDependenciesIndented());
 		seedCanonicalSystemTags();
@@ -880,6 +885,21 @@ public class GoalPlannerPlugin extends Plugin
 		if (client == null || goalStore == null) return false;
 
 		long live = client.getAccountHash();
+		// Per-character namespace: follow the logged-in character BEFORE the
+		// binding gate evaluates, so the gate compares against the right plan.
+		// setAccount no-ops when unchanged; on a real switch it migrates,
+		// reloads, and this drain sits out the settle window like a profile hop.
+		if (live > 0 && live != goalStore.getActiveAccount())
+		{
+			goalStore.setAccount(live);
+			trackingSuspendedUntil = System.currentTimeMillis() + PROFILE_SWITCH_SUSPEND_MS;
+			lastMiscApproval = -1;
+			if (panel != null)
+			{
+				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+			}
+			return false; // this drain waits; next one sees the settled state
+		}
 		long bound = goalStore.getBoundAccountHash();
 		com.goalplanner.util.AccountBindingGate.Decision decision =
 			accountGate.evaluate(live, bound);
@@ -939,6 +959,12 @@ public class GoalPlannerPlugin extends Plugin
 	private String detectProfile()
 	{
 		java.util.Set<net.runelite.api.WorldType> wt = client.getWorldType();
+		// Deadman first: a DMM world could conceivably also read as seasonal,
+		// and its progress must never bleed into the leagues plan.
+		if (wt != null && wt.contains(net.runelite.api.WorldType.DEADMAN))
+		{
+			return com.goalplanner.persistence.GoalStore.PROFILE_DEADMAN;
+		}
 		boolean seasonal = wt != null && wt.contains(net.runelite.api.WorldType.SEASONAL);
 		int leagueAccount = client.getVarbitValue(net.runelite.api.gameval.VarbitID.LEAGUE_ACCOUNT);
 		return (seasonal || leagueAccount != 0)

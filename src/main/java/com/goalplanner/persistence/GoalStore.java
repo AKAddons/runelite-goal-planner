@@ -91,10 +91,32 @@ public class GoalStore
 	 */
 	public static final String PROFILE_MAIN = "main";
 	public static final String PROFILE_LEAGUES = "leagues";
+	public static final String PROFILE_DEADMAN = "deadman";
 	private String activeProfile = PROFILE_MAIN;
 
-	/** Prefix a config key with the active profile namespace. */
-	private String profileKey(String key) { return activeProfile + "." + key; }
+	/**
+	 * The character this goal set belongs to ({@code client.getAccountHash()}),
+	 * or 0 before any login. Each character gets its own namespace inside the
+	 * profile - the same split main/leagues already uses, one level down - so
+	 * two accounts sharing a RuneLite profile no longer share a plan.
+	 *
+	 * <p>0 deliberately yields the PRE-ACCOUNT key shape ({@code main.goals}),
+	 * which is both what every existing install has on disk and what tests see:
+	 * the account dimension is invisible until {@link #setAccount} is called.
+	 */
+	private long activeAccount = 0L;
+
+	/** Per-profile pointer to the last character seen, OUTSIDE the account
+	 *  namespace so startup can find it before any login. */
+	private static final String LAST_ACCOUNT_KEY = "lastAccount";
+
+	/** Prefix a config key with the active profile + account namespace. */
+	private String profileKey(String key)
+	{
+		return activeAccount > 0
+			? activeProfile + ".a" + activeAccount + "." + key
+			: activeProfile + "." + key;
+	}
 
 	/** Read a config value from the active profile's namespace. */
 	private String getCfg(String key) { return configManager.getConfiguration(CONFIG_GROUP, profileKey(key)); }
@@ -436,6 +458,93 @@ public class GoalStore
 		log.info("Switching profile: {} → {}", activeProfile, newProfile);
 		activeProfile = newProfile;
 		reload();
+	}
+
+	public long getActiveAccount() { return activeAccount; }
+
+	/** The last character seen on this profile, or 0 if none recorded. */
+	public long getLastAccount()
+	{
+		String raw = configManager.getConfiguration(CONFIG_GROUP,
+			activeProfile + "." + LAST_ACCOUNT_KEY);
+		if (raw == null || raw.trim().isEmpty()) return 0L;
+		try { return Long.parseLong(raw.trim()); }
+		catch (NumberFormatException e) { return 0L; }
+	}
+
+	/**
+	 * Switch the active character namespace. Mirrors {@link #setProfile}: on a
+	 * real change it migrates any pre-account profile data into the new
+	 * account's namespace (first login adopts the existing plan, exactly like
+	 * the account binding's adoption), records the character as this profile's
+	 * last-seen, and reloads.
+	 *
+	 * <p>Non-positive hashes are ignored rather than unscoping: a logged-out
+	 * sentinel must never silently switch whose plan is in memory.
+	 */
+	public void setAccount(long accountHash)
+	{
+		if (accountHash <= 0 || accountHash == activeAccount) return;
+		log.info("Switching account namespace: {} → {} (profile {})",
+			activeAccount, accountHash, activeProfile);
+		activeAccount = accountHash;
+		configManager.setConfiguration(CONFIG_GROUP,
+			activeProfile + "." + LAST_ACCOUNT_KEY, Long.toString(accountHash));
+		migrateProfileIntoActiveAccount();
+		reload();
+	}
+
+	/**
+	 * Move pre-account profile-scoped data ({@code main.goals}) into the active
+	 * account's namespace ({@code main.a<hash>.goals}). The account-dimension
+	 * analogue of {@link #migrateLegacyIntoActiveProfile()}, with the same
+	 * adopt-then-delete shape: the first character to log in owns the existing
+	 * plan, and deleting the source is what makes the SECOND character start
+	 * fresh instead of re-adopting the same goals.
+	 *
+	 * <p>No-op if the account namespace already has data or there is nothing
+	 * profile-scoped to move.
+	 */
+	private boolean migrateProfileIntoActiveAccount()
+	{
+		if (activeAccount <= 0) return false;
+		if (getCfg(SCHEMA_KEY) != null) return false; // account already has data
+		String src = activeProfile + ".";
+		if (configManager.getConfiguration(CONFIG_GROUP, src + SCHEMA_KEY) == null)
+		{
+			return false; // nothing pre-account to adopt
+		}
+		log.info("Migrating profile-scoped storage → account namespace {}", activeAccount);
+
+		java.util.List<String> keys = new java.util.ArrayList<>(java.util.List.of(
+			SCHEMA_KEY, GOAL_ORDER_KEY, TAG_IDS_KEY, SECTIONS_KEY,
+			CATEGORY_COLORS_KEY, GOALS_KEY, TAGS_KEY, ACCOUNT_HASH_KEY));
+		String order = configManager.getConfiguration(CONFIG_GROUP, src + GOAL_ORDER_KEY);
+		String tagIds = configManager.getConfiguration(CONFIG_GROUP, src + TAG_IDS_KEY);
+		try
+		{
+			java.util.List<String> ids = order == null ? null : gson.fromJson(order, STRING_LIST_TYPE);
+			if (ids != null) for (String id : ids) keys.add(GOAL_PREFIX + id);
+		}
+		catch (Exception e) { log.warn("account migration: goal order parse failed", e); }
+		try
+		{
+			java.util.List<String> ids = tagIds == null ? null : gson.fromJson(tagIds, STRING_LIST_TYPE);
+			if (ids != null) for (String id : ids) keys.add(TAG_PREFIX + id);
+		}
+		catch (Exception e) { log.warn("account migration: tag ids parse failed", e); }
+
+		for (String key : keys)
+		{
+			String value = configManager.getConfiguration(CONFIG_GROUP, src + key);
+			if (value != null)
+			{
+				setCfg(key, value); // scoped write: lands in the account namespace
+				configManager.unsetConfiguration(CONFIG_GROUP, src + key);
+			}
+		}
+		log.info("Profile → account migration complete ({} keys considered)", keys.size());
+		return true;
 	}
 
 	/**

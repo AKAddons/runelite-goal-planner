@@ -1371,4 +1371,110 @@ class GoalStoreTest
 		store.setBoundAccountHash(9999L);
 		assertEquals(9999L, store.getBoundAccountHash(), "a real hash still binds");
 	}
+
+	// ====================================================================
+	// Per-character namespaces — profile + account as the key to everything
+	// ====================================================================
+
+	@Test
+	@DisplayName("two characters on one profile keep fully separate plans")
+	void accountsAreSeparate()
+	{
+		store.setAccount(111L);
+		Goal mains = Goal.builder().type(GoalType.CUSTOM).name("Main's goal").build();
+		store.addGoal(mains);
+
+		store.setAccount(222L);
+		assertNull(store.findGoalById(mains.getId()),
+			"testpurr must not see the main's goals");
+		Goal alts = Goal.builder().type(GoalType.CUSTOM).name("Alt's goal").build();
+		store.addGoal(alts);
+
+		store.setAccount(111L);
+		assertNotNull(store.findGoalById(mains.getId()), "switching back restores the main's plan");
+		assertNull(store.findGoalById(alts.getId()));
+	}
+
+	@Test
+	@DisplayName("the first character to log in adopts the pre-account plan; the second starts fresh")
+	void firstLoginAdoptsExistingPlan()
+	{
+		// Pre-upgrade state: goals live profile-scoped, no account dimension.
+		Goal existing = Goal.builder().type(GoalType.CUSTOM).name("Pre-upgrade goal").build();
+		store.addGoal(existing);
+		store.save();
+
+		store.setAccount(111L);
+		assertNotNull(store.findGoalById(existing.getId()),
+			"the existing plan must survive the upgrade - losing it is the one unforgivable failure");
+
+		// The adopt-then-delete is what makes the second character fresh:
+		// if the profile-scoped source were left behind, every new character
+		// would re-adopt the same goals.
+		store.setAccount(222L);
+		assertNull(store.findGoalById(existing.getId()),
+			"the second character must not re-adopt the first one's plan");
+	}
+
+	@Test
+	@DisplayName("adopted data survives a full reload from disk")
+	void adoptionIsPersistent()
+	{
+		Goal existing = Goal.builder().type(GoalType.CUSTOM).name("Persistent").build();
+		store.addGoal(existing);
+		store.save();
+		store.setAccount(111L);
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		fresh.setAccount(111L);
+		assertNotNull(fresh.findGoalById(existing.getId()),
+			"migration must move the persisted keys, not just the in-memory list");
+	}
+
+	@Test
+	@DisplayName("the last character is remembered per profile, so startup can restore it")
+	void lastAccountPointer()
+	{
+		assertEquals(0L, store.getLastAccount(), "fresh install: nothing recorded");
+		store.setAccount(111L);
+		assertEquals(111L, store.getLastAccount());
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		assertEquals(111L, fresh.getLastAccount(), "the pointer must survive a restart");
+	}
+
+	@Test
+	@DisplayName("non-positive hashes never switch the namespace")
+	void sentinelsIgnored()
+	{
+		store.setAccount(111L);
+		Goal g = Goal.builder().type(GoalType.CUSTOM).name("Held").build();
+		store.addGoal(g);
+
+		store.setAccount(0L);
+		store.setAccount(-1L);
+		assertEquals(111L, store.getActiveAccount(),
+			"a logged-out sentinel must not silently switch whose plan is in memory");
+		assertNotNull(store.findGoalById(g.getId()));
+	}
+
+	@Test
+	@DisplayName("profile and account compose: the same character has separate main and leagues plans")
+	void profileAndAccountCompose()
+	{
+		store.setAccount(111L);
+		Goal mainGoal = Goal.builder().type(GoalType.CUSTOM).name("Main-world goal").build();
+		store.addGoal(mainGoal);
+
+		store.setProfile("leagues");
+		assertNull(store.findGoalById(mainGoal.getId()),
+			"leagues.a111 is a different plan from main.a111");
+		assertEquals(111L, store.getActiveAccount(),
+			"a world hop changes the profile axis, not the character axis");
+
+		store.setProfile("main");
+		assertNotNull(store.findGoalById(mainGoal.getId()));
+	}
 }
