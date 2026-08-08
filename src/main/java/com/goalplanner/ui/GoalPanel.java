@@ -1699,6 +1699,19 @@ public class GoalPanel extends PluginPanel
 				break;
 			}
 		}
+		switch (ctx.getState())
+		{
+			case GOAL:
+				actionDock.setPeek("1 selected", false);
+				break;
+			case MULTI:
+				actionDock.setPeek(ctx.getCount() + " selected", false);
+				break;
+			case EMPTY:
+			default:
+				actionDock.setPeek("Add a goal", true);
+				break;
+		}
 		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
 	}
 

@@ -68,13 +68,15 @@ public class ActionDock extends JPanel
 	}
 
 	private static final int ROW_H = 26;
-	private static final int HANDLE_H = 11;
+	private static final int PEEK_H = 28;
 
 	private final JPanel content = new JPanel();
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
-	private final JButton collapseBtn = new JButton();
-	private boolean collapsed = false;
+	private final JButton peekBar = new JButton();
+	private boolean collapsed = true; // rest state is the one-line peek
+	private String peekText = "Add a goal";
+	private boolean peekAccent = true; // green when it is the create invitation
 	private Rows current = new Rows(null, List.of(), List.of());
 
 	public ActionDock()
@@ -89,13 +91,25 @@ public class ActionDock extends JPanel
 		content.add(scrollStrip(topRow));
 		content.add(scrollStrip(bottomRow));
 
-		styleCollapse();
-		add(collapseBtn, BorderLayout.NORTH);
+		stylePeekBar();
+		add(peekBar, BorderLayout.NORTH);
 		add(content, BorderLayout.CENTER);
 		applyCollapsed();
 	}
 
-	/** Replace the dock's buttons. Height never changes. */
+	/**
+	 * The resting bar's label and tone. {@code accent} true = the green
+	 * "+ Add a goal" create invitation (nothing selected); false = a neutral
+	 * "<N> selected" peek.
+	 */
+	public void setPeek(String text, boolean accent)
+	{
+		this.peekText = text != null ? text : "";
+		this.peekAccent = accent;
+		applyCollapsed();
+	}
+
+	/** Replace the expanded content. Does not force the dock open. */
 	public void setRows(Rows rows)
 	{
 		this.current = rows;
@@ -198,17 +212,23 @@ public class ActionDock extends JPanel
 		return b;
 	}
 
-	private void styleCollapse()
+	private static final java.awt.Color PEEK_CREATE_BG = new java.awt.Color(0x1D, 0x2A, 0x1F);
+	private static final java.awt.Color PEEK_CREATE_FG = new java.awt.Color(0xBF, 0xE0, 0xBF);
+	private static final java.awt.Color PEEK_NEUTRAL_BG = new java.awt.Color(0x22, 0x22, 0x24);
+	private static final java.awt.Color PEEK_NEUTRAL_FG = new java.awt.Color(0xBC, 0xBC, 0xBC);
+
+	private void stylePeekBar()
 	{
-		collapseBtn.setFocusPainted(false);
-		collapseBtn.setBorderPainted(false);
-		collapseBtn.setContentAreaFilled(true);
-		collapseBtn.setOpaque(true);
-		collapseBtn.setBackground(new java.awt.Color(0x2A, 0x2A, 0x2A));
-		collapseBtn.setHorizontalAlignment(javax.swing.SwingConstants.CENTER);
-		collapseBtn.setPreferredSize(new Dimension(0, HANDLE_H));
-		collapseBtn.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		collapseBtn.addActionListener(e -> {
+		peekBar.setFocusPainted(false);
+		peekBar.setBorderPainted(false);
+		peekBar.setContentAreaFilled(true);
+		peekBar.setOpaque(true);
+		peekBar.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
+		peekBar.setFont(peekBar.getFont().deriveFont(java.awt.Font.BOLD, 12f));
+		peekBar.setBorder(BorderFactory.createEmptyBorder(6, 11, 6, 11));
+		peekBar.setPreferredSize(new Dimension(0, PEEK_H));
+		peekBar.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+		peekBar.addActionListener(e -> {
 			collapsed = !collapsed;
 			applyCollapsed();
 		});
@@ -217,12 +237,16 @@ public class ActionDock extends JPanel
 	private void applyCollapsed()
 	{
 		content.setVisible(!collapsed);
-		collapseBtn.setIcon(collapsed
-			? com.goalplanner.ui.ShapeIcons.upTriangle(7,
-				new java.awt.Color(0xB4, 0xB4, 0xDC))
-			: com.goalplanner.ui.ShapeIcons.downTriangle(7,
-				new java.awt.Color(0xB4, 0xB4, 0xDC)));
-		collapseBtn.setToolTipText(collapsed ? "Show actions" : "Hide actions");
+		peekBar.setText((peekAccent ? "+  " : "") + peekText);
+		peekBar.setBackground(peekAccent ? PEEK_CREATE_BG : PEEK_NEUTRAL_BG);
+		peekBar.setForeground(peekAccent ? PEEK_CREATE_FG : PEEK_NEUTRAL_FG);
+		// Chevron trails on the right: up = tap to expand, down = tap to close.
+		peekBar.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
+		peekBar.setIcon(collapsed
+			? com.goalplanner.ui.ShapeIcons.upTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A))
+			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
+		peekBar.setIconTextGap(8);
+		peekBar.setToolTipText(collapsed ? "Open" : "Close");
 		revalidate();
 		repaint();
 	}
@@ -230,7 +254,7 @@ public class ActionDock extends JPanel
 	@Override
 	public Dimension getPreferredSize()
 	{
-		int h = HANDLE_H + (collapsed ? 0 : 2 * (ROW_H + 4) + 2);
+		int h = PEEK_H + (collapsed ? 0 : 2 * (ROW_H + 4) + 2);
 		return new Dimension(super.getPreferredSize().width, h);
 	}
 }
