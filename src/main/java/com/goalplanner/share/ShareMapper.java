@@ -197,6 +197,8 @@ public final class ShareMapper
 			dto.setSpriteId(g.getSpriteId());
 			dto.setTooltip(g.getTooltip());
 			dto.setCaTaskId(g.getCaTaskId());
+			dto.setRepeatEvery(g.getRepeatEvery().name());
+			dto.setRepeatChunk(g.getRepeatChunk());
 			dto.setCustomColorRgb(g.getCustomColorRgb());
 			dto.setOptional(g.isOptional());
 			dto.setAutoSeeded(g.isAutoSeeded());

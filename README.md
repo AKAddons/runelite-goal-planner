@@ -130,6 +130,26 @@ Right-click a goal (or selection) → **Move to Section** or **Duplicate to Sect
 
 ![Moving goals between sections](docs/img/move-duplicate.gif)
 
+### Repeatable goals
+
+Break a long grind into bite-sized pieces that come back. Right-click a custom goal → **Repeat** → *Daily / Weekly / Monthly*, and it moves into a **Repeatable** section pinned to the top of the panel. Check it off during the day; when the period rolls over it un-checks itself, ready to go again.
+
+Completed repeatable goals stay put rather than graduating to Completed, so the section reads as a checklist that fills up and empties again. The section only appears once you have at least one repeatable goal.
+
+Rollover happens even while you're logged out. By default it follows the in-game daily reset (00:00 UTC), so a routine you share with someone resets at the same moment for both of you — switch to local midnight or a custom hour in the config if you'd rather it matched your own day.
+
+### Repeatable goals from skills and items
+
+Turn a long-term goal into a repeating slice of itself. Right-click **99 Woodcutting** → **Repeatable goal** → *Daily* → *300,000 XP*, and you get a repeating goal that asks for 300k XP a day and re-arms every morning.
+
+Item goals work backwards from the drop. Right-click a **Bandos chestplate** goal and the menu offers *General Graardor* — the plugin knows which activity drops it — so you can set yourself 20 kills a week instead of staring at a single unchecked box for a month.
+
+The chunk always measures from wherever you are now, so progress you already made counts and a day you skip doesn't pile up into a double session tomorrow. Your original goal is untouched: the repeatable version sits alongside it, not instead of it.
+
+Not every item has one. Roughly half come from shops or skilling rather than an activity you can farm, and those simply don't offer the menu. Minigame drops don't offer it yet either.
+
+Repeatable goals travel in [share codes](#share-codes), so you can hand someone your whole daily routine. What crosses is the *shape* — daily, weekly, 300k XP — never your numbers: their copy sizes itself against their own progress on import.
+
 ### Dependency nesting (guide view)
 
 Turn a section into an outline: each goal indents under the prerequisite it unlocks, with a thin file-tree guide — your plan reads top-to-bottom like a quest guide. Per section: header right-click → **Dependency nesting** → *Nested / Not nested* (or set the global default in config). Completed steps stay visible in place.
@@ -178,7 +198,7 @@ Right-click any multi-selection: Move/Duplicate to Section, Add/Remove Tag, Chan
 
 ### Share codes
 
-Right-click a section header (or a multi-selection) → **Share** → *Copy share code*. You get a compact `GPSHARE…` string that carries the goal *definitions* — types, targets, colors, tags, relations — never your progress. Paste it anywhere: Discord, clan chat, a wiki page.
+Right-click a section header (or a multi-selection) → **Share** → *Copy share code*. You get a compact `GPSHARE…` string that carries the goal *definitions* — types, targets, colors, tags, relations, and how often a goal repeats — never your progress. Paste it anywhere: Discord, clan chat, a wiki page.
 
 ![Copying a section's share code](docs/img/share-codes.gif)
 

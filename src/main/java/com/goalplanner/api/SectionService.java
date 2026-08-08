@@ -236,7 +236,10 @@ class SectionService
 		int idx = 0;
 		for (Section s : api.goalStore.getSections())
 		{
-			if (s.getOrder() < Section.ORDER_INCOMPLETE) // skip built-ins (high order)
+			// Test the flag, not the order: built-ins are no longer all
+			// high-ordered (Repeatable is pinned to the top with MIN_VALUE), so
+			// an order comparison would count it as a user section here.
+			if (!s.isBuiltIn())
 			{
 				if (s.getId().equals(sectionId)) { prevUserIndex = idx; break; }
 				idx++;
@@ -481,7 +484,7 @@ class SectionService
 				// back inline if it's now keep-inline. (Like auto-completion, the
 				// relocation itself isn't separately undoable - revert restores
 				// just the flag.)
-				api.goalStore.reconcileCompletedSection();
+				api.goalStore.reconcileDerivedSections();
 				api.goalStore.save();
 				return true;
 			}

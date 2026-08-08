@@ -190,6 +190,39 @@ public interface GoalPlannerApi
 	boolean markGoalIncomplete(String goalId);
 
 	/**
+	 * Set how often a goal repeats. A repeating goal moves into the built-in
+	 * Repeatable section, stays there when checked off, and un-completes when
+	 * its period rolls over; setting {@link com.goalplanner.model.RepeatPeriod#NONE}
+	 * returns it to the section it came from.
+	 *
+	 * <p>Currently limited to CUSTOM goals - auto-tracked types measure absolute
+	 * progress, so repeating them needs per-period baselines that do not exist yet.
+	 *
+	 * @return true if the goal's repeat period changed
+	 */
+	boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period);
+
+	/**
+	 * Create a repeatable repeatable goal from a long-term one - a daily XP
+	 * chunk off a skill goal, or a kill-count chunk off an item goal at the
+	 * activity that drops it.
+	 *
+	 * @param activityName boss name for an item-derived goal; ignored for SKILL parents
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createDerivedRepeatGoal(String parentGoalId, com.goalplanner.model.RepeatPeriod period,
+		int chunk, String activityName);
+
+	/**
+	 * Change how much a derived repeatable goal asks for each period. Keeps the
+	 * current period's start fixed and moves only its end, so progress already
+	 * made this period still counts.
+	 *
+	 * @return true if the amount changed
+	 */
+	boolean setGoalRepeatChunk(String goalId, int newChunk);
+
+	/**
 	 * Restore a goal's tags to its default snapshot from creation. Returns false
 	 * if the goal has no defaults or doesn't exist.
 	 */

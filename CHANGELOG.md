@@ -6,6 +6,76 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [0.5.0] — 2026-08-08
+
+### Added
+- **Repeatable goals.** Right-click a custom goal → **Repeat** → *Daily /
+  Weekly / Monthly*. It moves into a new **Repeatable** section pinned to the
+  top of the panel, stays there when you check it off, and un-checks itself
+  when the period rolls over — so a long grind becomes a rotation instead of
+  one unbroken sitting. The section only appears once you have a repeatable
+  goal, and rollover happens even while you're logged out.
+- **Repeatable goals from skills and items.** Right-click a long-term goal → **Repeatable goal** →
+  period → size, and get a repeating slice of it. A skill goal offers XP chunks
+  ("Woodcutting +300,000 XP" a day); an item goal works backwards from the drop
+  and offers kill counts at whatever activity drops it ("General Graardor x20").
+  The chunk measures from wherever you are now, so a skipped day doesn't pile up
+  — and your original goal is left untouched. Items that come from shops or
+  skilling don't offer it, and minigame drops don't yet.
+- **Live "resets in" countdown.** Every repeatable card shows how long is left
+  in the current period — *Daily - resets in 3h 42m* — ticking once a minute.
+- **Repeat reset config.** Choose where the day boundary falls: the in-game
+  daily reset (00:00 UTC, the default, so shared routines roll over at the same
+  moment for everyone), local midnight, or a custom local hour.
+
+### Added (multi-character)
+- **Every character keeps its own plan.** Goals are now keyed by profile
+  **and** character — the same split that already kept leagues separate from
+  main, one level down. Two accounts sharing a RuneLite profile no longer
+  share (or endanger) each other's goals; a world hop to Leagues or **Deadman**
+  switches the profile axis while the character axis stays put. Your existing
+  plan is adopted by the first character to log in after updating; other
+  characters start fresh. Before login the panel shows the last character seen.
+
+### Fixed
+- **Re-importing a share code now warns first.** Pasting the same code twice
+  silently duplicated every goal outside your Default plan. The plugin now
+  remembers what each character has imported and asks before duplicating —
+  confirming still allows it, for when two copies is what you want.
+- **Goals no longer complete themselves against the wrong account.** If you play
+  more than one account, a goal set could be scored against whichever account
+  happened to be logged in — silently completing everything that account had
+  already done, permanently, and syncing that to your other machines. Goals were
+  stored per RuneLite profile, but nothing checked the profile matched the
+  account, so separate profiles didn't prevent it. A goal set is now bound to
+  the account that first tracks it, and tracking pauses with a chat warning if a
+  different account logs in. Existing plans bind themselves on next login — no
+  action needed.
+- **Any completed goal can now be reopened.** Right-click → **Mark Incomplete**
+  works on skill, boss, quest, diary and CA goals, not just custom ones, and
+  bulk selections can be reset in one undoable step. Clearing a completion lets
+  tracking re-derive the truth: a goal you really did finish comes straight
+  back, a wrongly-completed one stays open. This is the recovery path for plans
+  corrupted by the bug above — no need to delete and rebuild.
+
+### Changed
+- Completed repeatable goals deliberately do **not** graduate to the Completed
+  list — they stay in Repeatable so it reads as a checklist that fills up
+  during the day and empties at reset.
+
+### Notes
+- Making an *existing* goal repeat in place is still custom-only: auto-tracked
+  types read an absolute lifetime counter. Deriving a repeatable goal from one
+  covers them instead, by re-basing its target each period rather than storing
+  a baseline.
+- Not yet done: grouping the Repeatable section by deadline (daily/weekly/
+  monthly sub-headers), and minigame drops (their counters are varbits the
+  plugin does not read yet).
+- Architecture decisions for this feature:
+  [ADR-0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md),
+  [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md),
+  [ADR-0005](docs/decisions/0005-derived-goals-re-base-their-target-instead-of-storing-a-baseline.md).
+
 ## [0.4.2] — 2026-07-11
 
 RuneLite shipped **The Blood Moon Rises** in the `1.12.32` client release, so

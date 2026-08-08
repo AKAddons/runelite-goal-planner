@@ -421,9 +421,58 @@
         "ui/GoalContextMenuBuilder.java",
         "ui/GoalPanel.java"
       ],
-      "tests": ["ui/GoalPanelLoadoutLabSupportTest.java"],
+      "tests": [
+        "ui/GoalPanelLoadoutLabSupportTest.java"
+      ],
       "since": "0.4.2",
       "notes": "Outbound PluginMessage link-in: boss goal cards -> Loadout Lab (namespace loadoutlab, name search, data monster+source). Install-aware: enabled (ANY same-named copy counts - hub and sideloaded dev copies coexist) -> 'Search in Loadout Lab' posts the message, fire-and-forget; installed but disabled -> grayed non-clickable nudge; not installed -> NO menu entry (deliberate: no upsell for users without the plugin, user call 2026-07-11). Pure Swing menu wiring - verified manually against the receiver."
+    },
+    {
+      "id": "repeatable-goals",
+      "title": "Repeatable goals",
+      "group": "Organising",
+      "anchor": "repeatable-goals",
+      "media": null,
+      "code": [
+        "model/RepeatPeriod.java",
+        "ResetBoundary.java",
+        "util/RepeatSchedule.java",
+        "service/RepeatResetService.java",
+        "model/Goal.java",
+        "model/Section.java",
+        "persistence/GoalStore.java",
+        "api/GoalMutationService.java",
+        "ui/GoalContextMenuBuilder.java",
+        "ui/GoalPanel.java",
+        "GoalPlannerPlugin.java"
+      ],
+      "tests": [
+        "util/RepeatScheduleTest.java",
+        "service/RepeatResetServiceTest.java"
+      ],
+      "since": "0.5.0",
+      "notes": "Stage 1: manual repeat on CUSTOM goals. Goal.repeatEvery (NONE/DAILY/WEEKLY/MONTHLY) + lastPeriodKey; rollover compares integer period keys rather than differencing timestamps, so N periods offline resets once and DST is java.time's problem. Driven by a 1-minute Swing timer, NOT onGameTick - CUSTOM goals need no client data and the boundary is usually crossed while logged out. Repeatable goals live in a derived built-in section (Section.BuiltInKind.REPEATABLE, ORDER_REPEATABLE = MIN_VALUE, pinned top) that the panel hides while empty - the only built-in that hides. reconcileDerivedSections checks repeating BEFORE complete, so a checked-off daily never graduates to Completed; that mutual exclusion is what lets both mechanisms share archivedFromSectionId. Boundary configurable (game reset UTC default / local midnight / custom hour). See docs/decisions/0003 and 0004. NOT yet done: deadline group headers with a live 'resets in' countdown (RepeatSchedule.formatCountdown exists and is tested but is not wired to the panel). Auto-tracked types repeat via derived goals - see repeatable-goals-from-skills-and-items."
+    },
+    {
+      "id": "repeatable-goals-from-skills-and-items",
+      "title": "Repeatable goals from skills and items",
+      "group": "Organising",
+      "anchor": "repeatable-goals-from-skills-and-items",
+      "media": null,
+      "code": [
+        "data/ItemActivityResolver.java",
+        "api/GoalCreationService.java",
+        "service/RepeatResetService.java",
+        "model/Goal.java",
+        "ui/GoalContextMenuBuilder.java"
+      ],
+      "tests": [
+        "data/ItemActivityResolverTest.java",
+        "api/CreateDerivedRepeatGoalTest.java",
+        "service/RepeatResetServiceTest.java"
+      ],
+      "since": "0.5.0",
+      "notes": "Right-click a long-term goal -> 'Repeatable goal' -> period -> size, creating a repeating slice of it. A SKILL parent yields an XP chunk on the same skill; an item parent yields a kill-count goal at whatever activity drops it, resolved by ItemActivityResolver joining item-sources.tsv (itemId -> source label) with boss-killcount.tsv (boss -> KC varp). Goal.repeatChunk + derivedFromGoalId; the parent is never mutated. Key decision: NO baseline field. At rollover the target re-bases to currentValue + chunk (RepeatResetService) rather than progress being cleared, so every existing tracker works unchanged AND the rollover reads only stored state - which is what keeps resets working while logged out. Clearing progress instead would be silently undone by the next tracker tick, since trackers report a lifetime total. A missed period re-bases to one chunk, never accumulating. Creation reads live XP/KC and returns null if it cannot, rather than shipping a bogus target that self-completes. Coverage: BOSS + RAID source labels join at 90%+ after reconciling case, leading articles, group labels (Dagannoth Kings, Moons of Peril) and ' and ' pairs; the 2 residual gaps are pinned by test. MINIGAME is excluded on purpose - all 22 minigame labels resolve to nothing because their counters are the collection_minigames_* varbits the plugin does not read yet. ~48% of items are category OTHER and correctly get no menu entry at all. Repeat fields ride share codes additively (repeatEvery + repeatChunk, plugin ADR-0006): the chunk travels, the re-based target does not, and a pre-0.5.0 recipient imports a one-shot. MCP emits the same fields."
     }
   ]
 }

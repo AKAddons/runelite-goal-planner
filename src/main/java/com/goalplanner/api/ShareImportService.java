@@ -311,7 +311,13 @@ class ShareImportService
 			.type(type)
 			.name(clamp(dto.getName(), MAX_NAME))
 			.description(clamp(dto.getDescription(), MAX_TEXT))
-			.targetValue(dto.getTargetValue())
+			// A repeatable chunk goal's target is the SENDER's progress plus the
+			// chunk - meaningless here. Import it as 0 ("not yet sized") and let
+			// the first tracker read size it against the recipient's own progress
+			// (see GoalMutationService.recordGoalProgress). Sending 9,810,000 to
+			// someone with 2M Prayer XP would ask them for 7.8M in a day while the
+			// card displayed a tidy "0 / 10K".
+			.targetValue(dto.getRepeatChunk() > 0 ? 0 : dto.getTargetValue())
 			.skillName(dto.getSkillName())
 			.questName(dto.getQuestName())
 			.accountMetric(dto.getAccountMetric())
@@ -321,6 +327,8 @@ class ShareImportService
 			.spriteId(spriteId)
 			.tooltip(clamp(dto.getTooltip(), MAX_TEXT))
 			.caTaskId(dto.getCaTaskId())
+			.repeatEvery(parseRepeatPeriod(dto.getRepeatEvery()))
+			.repeatChunk(Math.max(0, dto.getRepeatChunk()))
 			.customColorRgb(dto.getCustomColorRgb())
 			.optional(dto.isOptional())
 			.autoSeeded(dto.isAutoSeeded())
@@ -427,5 +435,28 @@ class ShareImportService
 		}
 		String t = s.trim();
 		return t.length() <= max ? t : t.substring(0, max);
+	}
+
+	/**
+	 * Read a shared repeat period. Anything unrecognised - absent (an older
+	 * sender), misspelled, or a period a future version adds - imports as a
+	 * plain one-shot rather than failing the whole bundle. A share code is
+	 * untrusted input from another client.
+	 */
+	private static com.goalplanner.model.RepeatPeriod parseRepeatPeriod(String raw)
+	{
+		if (raw == null || raw.trim().isEmpty())
+		{
+			return com.goalplanner.model.RepeatPeriod.NONE;
+		}
+		try
+		{
+			return com.goalplanner.model.RepeatPeriod.valueOf(raw.trim());
+		}
+		catch (IllegalArgumentException e)
+		{
+			log.warn("share import: unknown repeat period {} - importing as one-shot", raw);
+			return com.goalplanner.model.RepeatPeriod.NONE;
+		}
 	}
 }

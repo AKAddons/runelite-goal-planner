@@ -45,6 +45,8 @@ public class GoalStore
 	private static final String SECTIONS_KEY = "sections";
 	private static final String TAGS_KEY = "tags";
 	private static final String CATEGORY_COLORS_KEY = "categoryColors";
+	private static final String ACCOUNT_HASH_KEY = "accountHash";
+	private static final String IMPORTED_CODES_KEY = "importedCodes";
 
 	// V2 per-entity persistence keys
 	private static final String SCHEMA_KEY = "schema";
@@ -90,10 +92,32 @@ public class GoalStore
 	 */
 	public static final String PROFILE_MAIN = "main";
 	public static final String PROFILE_LEAGUES = "leagues";
+	public static final String PROFILE_DEADMAN = "deadman";
 	private String activeProfile = PROFILE_MAIN;
 
-	/** Prefix a config key with the active profile namespace. */
-	private String profileKey(String key) { return activeProfile + "." + key; }
+	/**
+	 * The character this goal set belongs to ({@code client.getAccountHash()}),
+	 * or 0 before any login. Each character gets its own namespace inside the
+	 * profile - the same split main/leagues already uses, one level down - so
+	 * two accounts sharing a RuneLite profile no longer share a plan.
+	 *
+	 * <p>0 deliberately yields the PRE-ACCOUNT key shape ({@code main.goals}),
+	 * which is both what every existing install has on disk and what tests see:
+	 * the account dimension is invisible until {@link #setAccount} is called.
+	 */
+	private long activeAccount = 0L;
+
+	/** Per-profile pointer to the last character seen, OUTSIDE the account
+	 *  namespace so startup can find it before any login. */
+	private static final String LAST_ACCOUNT_KEY = "lastAccount";
+
+	/** Prefix a config key with the active profile + account namespace. */
+	private String profileKey(String key)
+	{
+		return activeAccount > 0
+			? activeProfile + ".a" + activeAccount + "." + key
+			: activeProfile + "." + key;
+	}
 
 	/** Read a config value from the active profile's namespace. */
 	private String getCfg(String key) { return configManager.getConfiguration(CONFIG_GROUP, profileKey(key)); }
@@ -105,6 +129,43 @@ public class GoalStore
 	private void unsetCfg(String key) { configManager.unsetConfiguration(CONFIG_GROUP, profileKey(key)); }
 
 	public String getActiveProfile() { return activeProfile; }
+
+	/**
+	 * The account this profile's goals belong to ({@code client.getAccountHash()}),
+	 * or 0 when the goal set has never been bound.
+	 *
+	 * <p>Goals are stored per config profile, but a profile is only a FILE - it
+	 * carries no guarantee about who is logged in. Trackers evaluate whatever
+	 * goal set is in memory against whatever account is live, so without an
+	 * identity to check, one drain with the wrong pairing silently completes
+	 * every goal the other account happens to satisfy. Completion is terminal
+	 * for auto-tracked types, so that damage is permanent, and config sync then
+	 * carries it to the user's other machines.
+	 */
+	public long getBoundAccountHash()
+	{
+		String raw = getCfg(ACCOUNT_HASH_KEY);
+		if (raw == null || raw.trim().isEmpty()) return 0L;
+		try
+		{
+			return Long.parseLong(raw.trim());
+		}
+		catch (NumberFormatException e)
+		{
+			return 0L;
+		}
+	}
+
+	/** Bind this profile's goals to an account. Pass 0 to unbind. */
+	public void setBoundAccountHash(long accountHash)
+	{
+		if (accountHash == 0L)
+		{
+			unsetCfg(ACCOUNT_HASH_KEY);
+			return;
+		}
+		setCfg(ACCOUNT_HASH_KEY, Long.toString(accountHash));
+	}
 
 	/** When true, granular saves are deferred. Call resumeSave() to persist. */
 	private boolean saveSuspended = false;
@@ -398,6 +459,152 @@ public class GoalStore
 		log.info("Switching profile: {} → {}", activeProfile, newProfile);
 		activeProfile = newProfile;
 		reload();
+	}
+
+	public long getActiveAccount() { return activeAccount; }
+
+	/** Cap on remembered import hashes; oldest fall off. Bounds config growth. */
+	private static final int MAX_IMPORTED_CODES = 50;
+
+	/**
+	 * Whether this exact share code was imported into THIS character's plan
+	 * before. Keyed by SHA-1 of the canonical encoding, stored in the
+	 * profile+account namespace - so each character has its own import history
+	 * and re-import protection follows the plan it protects.
+	 */
+	public boolean wasCodeImported(String canonicalCode)
+	{
+		if (canonicalCode == null || canonicalCode.isEmpty()) return false;
+		return importedCodeHashes().contains(sha1(canonicalCode));
+	}
+
+	/** Record a successful import of this code for the active character. */
+	public void rememberImportedCode(String canonicalCode)
+	{
+		if (canonicalCode == null || canonicalCode.isEmpty()) return;
+		java.util.List<String> hashes = importedCodeHashes();
+		String h = sha1(canonicalCode);
+		if (hashes.contains(h)) return;
+		hashes.add(h);
+		while (hashes.size() > MAX_IMPORTED_CODES) hashes.remove(0);
+		setCfg(IMPORTED_CODES_KEY, gson.toJson(hashes));
+	}
+
+	private java.util.List<String> importedCodeHashes()
+	{
+		String raw = getCfg(IMPORTED_CODES_KEY);
+		if (raw == null || raw.trim().isEmpty()) return new ArrayList<>();
+		try
+		{
+			java.util.List<String> hashes = gson.fromJson(raw, STRING_LIST_TYPE);
+			return hashes != null ? hashes : new ArrayList<>();
+		}
+		catch (Exception e)
+		{
+			return new ArrayList<>(); // corrupt history fails open: worst case is one missed warning
+		}
+	}
+
+	private static String sha1(String text)
+	{
+		try
+		{
+			byte[] d = java.security.MessageDigest.getInstance("SHA-1")
+				.digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			StringBuilder sb = new StringBuilder(d.length * 2);
+			for (byte b : d) sb.append(String.format("%02x", b));
+			return sb.toString();
+		}
+		catch (java.security.NoSuchAlgorithmException e)
+		{
+			// SHA-1 is mandatory on every JVM; fall back to something stable anyway.
+			return Integer.toHexString(text.hashCode());
+		}
+	}
+
+	/** The last character seen on this profile, or 0 if none recorded. */
+	public long getLastAccount()
+	{
+		String raw = configManager.getConfiguration(CONFIG_GROUP,
+			activeProfile + "." + LAST_ACCOUNT_KEY);
+		if (raw == null || raw.trim().isEmpty()) return 0L;
+		try { return Long.parseLong(raw.trim()); }
+		catch (NumberFormatException e) { return 0L; }
+	}
+
+	/**
+	 * Switch the active character namespace. Mirrors {@link #setProfile}: on a
+	 * real change it migrates any pre-account profile data into the new
+	 * account's namespace (first login adopts the existing plan, exactly like
+	 * the account binding's adoption), records the character as this profile's
+	 * last-seen, and reloads.
+	 *
+	 * <p>Non-positive hashes are ignored rather than unscoping: a logged-out
+	 * sentinel must never silently switch whose plan is in memory.
+	 */
+	public void setAccount(long accountHash)
+	{
+		if (accountHash <= 0 || accountHash == activeAccount) return;
+		log.info("Switching account namespace: {} → {} (profile {})",
+			activeAccount, accountHash, activeProfile);
+		activeAccount = accountHash;
+		configManager.setConfiguration(CONFIG_GROUP,
+			activeProfile + "." + LAST_ACCOUNT_KEY, Long.toString(accountHash));
+		migrateProfileIntoActiveAccount();
+		reload();
+	}
+
+	/**
+	 * Move pre-account profile-scoped data ({@code main.goals}) into the active
+	 * account's namespace ({@code main.a<hash>.goals}). The account-dimension
+	 * analogue of {@link #migrateLegacyIntoActiveProfile()}, with the same
+	 * adopt-then-delete shape: the first character to log in owns the existing
+	 * plan, and deleting the source is what makes the SECOND character start
+	 * fresh instead of re-adopting the same goals.
+	 *
+	 * <p>No-op if the account namespace already has data or there is nothing
+	 * profile-scoped to move.
+	 */
+	private boolean migrateProfileIntoActiveAccount()
+	{
+		if (activeAccount <= 0) return false;
+		if (getCfg(SCHEMA_KEY) != null) return false; // account already has data
+		String src = activeProfile + ".";
+		if (configManager.getConfiguration(CONFIG_GROUP, src + SCHEMA_KEY) == null)
+		{
+			return false; // nothing pre-account to adopt
+		}
+		log.info("Migrating profile-scoped storage → account namespace {}", activeAccount);
+
+		java.util.List<String> keys = new java.util.ArrayList<>(java.util.List.of(
+			SCHEMA_KEY, GOAL_ORDER_KEY, TAG_IDS_KEY, SECTIONS_KEY,
+			CATEGORY_COLORS_KEY, GOALS_KEY, TAGS_KEY, ACCOUNT_HASH_KEY));
+		String order = configManager.getConfiguration(CONFIG_GROUP, src + GOAL_ORDER_KEY);
+		String tagIds = configManager.getConfiguration(CONFIG_GROUP, src + TAG_IDS_KEY);
+		try
+		{
+			java.util.List<String> ids = order == null ? null : gson.fromJson(order, STRING_LIST_TYPE);
+			if (ids != null) for (String id : ids) keys.add(GOAL_PREFIX + id);
+		}
+		catch (Exception e) { log.warn("account migration: goal order parse failed", e); }
+		try
+		{
+			java.util.List<String> ids = tagIds == null ? null : gson.fromJson(tagIds, STRING_LIST_TYPE);
+			if (ids != null) for (String id : ids) keys.add(TAG_PREFIX + id);
+		}
+		catch (Exception e) { log.warn("account migration: tag ids parse failed", e); }
+
+		for (String key : keys)
+		{
+			String value = configManager.getConfiguration(CONFIG_GROUP, src + key);
+			if (value != null)
+			{
+				setCfg(key, value); // scoped write: lands in the account namespace
+				configManager.unsetConfiguration(CONFIG_GROUP, src + key);
+			}
+		}
+		log.info("Profile → account migration complete ({} keys considered)", keys.size());
+		return true;
 	}
 
 	/**
@@ -840,8 +1047,21 @@ public class GoalStore
 			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE);
 		boolean hasCompleted = sections.stream()
 			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.COMPLETED);
+		boolean hasRepeatable = sections.stream()
+			.anyMatch(s -> s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE);
 
 		boolean created = false;
+		if (!hasRepeatable)
+		{
+			// Always created, even for profiles with no repeatable goals - the
+			// panel hides it while empty, so there is no lifecycle to get wrong.
+			sections.add(Section.builder()
+				.name("Repeatable")
+				.order(Section.ORDER_REPEATABLE)
+				.builtInKind(Section.BuiltInKind.REPEATABLE)
+				.build());
+			created = true;
+		}
 		if (!hasIncomplete)
 		{
 			sections.add(Section.builder()
@@ -866,7 +1086,13 @@ public class GoalStore
 		boolean reordered = false;
 		for (Section s : sections)
 		{
-			if (s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE
+			if (s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE
+				&& s.getOrder() != Section.ORDER_REPEATABLE)
+			{
+				s.setOrder(Section.ORDER_REPEATABLE);
+				reordered = true;
+			}
+			else if (s.getBuiltInKind() == Section.BuiltInKind.INCOMPLETE
 				&& s.getOrder() != Section.ORDER_INCOMPLETE)
 			{
 				s.setOrder(Section.ORDER_INCOMPLETE);
@@ -1327,6 +1553,27 @@ public class GoalStore
 			.name("Completed")
 			.order(Section.ORDER_COMPLETED)
 			.builtInKind(Section.BuiltInKind.COMPLETED)
+			.build();
+		sections.add(created);
+		return created;
+	}
+
+	/**
+	 * Return the Repeatable built-in section. Guaranteed non-null after load().
+	 * Unlike the other built-ins this one is hidden by the panel while empty -
+	 * most players never make a repeatable goal, and an always-visible empty
+	 * header is pure clutter for them.
+	 */
+	public Section getRepeatableSection()
+	{
+		for (Section s : sections)
+		{
+			if (s.getBuiltInKind() == Section.BuiltInKind.REPEATABLE) return s;
+		}
+		Section created = Section.builder()
+			.name("Repeatable")
+			.order(Section.ORDER_REPEATABLE)
+			.builtInKind(Section.BuiltInKind.REPEATABLE)
 			.build();
 		sections.add(created);
 		return created;
@@ -1844,12 +2091,23 @@ public class GoalStore
 	}
 
 	/**
-	 * Scan all goals and move any that have flipped to COMPLETE into the Completed
-	 * section (unless they're already there). Returns true if any goal was moved.
-	 * Call this after tracker updates.
+	 * Assign every goal to its derived section: Repeatable if it repeats,
+	 * Completed if it has finished and its home section auto-archives, its home
+	 * section otherwise. Returns true if any goal was moved. Call this after
+	 * tracker updates and after any completion or repeat change.
+	 *
+	 * <p>Repetition is tested FIRST and short-circuits: a checked-off daily
+	 * stays in Repeatable rather than graduating to Completed, which is what
+	 * makes that section read as a checklist that fills up and empties again.
+	 * The corollary is that a repeating goal is never in Completed, which is
+	 * why both mechanisms can share {@link Goal#getArchivedFromSectionId()} to
+	 * remember the home section - the two states are mutually exclusive by
+	 * construction. Breaking that invariant corrupts placement, so it is
+	 * pinned by test rather than left to this comment.
 	 */
-	public boolean reconcileCompletedSection()
+	public boolean reconcileDerivedSections()
 	{
+		String repeatableId = getRepeatableSection().getId();
 		String completedId = getCompletedSection().getId();
 		String incompleteId = getIncompleteSection().getId();
 		boolean anyMoved = false;
@@ -1862,6 +2120,40 @@ public class GoalStore
 			String currentSid = goal.getSectionId();
 			boolean isComplete = goal.isComplete();
 			String archivedFrom = goal.getArchivedFromSectionId();
+			boolean movedThis = false;
+
+			if (goal.isRepeating())
+			{
+				if (!repeatableId.equals(currentSid))
+				{
+					// Remember where it came from so turning repeat off puts it
+					// back. Coming from Completed, the home it already recorded
+					// there is the real home - don't overwrite it with
+					// "Completed".
+					if (!completedId.equals(currentSid) && !incompleteId.equals(currentSid))
+					{
+						goal.setArchivedFromSectionId(currentSid);
+					}
+					goal.setSectionId(repeatableId);
+					anyMoved = true;
+					movedGoals.add(goal);
+				}
+				// Never graduates to Completed, however done it is.
+				continue;
+			}
+
+			if (repeatableId.equals(currentSid))
+			{
+				// Repeat was switched off → back to its remembered home, then
+				// fall through so a goal that is also complete archives in this
+				// same pass rather than needing a second one.
+				Section home = findSection(archivedFrom);
+				goal.setSectionId(home != null ? archivedFrom : incompleteId);
+				goal.setArchivedFromSectionId(null);
+				currentSid = goal.getSectionId();
+				archivedFrom = null;
+				movedThis = true;
+			}
 
 			if (completedId.equals(currentSid))
 			{
@@ -1873,8 +2165,7 @@ public class GoalStore
 					Section home = findSection(archivedFrom);
 					goal.setSectionId(home != null ? archivedFrom : incompleteId);
 					goal.setArchivedFromSectionId(null);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
 				else if (archivedFrom != null)
 				{
@@ -1883,16 +2174,14 @@ public class GoalStore
 					{
 						// Home section gone → it's now a genuine default-completed goal.
 						goal.setArchivedFromSectionId(null);
-						anyMoved = true;
-						movedGoals.add(goal);
+						movedThis = true;
 					}
 					else if (!effectiveAutoArchive(home))
 					{
 						// Home flipped to keep-inline → return the goal to it.
 						goal.setSectionId(archivedFrom);
 						goal.setArchivedFromSectionId(null);
-						anyMoved = true;
-						movedGoals.add(goal);
+						movedThis = true;
 					}
 					// else: home still auto-archives → stay archived.
 				}
@@ -1904,8 +2193,7 @@ public class GoalStore
 				if (isComplete)
 				{
 					goal.setSectionId(completedId);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
 			}
 			else
@@ -1922,9 +2210,16 @@ public class GoalStore
 				{
 					goal.setArchivedFromSectionId(currentSid);
 					goal.setSectionId(completedId);
-					anyMoved = true;
-					movedGoals.add(goal);
+					movedThis = true;
 				}
+			}
+
+			// One record per goal, however many hops it made this pass (a goal
+			// leaving Repeatable can also archive in the same iteration).
+			if (movedThis)
+			{
+				anyMoved = true;
+				movedGoals.add(goal);
 			}
 		}
 		if (anyMoved)
@@ -2172,7 +2467,7 @@ public class GoalStore
 	 * the global default, {@code TRUE} forces archive, {@code FALSE} forces keep.
 	 * Built-in sections can't be set. Returns false on: not found, built-in, or
 	 * no-op. Does NOT reconcile - callers wanting immediate effect call
-	 * {@link #reconcileCompletedSection()} after.
+	 * {@link #reconcileDerivedSections()} after.
 	 */
 	public boolean setSectionAutoArchiveOverride(String sectionId, Boolean value)
 	{
@@ -2208,7 +2503,7 @@ public class GoalStore
 		sectionIndex.remove(sectionId);
 		renumberUserSections();
 		normalizeOrder();
-		reconcileCompletedSection();
+		reconcileDerivedSections();
 		saveSectionsIfNotSuspended();
 		saveGoalOrderIfNotSuspended();
 		return true;
@@ -2236,7 +2531,7 @@ public class GoalStore
 		if (!moved.isEmpty())
 		{
 			normalizeOrder();
-			reconcileCompletedSection();
+			reconcileDerivedSections();
 			for (Goal g : moved) saveGoalIfNotSuspended(g);
 			saveGoalOrderIfNotSuspended();
 		}
@@ -2371,7 +2666,7 @@ public class GoalStore
 		for (String id : doomed) sectionIndex.remove(id);
 		renumberUserSections();
 		normalizeOrder();
-		reconcileCompletedSection();
+		reconcileDerivedSections();
 		// Goals may have been reassigned by both the section delete and reconcile
 		for (Goal g : getGoals()) saveGoalIfNotSuspended(g);
 		saveSectionsIfNotSuspended();

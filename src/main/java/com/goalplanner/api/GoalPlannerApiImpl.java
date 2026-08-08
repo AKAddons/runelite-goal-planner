@@ -40,6 +40,24 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 
 	/** Optional UI-refresh hook the plugin sets after the panel is constructed. */
 	Runnable onGoalsChanged = () -> {};
+
+	/** Supplies when a period ends. Set by the plugin, which owns the boundary
+	 *  config; null-safe default so tests and headless callers just see 0. */
+	java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant>
+		nextBoundaryFn = p -> null;
+
+	/** The zone the boundary config measures days in. */
+	java.util.function.Supplier<java.time.ZoneId> boundaryZoneFn =
+		() -> java.time.ZoneOffset.UTC;
+
+	/** Plugin-internal: hand the API a way to resolve period boundaries. */
+	public void setNextBoundaryFn(
+		java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant> fn,
+		java.util.function.Supplier<java.time.ZoneId> zoneFn)
+	{
+		this.nextBoundaryFn = fn != null ? fn : p -> null;
+		this.boundaryZoneFn = zoneFn != null ? zoneFn : () -> java.time.ZoneOffset.UTC;
+	}
 	/** Lightweight selection-only refresh - avoids full rebuild for selection changes. */
 	Runnable onSelectionChanged = () -> {};
 
@@ -226,11 +244,18 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean editCustomGoal(String goalId, String newName, String newDescription) { autoDeselectIfNotMember(goalId); return mutationService.editCustomGoal(goalId, newName, newDescription); }
 	@Override public boolean markGoalComplete(String goalId) { autoDeselectIfNotMember(goalId); return mutationService.markGoalComplete(goalId); }
 	@Override public boolean markGoalIncomplete(String goalId) { autoDeselectIfNotMember(goalId); return mutationService.markGoalIncomplete(goalId); }
+	@Override public boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period) { return mutationService.setGoalRepeat(goalId, period); }
+	@Override public String createDerivedRepeatGoal(String parentGoalId, com.goalplanner.model.RepeatPeriod period, int chunk, String activityName) { return creationService.createDerivedRepeatGoal(parentGoalId, period, chunk, activityName); }
+	@Override public boolean setGoalRepeatChunk(String goalId, int newChunk) { return mutationService.setGoalRepeatChunk(goalId, newChunk); }
+	/** Plugin-internal: re-import protection (per-character import history). */
+	public boolean wasCodeImported(String canonicalCode) { return goalStore.wasCodeImported(canonicalCode); }
+	public void rememberImportedCode(String canonicalCode) { goalStore.rememberImportedCode(canonicalCode); }
 	@Override public boolean changeTarget(String goalId, int newTarget) { autoDeselectIfNotMember(goalId); return mutationService.changeTarget(goalId, newTarget); }
 	@Override public boolean recordGoalProgress(String goalId, int newValue) { return mutationService.recordGoalProgress(goalId, newValue); }
 	@Override public boolean isGoalOverridden(String goalId) { return mutationService.isGoalOverridden(goalId); }
 	@Override public int bulkRestoreDefaults(java.util.Set<String> goalIds) { return mutationService.bulkRestoreDefaults(goalIds); }
 	@Override public int bulkRemoveGoals(java.util.Set<String> goalIds) { return mutationService.bulkRemoveGoals(goalIds); }
+	@Override public int bulkMarkIncomplete(java.util.Set<String> goalIds) { return mutationService.bulkMarkIncomplete(goalIds); }
 	@Override public int bulkMoveGoalsToSection(java.util.Set<String> goalIds, String targetSectionId) { return mutationService.bulkMoveGoalsToSection(goalIds, targetSectionId); }
 	@Override public void removeAllGoals() { mutationService.removeAllGoals(); }
 	// Not part of the published GoalPlannerApi - UI "Remove duplicate goals" cleanup.

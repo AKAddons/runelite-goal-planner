@@ -173,8 +173,32 @@ class GoalQueryService
 		v.type = g.getType().name();
 		v.name = g.getName();
 		v.description = g.getDescription();
-		v.currentValue = g.getCurrentValue();
-		v.targetValue = g.getTargetValue();
+		// Period-relative for repeatable goals, identical to the raw values for
+		// everything else. Mapped here rather than in the renderers so the card
+		// text, the progress bar and the tooltip all agree without each one
+		// having to know about repeatChunk.
+		v.currentValue = g.getDisplayCurrent();
+		v.targetValue = g.getDisplayTarget();
+		v.repeatChunk = g.getRepeatChunk();
+		v.repeatEvery = g.getRepeatEvery().name();
+		if (g.isRepeating())
+		{
+			java.time.Instant end = api.nextBoundaryFn.apply(g.getRepeatEvery());
+			v.resetsAt = end != null ? end.toEpochMilli() : 0L;
+			// Time REMAINING, not the wall-clock deadline. "by 00:00" says when
+			// the period ends but not whether you have ten minutes or ten hours,
+			// which is the only part you act on.
+			v.resetsAtLabel = end == null ? ""
+				: com.goalplanner.util.RepeatSchedule.formatCountdown(
+					end.toEpochMilli() - System.currentTimeMillis());
+			// Rendered in the PLAYER'S zone, not the boundary's. The default
+			// boundary is 00:00 UTC, so formatting it in the boundary zone shows
+			// "00:00" to someone whose daily actually returns at 17:00 local - a
+			// bare clock time reads as local, so that is just wrong. The instant
+			// is identical either way; only the zone it is displayed in changes.
+			v.resetsAtClock = com.goalplanner.util.RepeatSchedule.formatDeadline(
+				end, java.time.ZoneId.systemDefault(), g.getRepeatEvery());
+		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
 		v.spriteId = g.getSpriteId();

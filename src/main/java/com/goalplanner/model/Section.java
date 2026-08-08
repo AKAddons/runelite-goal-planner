@@ -25,9 +25,17 @@ public class Section
 	 */
 	public enum BuiltInKind
 	{
+		REPEATABLE,
 		INCOMPLETE,
 		COMPLETED
 	}
+
+	/**
+	 * Order value for the Repeatable built-in section (always first). It is the
+	 * "what am I doing right now" list, so it sits above the backlog rather
+	 * than below it.
+	 */
+	public static final int ORDER_REPEATABLE = Integer.MIN_VALUE;
 
 	/**
 	 * Order value for the Incomplete built-in section. Pinned just above

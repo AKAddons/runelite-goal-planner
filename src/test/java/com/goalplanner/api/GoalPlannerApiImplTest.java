@@ -537,7 +537,7 @@ class GoalPlannerApiImplTest
 		assertTrue(g.isComplete());
 
 		// A keep-inline section holds its completed goal as a ticked-off item.
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(sectionId, g.getSectionId());
 	}
 
@@ -1202,7 +1202,7 @@ class GoalPlannerApiImplTest
 			g.setStatus(GoalStatus.COMPLETE);
 			g.setCompletedAt(123_456_789L);
 			store.addGoal(g);
-			store.reconcileCompletedSection(); // archive into Completed like the live flow
+			store.reconcileDerivedSections(); // archive into Completed like the live flow
 			return g;
 		}
 
@@ -2703,6 +2703,130 @@ class GoalPlannerApiImplTest
 			assertEquals(2, result.size());
 			assertEquals(a, result.get(0).id);
 			assertEquals(b, result.get(1).id);
+		}
+	}
+
+	@org.junit.jupiter.api.Nested
+	@DisplayName("recovery: reopening goals completed against the wrong account")
+	class ReopenRecovery
+	{
+		private Goal completed(GoalType type, String name)
+		{
+			Goal g = Goal.builder().type(type).name(name)
+				.targetValue(100).currentValue(100)
+				.status(GoalStatus.COMPLETE).completedAt(1_000L).build();
+			store.addGoal(g);
+			return g;
+		}
+
+		@Test
+		@DisplayName("an auto-tracked goal can now be reopened, not just CUSTOM and ITEM_GRIND")
+		void autoTrackedTypesReopen()
+		{
+			for (GoalType type : new GoalType[]{
+				GoalType.SKILL, GoalType.BOSS, GoalType.QUEST,
+				GoalType.DIARY, GoalType.COMBAT_ACHIEVEMENT, GoalType.ACCOUNT})
+			{
+				Goal g = completed(type, "Wrongly complete " + type);
+				assertTrue(api.markGoalIncomplete(g.getId()),
+					type + " must be reopenable - it is the only recovery from a bad completion");
+				assertFalse(g.isComplete());
+			}
+		}
+
+		@Test
+		@DisplayName("reopening an already-open goal is a no-op")
+		void openGoalIsNoOp()
+		{
+			Goal g = Goal.builder().type(GoalType.SKILL).name("Open").targetValue(100).build();
+			store.addGoal(g);
+			assertFalse(api.markGoalIncomplete(g.getId()));
+		}
+
+		@Test
+		@DisplayName("bulk reset reopens every completed goal in the selection and counts them")
+		void bulkReopens()
+		{
+			Goal a = completed(GoalType.SKILL, "A");
+			Goal b = completed(GoalType.BOSS, "B");
+			Goal open = Goal.builder().type(GoalType.SKILL).name("C").targetValue(100).build();
+			store.addGoal(open);
+
+			int reopened = api.bulkMarkIncomplete(
+				new java.util.LinkedHashSet<>(java.util.List.of(a.getId(), b.getId(), open.getId())));
+
+			assertEquals(2, reopened, "only the completed ones count");
+			assertFalse(a.isComplete());
+			assertFalse(b.isComplete());
+		}
+
+		@Test
+		@DisplayName("bulk reset is one undo step, so a mistaken wipe is recoverable")
+		void bulkIsSingleUndo()
+		{
+			Goal a = completed(GoalType.SKILL, "A");
+			Goal b = completed(GoalType.BOSS, "B");
+
+			api.bulkMarkIncomplete(new java.util.LinkedHashSet<>(
+				java.util.List.of(a.getId(), b.getId())));
+			assertFalse(a.isComplete());
+
+			api.undo();
+
+			assertTrue(a.isComplete(), "one undo must restore the whole reset");
+			assertTrue(b.isComplete());
+		}
+
+		@Test
+		@DisplayName("empty and null selections do nothing")
+		void bulkEmpty()
+		{
+			assertEquals(0, api.bulkMarkIncomplete(null));
+			assertEquals(0, api.bulkMarkIncomplete(new java.util.LinkedHashSet<>()));
+		}
+	}
+
+	@org.junit.jupiter.api.Nested
+	@DisplayName("OR-unlock cascade is order-independent")
+	class OrCascadeOrder
+	{
+		@Test
+		@DisplayName("the parent completes even when the AND-prereq finishes last")
+		void andPrereqLastStillCascades()
+		{
+			// Warriors-style: unlock requires quest AND (99 Attack OR 99 Strength).
+			Goal quest = Goal.builder().type(GoalType.QUEST).name("Bone Voyage")
+				.questName("BONE_VOYAGE").targetValue(1).build();
+			Goal att = Goal.builder().type(GoalType.SKILL).name("99 Attack")
+				.skillName("ATTACK").targetValue(13_034_431).build();
+			Goal unlock = Goal.builder().type(GoalType.CUSTOM).name("Unlock").build();
+			store.addGoal(quest); store.addGoal(att); store.addGoal(unlock);
+			api.addRequirement(unlock.getId(), quest.getId());
+			api.addOrRequirement(unlock.getId(), att.getId());
+
+			// Tracker order in the real drain: skills BEFORE quests.
+			api.recordGoalProgress(att.getId(), 13_034_431);
+			assertFalse(unlock.isComplete(), "AND-prereq still open - must not complete yet");
+			api.recordGoalProgress(quest.getId(), 1);
+
+			assertTrue(unlock.isComplete(),
+				"the AND-prereq finishing last must still trigger the OR-unlock cascade");
+		}
+
+		@Test
+		@DisplayName("a plain AND-only parent never auto-completes from its prereqs")
+		void andOnlyParentUntouched()
+		{
+			Goal quest = Goal.builder().type(GoalType.QUEST).name("Q")
+				.questName("BONE_VOYAGE").targetValue(1).build();
+			Goal parent = Goal.builder().type(GoalType.CUSTOM).name("Manual step").build();
+			store.addGoal(quest); store.addGoal(parent);
+			api.addRequirement(parent.getId(), quest.getId());
+
+			api.recordGoalProgress(quest.getId(), 1);
+
+			assertFalse(parent.isComplete(),
+				"completing prerequisites must never auto-complete a non-OR goal");
 		}
 	}
 }

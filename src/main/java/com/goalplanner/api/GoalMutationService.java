@@ -141,7 +141,16 @@ class GoalMutationService
 		if (goalId == null) return false;
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
-		if (g.getType() != GoalType.CUSTOM && g.getType() != GoalType.ITEM_GRIND) return false;
+		// Deliberately allowed for EVERY type, not just manually-toggled ones.
+		// This is the recovery path when a goal was completed against the wrong
+		// account: clearing completedAt lets the trackers re-derive the truth on
+		// the next drain, so a genuinely-finished goal re-completes within a tick
+		// and a falsely-completed one simply stays open. Refusing here would
+		// leave users with no way out but deleting and rebuilding their plan.
+		//
+		// The cost: re-completion stamps a fresh completedAt, so a legitimately
+		// completed goal loses its original date. Acceptable for an action the
+		// user takes explicitly on a goal they believe is wrong.
 		if (g.getStatus() != com.goalplanner.model.GoalStatus.COMPLETE) return false;
 		final long prevCompletedAt = g.getCompletedAt();
 		final String name = g.getName();
@@ -159,6 +168,47 @@ class GoalMutationService
 		});
 	}
 
+	/**
+	 * Clear completion on every goal in the selection, as one undoable step.
+	 *
+	 * <p>The bulk form of the recovery above: after goals were completed against
+	 * the wrong account, select them and reset. Trackers re-derive from the
+	 * correct account on the next drain, so the plan is rebuilt from live state
+	 * rather than by hand.
+	 *
+	 * @return how many goals were actually reopened
+	 */
+	int bulkMarkIncomplete(java.util.Set<String> goalIds)
+	{
+		log.debug("API.internal bulkMarkIncomplete(goalIds={})", goalIds == null ? 0 : goalIds.size());
+		if (goalIds == null || goalIds.isEmpty()) return 0;
+
+		java.util.List<String> targets = new java.util.ArrayList<>();
+		for (String id : goalIds)
+		{
+			Goal g = api.findGoal(id);
+			if (g != null && g.getStatus() == com.goalplanner.model.GoalStatus.COMPLETE)
+			{
+				targets.add(id);
+			}
+		}
+		if (targets.isEmpty()) return 0;
+
+		api.beginCompound("Reset completion on " + targets.size() + " goal(s)");
+		try
+		{
+			for (String id : targets)
+			{
+				markGoalIncomplete(id);
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+		return targets.size();
+	}
+
 	boolean markCompleteInternal(String goalId)
 	{
 		return markCompleteInternalAt(goalId, System.currentTimeMillis());
@@ -171,7 +221,7 @@ class GoalMutationService
 		g.setCompletedAt(completedAt);
 		g.setStatus(com.goalplanner.model.GoalStatus.COMPLETE);
 		api.goalStore.updateGoal(g);
-		api.goalStore.reconcileCompletedSection();
+		api.goalStore.reconcileDerivedSections();
 		return true;
 	}
 
@@ -182,7 +232,147 @@ class GoalMutationService
 		g.setCompletedAt(restoredCompletedAt);
 		g.setStatus(com.goalplanner.model.GoalStatus.ACTIVE);
 		api.goalStore.updateGoal(g);
-		api.goalStore.reconcileCompletedSection();
+		api.goalStore.reconcileDerivedSections();
+		return true;
+	}
+
+	boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period)
+	{
+		log.debug("API.public setGoalRepeat(goalId={}, period={})", goalId, period);
+		if (goalId == null || period == null) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		// Manual repeat is CUSTOM-only: an auto-tracked type reads an absolute
+		// counter, so flipping one to repeat in place would show the lifetime
+		// total every morning instead of the period's progress.
+		//
+		// A goal with a repeatChunk is exempt - it is a derived repeatable goal
+		// whose target already re-bases each period, so changing its term is
+		// well-defined for any type.
+		if (g.getType() != GoalType.CUSTOM && g.getRepeatChunk() <= 0) return false;
+		if (g.getRepeatEvery() == period) return false; // no-op
+
+		final com.goalplanner.model.RepeatPeriod prevPeriod = g.getRepeatEvery();
+		final long prevKey = g.getLastPeriodKey();
+		final String name = g.getName();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply() { return applyRepeat(goalId, period, 0L); }
+			@Override public boolean revert() { return applyRepeat(goalId, prevPeriod, prevKey); }
+			@Override public String getDescription()
+			{
+				return (period.isRepeating() ? "Repeat " + period.getLabel() + ": " : "Stop repeating: ")
+					+ name;
+			}
+		});
+	}
+
+	/**
+	 * Set the repeat period and stamp state, then let reconcile move the goal
+	 * into or out of the Repeatable section. A fresh enable stamps
+	 * {@code lastPeriodKey = 0} so the next reset check adopts the current
+	 * period without reopening a goal that is already done for today.
+	 */
+	/**
+	 * Change how much a derived repeatable goal asks for each period.
+	 *
+	 * <p>Keeps the CURRENT period's start where it is and only moves its end:
+	 * the period began at {@code targetValue - oldChunk}, so the new target is
+	 * that start plus the new chunk. Re-basing off {@code currentValue} instead
+	 * would forgive whatever the player already did this period, and shrinking
+	 * the chunk below what they have already earned should complete the goal,
+	 * not silently reset it.
+	 */
+	boolean setGoalRepeatChunk(String goalId, int newChunk)
+	{
+		log.debug("API.public setGoalRepeatChunk(goalId={}, newChunk={})", goalId, newChunk);
+		if (goalId == null || newChunk <= 0) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		if (g.getRepeatChunk() <= 0) return false;      // not a derived goal
+		if (g.getRepeatChunk() == newChunk) return false; // no-op
+
+		final int prevChunk = g.getRepeatChunk();
+		final int prevTarget = g.getTargetValue();
+		final long prevCompletedAt = g.getCompletedAt();
+		final com.goalplanner.model.GoalStatus prevStatus = g.getStatus();
+		final int periodStart = prevTarget - prevChunk;
+		final String name = g.getName();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(newChunk);
+				goal.setTargetValue(periodStart + newChunk);
+				renameChunkGoal(goal, newChunk);
+				reevaluateCompletion(goal);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public boolean revert()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(prevChunk);
+				goal.setTargetValue(prevTarget);
+				renameChunkGoal(goal, prevChunk);
+				goal.setCompletedAt(prevCompletedAt);
+				goal.setStatus(prevStatus);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public String getDescription() { return "Change amount: " + name; }
+		});
+	}
+
+	/** Keep the card title honest when the amount changes ("Prayer +50K XP"). */
+	private void renameChunkGoal(Goal g, int chunk)
+	{
+		if (g.getType() == GoalType.SKILL && g.getSkillName() != null)
+		{
+			try
+			{
+				net.runelite.api.Skill skill = net.runelite.api.Skill.valueOf(g.getSkillName());
+				g.setName(skill.getName() + " +"
+					+ com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP");
+			}
+			catch (IllegalArgumentException ignored) {}
+		}
+		else if (g.getType() == GoalType.BOSS && g.getBossName() != null)
+		{
+			g.setName(g.getBossName() + " x" + chunk);
+			g.setDescription(g.getRepeatEvery().getLabel() + " - " + chunk + " kills");
+		}
+	}
+
+	/** Shrinking a chunk below what is already earned completes it; growing reopens. */
+	private void reevaluateCompletion(Goal g)
+	{
+		boolean meets = g.meetsTarget();
+		if (g.isComplete() && !meets)
+		{
+			g.setCompletedAt(0);
+			g.setStatus(com.goalplanner.model.GoalStatus.ACTIVE);
+		}
+		else if (!g.isComplete() && meets)
+		{
+			g.setCompletedAt(System.currentTimeMillis());
+			g.setStatus(com.goalplanner.model.GoalStatus.COMPLETE);
+		}
+	}
+
+	private boolean applyRepeat(String goalId, com.goalplanner.model.RepeatPeriod period, long periodKey)
+	{
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		g.setRepeatEvery(period);
+		g.setLastPeriodKey(periodKey);
+		api.goalStore.updateGoal(g);
+		api.goalStore.reconcileDerivedSections();
 		return true;
 	}
 
@@ -260,7 +450,7 @@ class GoalMutationService
 				api.goalStore.updateGoal(cg);
 				if (statusChanged)
 				{
-					api.goalStore.reconcileCompletedSection();
+					api.goalStore.reconcileDerivedSections();
 				}
 				return true;
 			}
@@ -321,7 +511,7 @@ class GoalMutationService
 		api.goalStore.updateGoal(g);
 		if (statusChanged)
 		{
-			api.goalStore.reconcileCompletedSection();
+			api.goalStore.reconcileDerivedSections();
 		}
 		return true;
 	}
@@ -330,7 +520,25 @@ class GoalMutationService
 	{
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
-		if (g.getCurrentValue() == newValue) return false;
+		// An imported repeatable goal arrives unsized (targetValue 0) because the
+		// sender's target was computed against THEIR progress. This is the first
+		// moment the recipient's own value is known, so size it here: the next
+		// `chunk` from wherever they actually are. meetsTarget() is false while
+		// targetValue is 0, so an unsized goal can never complete by accident.
+		//
+		// Deliberately BEFORE the no-op guard below. A player who has never
+		// killed the boss reports 0, which equals the stored 0, so the guard
+		// would return early and leave the goal unsized forever.
+		boolean justSized = false;
+		if (g.getRepeatChunk() > 0 && g.getTargetValue() <= 0)
+		{
+			g.setTargetValue(newValue + g.getRepeatChunk());
+			justSized = true;
+			log.info("API.internal recordGoalProgress: sized imported repeatable {} to {}",
+				g.getId(), g.getTargetValue());
+		}
+
+		if (g.getCurrentValue() == newValue && !justSized) return false;
 
 		g.setCurrentValue(newValue);
 
@@ -370,10 +578,16 @@ class GoalMutationService
 		{
 			Goal parent = api.findGoal(parentId);
 			if (parent == null || parent.isComplete()) continue;
+			// Any OR-unlock parent gets re-evaluated, whichever edge just
+			// completed. The old skip ("this parent uses AND-edge, not OR")
+			// made the cascade order-dependent: if the LAST prerequisite to
+			// finish was an AND-edge (quest tracker runs after skill tracker,
+			// so a quest AND-prereq often is), the parent was never rechecked
+			// and sat incomplete with every requirement met.
 			if (parent.getOrRequiredGoalIds() == null
-				|| !parent.getOrRequiredGoalIds().contains(completedGoalId))
+				|| parent.getOrRequiredGoalIds().isEmpty())
 			{
-				continue; // this parent uses AND-edge, not OR
+				continue; // not an OR-unlock - completing prereqs never auto-completes it
 			}
 
 			// Check: any OR-prereq complete?

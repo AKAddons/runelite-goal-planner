@@ -150,4 +150,53 @@ public class ShareMapperTest
 		assertTrue(bundle.getGoals().isEmpty());
 		assertNull(bundle.getSectionName());
 	}
+
+	// ---- repeat fields on the wire ----
+
+	/** A repeatable goal must carry its period and chunk, or a shared daily
+	 *  routine silently imports as a set of one-shots. */
+	@Test
+	public void repeatFieldsExported()
+	{
+		Goal g = Goal.builder()
+			.type(GoalType.SKILL).name("Prayer +10K XP").skillName("PRAYER")
+			.targetValue(9_810_000)
+			.repeatEvery(com.goalplanner.model.RepeatPeriod.WEEKLY)
+			.repeatChunk(10_000)
+			.build();
+
+		GoalShareDto dto = ShareMapper.toBundle(ShareBundle.Kind.GOALS, null, -1,
+			Collections.singletonList(g), id -> null, "tester").getGoals().get(0);
+
+		assertEquals("WEEKLY", dto.getRepeatEvery());
+		assertEquals(10_000, dto.getRepeatChunk());
+	}
+
+	@Test
+	public void plainGoalExportsNone()
+	{
+		Goal g = Goal.builder()
+			.type(GoalType.SKILL).name("Prayer - Level 99").skillName("PRAYER")
+			.targetValue(13_034_431).build();
+
+		GoalShareDto dto = ShareMapper.toBundle(ShareBundle.Kind.GOALS, null, -1,
+			Collections.singletonList(g), id -> null, "tester").getGoals().get(0);
+
+		assertEquals("NONE", dto.getRepeatEvery());
+		assertEquals(0, dto.getRepeatChunk());
+	}
+
+	/** Gson leaves repeatEvery null on goals persisted before the feature; the
+	 *  null-guarding getter must keep that off the wire. */
+	@Test
+	public void legacyGoalExportsNone()
+	{
+		Goal legacy = Goal.builder().type(GoalType.CUSTOM).name("Old").build();
+		legacy.setRepeatEvery(null);
+
+		GoalShareDto dto = ShareMapper.toBundle(ShareBundle.Kind.GOALS, null, -1,
+			Collections.singletonList(legacy), id -> null, "tester").getGoals().get(0);
+
+		assertEquals("NONE", dto.getRepeatEvery());
+	}
 }

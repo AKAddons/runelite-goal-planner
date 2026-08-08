@@ -35,6 +35,25 @@ public class GoalView
 	public String description;
 	public int currentValue;
 	public int targetValue;
+
+	/** Non-zero for a repeatable goal: the gain expected each period. Renderers
+	 *  must not do absolute-value math (level lookups, thresholds) on
+	 *  currentValue/targetValue when this is set - those are period-relative. */
+	public int repeatChunk;
+
+	/** Wall-clock form of the same boundary ("00:00", "Wed 00:00", "1 Sep").
+	 *  Completed repeatables show this instead of the countdown: you are not
+	 *  working on it, so "when does it come back" beats "how long is left". */
+	public String resetsAtClock;
+
+	/** RepeatPeriod name, or "NONE". Non-NONE means this goal rolls over. */
+	public String repeatEvery = "NONE";
+
+	/** Epoch millis when the current period ends, or 0 if it never does. */
+	public long resetsAt;
+
+	/** Compact "by ..." stamp for the card, e.g. "00:00", "Wed 00:00", "1 Sep". */
+	public String resetsAtLabel = "";
 	/** 0 if not complete; nonzero millis-since-epoch when the goal was marked complete. */
 	public long completedAt;
 	public String sectionId;

@@ -41,6 +41,33 @@ public interface GoalPlannerConfig extends Config
 		return true;
 	}
 
+	@ConfigItem(
+		keyName = "resetBoundary",
+		name = "Repeat reset",
+		description = "When repeatable goals roll over. Game reset (00:00 UTC) matches in-game "
+			+ "dailies and is the same moment for everyone, so a shared routine behaves "
+			+ "identically for whoever imports it.",
+		section = behaviourSection,
+		position = 3
+	)
+	default ResetBoundary resetBoundary()
+	{
+		return ResetBoundary.GAME_RESET;
+	}
+
+	@ConfigItem(
+		keyName = "resetHour",
+		name = "Reset hour",
+		description = "Hour of the day (0-23, local time) that repeatable goals roll over. "
+			+ "Only used when Repeat reset is set to Custom hour.",
+		section = behaviourSection,
+		position = 4
+	)
+	default int resetHour()
+	{
+		return 0;
+	}
+
 	@ConfigSection(
 		name = "Appearance",
 		description = "Readability options (experimental). Report issues: discord.gg/CFQsA3fmh7",

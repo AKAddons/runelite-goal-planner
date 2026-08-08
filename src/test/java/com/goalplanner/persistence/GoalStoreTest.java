@@ -38,24 +38,39 @@ class GoalStoreTest
 	// ====================================================================
 
 	@Test
-	@DisplayName("load() creates Incomplete + Completed sections from empty state")
+	@DisplayName("load() creates Repeatable + Incomplete + Completed sections from empty state")
 	void loadCreatesBuiltInSections()
 	{
 		List<Section> sections = store.getSections();
-		assertEquals(2, sections.size());
+		assertEquals(3, sections.size());
+		assertNotNull(store.getRepeatableSection());
 		assertNotNull(store.getIncompleteSection());
 		assertNotNull(store.getCompletedSection());
+		assertEquals(Section.BuiltInKind.REPEATABLE, store.getRepeatableSection().getBuiltInKind());
 		assertEquals(Section.BuiltInKind.INCOMPLETE, store.getIncompleteSection().getBuiltInKind());
 		assertEquals(Section.BuiltInKind.COMPLETED, store.getCompletedSection().getBuiltInKind());
 	}
 
 	@Test
-	@DisplayName("Incomplete section is pinned at MAX_VALUE - 1; Completed at MAX_VALUE")
+	@DisplayName("Repeatable pins to the top; Incomplete then Completed pin to the bottom")
 	void builtInSectionOrdering()
 	{
+		assertEquals(Section.ORDER_REPEATABLE, store.getRepeatableSection().getOrder());
 		assertEquals(Section.ORDER_INCOMPLETE, store.getIncompleteSection().getOrder());
 		assertEquals(Section.ORDER_COMPLETED, store.getCompletedSection().getOrder());
+		assertTrue(store.getRepeatableSection().getOrder() < store.getIncompleteSection().getOrder());
 		assertTrue(store.getIncompleteSection().getOrder() < store.getCompletedSection().getOrder());
+	}
+
+	@Test
+	@DisplayName("a user section sorts between Repeatable and Incomplete")
+	void userSectionSitsBetweenBuiltIns()
+	{
+		Section user = store.createUserSection("Dailies adjacent");
+		assertTrue(store.getRepeatableSection().getOrder() < user.getOrder(),
+			"Repeatable must stay above user sections");
+		assertTrue(user.getOrder() < store.getIncompleteSection().getOrder(),
+			"user sections must stay above Incomplete");
 	}
 
 	@Test
@@ -292,7 +307,7 @@ class GoalStoreTest
 
 		// The manual placement is pinned: even with auto-archive on (the
 		// default), reconcile must NOT yank the goal back to Completed.
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(custom.getId(), g.getSectionId());
 	}
 
@@ -308,17 +323,17 @@ class GoalStoreTest
 		// Completes while sitting in the section (no manual pin) → tidied away.
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 		assertEquals(custom.getId(), g.getArchivedFromSectionId());
 	}
 
 	// ====================================================================
-	// reconcileCompletedSection
+	// reconcileDerivedSections
 	// ====================================================================
 
 	@Test
-	@DisplayName("reconcileCompletedSection moves a completed goal from Incomplete to Completed")
+	@DisplayName("reconcileDerivedSections moves a completed goal from Incomplete to Completed")
 	void reconcilePullsCompleteIntoCompleted()
 	{
 		// The default Incomplete/Completed pair auto-sorts: a goal in Incomplete
@@ -329,12 +344,12 @@ class GoalStoreTest
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 	}
 
 	@Test
-	@DisplayName("reconcileCompletedSection moves un-completed goals out of Completed")
+	@DisplayName("reconcileDerivedSections moves un-completed goals out of Completed")
 	void reconcilePushesIncompleteOutOfCompleted()
 	{
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g")
@@ -342,24 +357,24 @@ class GoalStoreTest
 			.status(GoalStatus.COMPLETE)
 			.build();
 		store.addGoal(g);
-		store.reconcileCompletedSection();
+		store.reconcileDerivedSections();
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 
 		// Un-complete it
 		g.setCompletedAt(0);
 		g.setStatus(GoalStatus.ACTIVE);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getIncompleteSection().getId(), g.getSectionId());
 	}
 
 	@Test
-	@DisplayName("reconcileCompletedSection no-ops when nothing needs moving")
+	@DisplayName("reconcileDerivedSections no-ops when nothing needs moving")
 	void reconcileNoopOnSteadyState()
 	{
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g").build();
 		store.addGoal(g);
-		assertFalse(store.reconcileCompletedSection());
+		assertFalse(store.reconcileDerivedSections());
 	}
 
 	// ====================================================================
@@ -379,7 +394,7 @@ class GoalStoreTest
 		g.setCompletedAt(System.currentTimeMillis());
 		g.setStatus(GoalStatus.COMPLETE);
 
-		assertFalse(store.reconcileCompletedSection());
+		assertFalse(store.reconcileDerivedSections());
 		assertEquals(custom.getId(), g.getSectionId());
 	}
 
@@ -474,7 +489,7 @@ class GoalStoreTest
 		store.addGoal(f);
 		store.addGoal(k);
 
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		String completedId = store.getCompletedSection().getId();
 		assertEquals(completedId, d.getSectionId()); // inherits default → archived
 		assertEquals(completedId, f.getSectionId()); // forced → archived
@@ -541,13 +556,13 @@ class GoalStoreTest
 		store.addGoal(g);
 
 		// Archive out to Completed, remembering its home section.
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 		assertEquals(x.getId(), g.getArchivedFromSectionId());
 
 		// Flip the section back to keep-inline → the goal returns home, memory cleared.
 		store.setSectionAutoArchiveOverride(x.getId(), false);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(x.getId(), g.getSectionId());
 		assertNull(g.getArchivedFromSectionId());
 	}
@@ -561,13 +576,13 @@ class GoalStoreTest
 		Goal g = Goal.builder().type(GoalType.CUSTOM).name("g").completedAt(1L)
 			.status(GoalStatus.COMPLETE).sectionId(x.getId()).build();
 		store.addGoal(g);
-		store.reconcileCompletedSection(); // archived to Completed
+		store.reconcileDerivedSections(); // archived to Completed
 		assertEquals(store.getCompletedSection().getId(), g.getSectionId());
 
 		// Un-complete it → it leaves Completed back to its home section.
 		g.setCompletedAt(0);
 		g.setStatus(GoalStatus.ACTIVE);
-		assertTrue(store.reconcileCompletedSection());
+		assertTrue(store.reconcileDerivedSections());
 		assertEquals(x.getId(), g.getSectionId());
 		assertNull(g.getArchivedFromSectionId());
 	}
@@ -593,7 +608,8 @@ class GoalStoreTest
 		reloaded.load();
 
 		assertEquals(2, reloaded.getGoals().size());
-		assertEquals(3, reloaded.getSections().size()); // Incomplete + Completed + Custom
+		// Repeatable + Incomplete + Completed + Custom
+		assertEquals(4, reloaded.getSections().size());
 		assertNotNull(reloaded.findUserSectionByName("Custom Section"));
 	}
 
@@ -636,7 +652,7 @@ class GoalStoreTest
 
 		int removed = store.removeAllUserSections();
 		assertEquals(2, removed);
-		assertEquals(2, store.getSections().size()); // built-ins remain
+		assertEquals(3, store.getSections().size()); // all three built-ins remain
 		assertEquals(store.getIncompleteSection().getId(), g.getSectionId());
 	}
 
@@ -1283,5 +1299,238 @@ class GoalStoreTest
 			if (atLeastOneAcyclicAdd) break;
 		}
 		assertTrue(atLeastOneAcyclicAdd);
+	}
+
+	// ====================================================================
+	// Account binding — the guard against goals completing themselves
+	// against the wrong account
+	// ====================================================================
+
+	@Test
+	@DisplayName("a fresh goal set is unbound, so it can adopt whoever logs in first")
+	void accountHashStartsUnbound()
+	{
+		assertEquals(0L, store.getBoundAccountHash());
+	}
+
+	@Test
+	@DisplayName("a bound account round-trips through config")
+	void accountHashRoundTrips()
+	{
+		store.setBoundAccountHash(1234567890123L);
+		assertEquals(1234567890123L, store.getBoundAccountHash());
+
+		GoalStore reloaded = new GoalStore(configManager, new com.google.gson.Gson());
+		reloaded.load();
+		assertEquals(1234567890123L, reloaded.getBoundAccountHash(),
+			"the binding must survive a restart or it guards nothing");
+	}
+
+	@Test
+	@DisplayName("binding is per profile, so two accounts on one machine do not share it")
+	void accountHashIsPerProfile()
+	{
+		store.setBoundAccountHash(1111L);
+		store.setProfile("leagues");
+		assertEquals(0L, store.getBoundAccountHash(),
+			"a different profile must not inherit another account's binding");
+
+		store.setBoundAccountHash(2222L);
+		store.setProfile("main");
+		assertEquals(1111L, store.getBoundAccountHash(), "and the original must survive");
+	}
+
+	@Test
+	@DisplayName("unbinding clears it rather than storing zero")
+	void accountHashUnbinds()
+	{
+		store.setBoundAccountHash(4242L);
+		store.setBoundAccountHash(0L);
+		assertEquals(0L, store.getBoundAccountHash());
+	}
+
+	@Test
+	@DisplayName("a corrupt stored value reads as unbound rather than throwing")
+	void accountHashCorruptValue()
+	{
+		configManager.setConfiguration("goalplanner", "main.accountHash", "not-a-number");
+		assertEquals(0L, store.getBoundAccountHash(),
+			"a garbled binding must fail open to adoption, not crash the tracker gate");
+	}
+
+	@Test
+	@DisplayName("binding rejects non-positive hashes, so a logged-out sentinel cannot unbind a goal set")
+	void accountHashIgnoresSentinels()
+	{
+		store.setBoundAccountHash(9999L);
+		// -1 and 0 are both "no account" shapes. Neither should be storable as a
+		// real binding; setBoundAccountHash(0) is the explicit unbind.
+		store.setBoundAccountHash(0L);
+		assertEquals(0L, store.getBoundAccountHash(), "0 unbinds");
+
+		store.setBoundAccountHash(9999L);
+		assertEquals(9999L, store.getBoundAccountHash(), "a real hash still binds");
+	}
+
+	// ====================================================================
+	// Per-character namespaces — profile + account as the key to everything
+	// ====================================================================
+
+	@Test
+	@DisplayName("two characters on one profile keep fully separate plans")
+	void accountsAreSeparate()
+	{
+		store.setAccount(111L);
+		Goal mains = Goal.builder().type(GoalType.CUSTOM).name("Main's goal").build();
+		store.addGoal(mains);
+
+		store.setAccount(222L);
+		assertNull(store.findGoalById(mains.getId()),
+			"testpurr must not see the main's goals");
+		Goal alts = Goal.builder().type(GoalType.CUSTOM).name("Alt's goal").build();
+		store.addGoal(alts);
+
+		store.setAccount(111L);
+		assertNotNull(store.findGoalById(mains.getId()), "switching back restores the main's plan");
+		assertNull(store.findGoalById(alts.getId()));
+	}
+
+	@Test
+	@DisplayName("the first character to log in adopts the pre-account plan; the second starts fresh")
+	void firstLoginAdoptsExistingPlan()
+	{
+		// Pre-upgrade state: goals live profile-scoped, no account dimension.
+		Goal existing = Goal.builder().type(GoalType.CUSTOM).name("Pre-upgrade goal").build();
+		store.addGoal(existing);
+		store.save();
+
+		store.setAccount(111L);
+		assertNotNull(store.findGoalById(existing.getId()),
+			"the existing plan must survive the upgrade - losing it is the one unforgivable failure");
+
+		// The adopt-then-delete is what makes the second character fresh:
+		// if the profile-scoped source were left behind, every new character
+		// would re-adopt the same goals.
+		store.setAccount(222L);
+		assertNull(store.findGoalById(existing.getId()),
+			"the second character must not re-adopt the first one's plan");
+	}
+
+	@Test
+	@DisplayName("adopted data survives a full reload from disk")
+	void adoptionIsPersistent()
+	{
+		Goal existing = Goal.builder().type(GoalType.CUSTOM).name("Persistent").build();
+		store.addGoal(existing);
+		store.save();
+		store.setAccount(111L);
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		fresh.setAccount(111L);
+		assertNotNull(fresh.findGoalById(existing.getId()),
+			"migration must move the persisted keys, not just the in-memory list");
+	}
+
+	@Test
+	@DisplayName("the last character is remembered per profile, so startup can restore it")
+	void lastAccountPointer()
+	{
+		assertEquals(0L, store.getLastAccount(), "fresh install: nothing recorded");
+		store.setAccount(111L);
+		assertEquals(111L, store.getLastAccount());
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		assertEquals(111L, fresh.getLastAccount(), "the pointer must survive a restart");
+	}
+
+	@Test
+	@DisplayName("non-positive hashes never switch the namespace")
+	void sentinelsIgnored()
+	{
+		store.setAccount(111L);
+		Goal g = Goal.builder().type(GoalType.CUSTOM).name("Held").build();
+		store.addGoal(g);
+
+		store.setAccount(0L);
+		store.setAccount(-1L);
+		assertEquals(111L, store.getActiveAccount(),
+			"a logged-out sentinel must not silently switch whose plan is in memory");
+		assertNotNull(store.findGoalById(g.getId()));
+	}
+
+	@Test
+	@DisplayName("profile and account compose: the same character has separate main and leagues plans")
+	void profileAndAccountCompose()
+	{
+		store.setAccount(111L);
+		Goal mainGoal = Goal.builder().type(GoalType.CUSTOM).name("Main-world goal").build();
+		store.addGoal(mainGoal);
+
+		store.setProfile("leagues");
+		assertNull(store.findGoalById(mainGoal.getId()),
+			"leagues.a111 is a different plan from main.a111");
+		assertEquals(111L, store.getActiveAccount(),
+			"a world hop changes the profile axis, not the character axis");
+
+		store.setProfile("main");
+		assertNotNull(store.findGoalById(mainGoal.getId()));
+	}
+
+	// ====================================================================
+	// Re-import protection — per-character import history
+	// ====================================================================
+
+	@Test
+	@DisplayName("an imported code is remembered; an unseen one is not")
+	void importHistoryRemembers()
+	{
+		assertFalse(store.wasCodeImported("GPSHARE2:abc"));
+		store.rememberImportedCode("GPSHARE2:abc");
+		assertTrue(store.wasCodeImported("GPSHARE2:abc"));
+		assertFalse(store.wasCodeImported("GPSHARE2:other"));
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		assertTrue(fresh.wasCodeImported("GPSHARE2:abc"), "history must survive a restart");
+	}
+
+	@Test
+	@DisplayName("import history is per character - your alt has not seen your main's codes")
+	void importHistoryIsPerCharacter()
+	{
+		store.setAccount(111L);
+		store.rememberImportedCode("GPSHARE2:routine");
+		assertTrue(store.wasCodeImported("GPSHARE2:routine"));
+
+		store.setAccount(222L);
+		assertFalse(store.wasCodeImported("GPSHARE2:routine"),
+			"a code imported on the main is fresh for the alt - its plan never saw it");
+
+		store.setAccount(111L);
+		assertTrue(store.wasCodeImported("GPSHARE2:routine"));
+	}
+
+	@Test
+	@DisplayName("history is capped, oldest first out")
+	void importHistoryCapped()
+	{
+		for (int i = 0; i < 55; i++) store.rememberImportedCode("code-" + i);
+		assertFalse(store.wasCodeImported("code-0"), "oldest must have fallen off the cap");
+		assertTrue(store.wasCodeImported("code-54"));
+	}
+
+	@Test
+	@DisplayName("null, empty, and corrupt stored history all fail open")
+	void importHistoryFailsOpen()
+	{
+		assertFalse(store.wasCodeImported(null));
+		assertFalse(store.wasCodeImported(""));
+		store.rememberImportedCode(null); // no-op, no throw
+
+		configManager.setConfiguration("goalplanner", "main.importedCodes", "not-json[");
+		assertFalse(store.wasCodeImported("GPSHARE2:abc"),
+			"corrupt history means one missed warning, never a crash");
 	}
 }

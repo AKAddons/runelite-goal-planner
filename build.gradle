@@ -48,7 +48,7 @@ tasks.named('test', Test) {
 }
 
 group = 'com.goalplanner'
-version = '0.4.2'
+version = '0.5.0'
 
 tasks.withType(JavaCompile).configureEach {
 	options.encoding = 'UTF-8'
@@ -118,10 +118,19 @@ tasks.register('checkGlyphs', Exec) {
 	commandLine 'python3', 'scripts/check_glyphs.py'
 }
 
+// ADR structure guard: decisions live as MADR files in docs/decisions/ (ADR-0001).
+// Holds the invariants that keep the log skimmable — known status values,
+// resolvable "superseded by" pointers, and an index that hasn't drifted.
+tasks.register('checkAdr', Exec) {
+	group = 'verification'
+	description = 'Validate architecture decision records and the DECISIONS.md index.'
+	commandLine 'python3', 'scripts/check_adr.py'
+}
+
 // One pre-submission gate: docs in sync AND source under the hub cap. Run this
 // before re-pinning the plugin-hub PR.
 tasks.register('preSubmit') {
 	group = 'verification'
-	description = 'Pre-submission checks for a Plugin Hub update (test + checkDocs + checkTokens + checkGlyphs).'
-	dependsOn 'test', 'checkDocs', 'checkTokens', 'checkGlyphs'
+	description = 'Pre-submission checks for a Plugin Hub update (test + checkDocs + checkTokens + checkGlyphs + checkAdr).'
+	dependsOn 'test', 'checkDocs', 'checkTokens', 'checkGlyphs', 'checkAdr'
 }

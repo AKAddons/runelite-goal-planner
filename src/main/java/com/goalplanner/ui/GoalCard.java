@@ -712,6 +712,49 @@ public class GoalCard extends JPanel
 		return truncateToWidth(text, descFont(), NAME_WIDTH_PX);
 	}
 
+
+	/**
+	 * Subtitle for a repeating goal: the period plus when this one is due, e.g.
+	 * {@code "Daily - by 00:00"}.
+	 *
+	 * <p>Computed from the LIVE period every render rather than read from the
+	 * stored description. The description is written once at creation, so a goal
+	 * switched from daily to weekly kept claiming "Daily" until something else
+	 * rewrote it.
+	 */
+	/**
+	 * Subtitle for a repeatable goal that is DONE for this period. It stays in
+	 * the Repeatable section rather than graduating, so the useful fact is when
+	 * it comes back - a wall-clock time, not a countdown. You are not working on
+	 * it, so "how long is left" no longer means anything to act on.
+	 */
+	private String completedRepeatSubtitle()
+	{
+		return view.resetsAtClock == null || view.resetsAtClock.isEmpty()
+			? ""
+			: "resets - " + view.resetsAtClock;
+	}
+
+	private String repeatSubtitle()
+	{
+		if (view.repeatEvery == null || "NONE".equals(view.repeatEvery))
+		{
+			return view.description == null ? "" : view.description;
+		}
+		String label;
+		try
+		{
+			label = com.goalplanner.model.RepeatPeriod.valueOf(view.repeatEvery).getLabel();
+		}
+		catch (IllegalArgumentException e)
+		{
+			return view.description == null ? "" : view.description;
+		}
+		return view.resetsAtLabel == null || view.resetsAtLabel.isEmpty()
+			? label
+			: label + " - " + view.resetsAtLabel;
+	}
+
 	private String formatNameHtml()
 	{
 		String line1;
@@ -722,6 +765,15 @@ public class GoalCard extends JPanel
 			case "SKILL":
 				String skillName = (String) view.attributes.get("skillName");
 				String skillDisplay = skillName != null ? Skill.valueOf(skillName).getName() : view.name;
+				if (view.repeatChunk > 0)
+				{
+					// Period-relative values: "100,000 XP this period" is not
+					// "level 49". Running them through getLevelForXp would render
+					// "49 Prayer / Lv 1 / 49" on a level-96 account.
+					line1 = fitName(view.name);
+					line2 = "";
+					break;
+				}
 				int currentLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(
 					Math.max(0, view.currentValue)));
 				int targetLevel = Math.max(1, net.runelite.api.Experience.getLevelForXp(
@@ -795,6 +847,16 @@ public class GoalCard extends JPanel
 			line2 = "Completed " + formatCompletionDate(view.completedAt);
 		}
 
+		// Every repeating goal shows its period and countdown, whatever its type.
+		// This lived in the SKILL branch only, so boss/item/custom repeatables
+		// silently had no timer. Applied after the completed-date override on
+		// purpose: for something that comes back, "resets in 3h" is more useful
+		// than the date you finished it.
+		if (view.repeatEvery != null && !"NONE".equals(view.repeatEvery))
+		{
+			line2 = isComplete() ? completedRepeatSubtitle() : repeatSubtitle();
+		}
+
 		if (line2.isEmpty())
 		{
 			return FormatUtil.escapeHtml(line1);
@@ -802,7 +864,7 @@ public class GoalCard extends JPanel
 
 		return "<html>" + FormatUtil.escapeHtml(line1)
 			+ "<br><span style='font-size:9px; color:#a0a0a0'>"
-			+ FormatUtil.escapeHtml(line2) + "</span></html>";
+			+ FormatUtil.escapeHtml(fitDescription(line2)) + "</span></html>";
 	}
 
 	private static String formatCompletionDate(long epochMillis)
@@ -857,9 +919,16 @@ public class GoalCard extends JPanel
 					: FormatUtil.formatNumber(view.currentValue) + " / " + FormatUtil.formatNumber(view.targetValue);
 			}
 			String unit = "SKILL".equals(type) ? " left" : " kills left";
+			String counts = FormatUtil.formatNumber(view.currentValue) + " / "
+				+ FormatUtil.formatNumber(view.targetValue);
+			// The percent is a bonus, not load-bearing (the bar shows it too).
+			// Past ~10 chars, "0 / 300K (0%)" wraps the column into three
+			// clipped lines - so wide counts drop the percent token instead.
+			String top = counts.length() <= 10
+				? counts + " (" + String.format("%.0f%%", pct) + ")"
+				: counts;
 			return "<html>"
-				+ FormatUtil.formatNumber(view.currentValue) + " / " + FormatUtil.formatNumber(view.targetValue)
-				+ " (" + String.format("%.0f%%", pct) + ")"
+				+ top
 				+ "<br><span style='font-size:9px; color:#a0a0a0'>"
 				+ FormatUtil.formatNumber(remaining) + unit + "</span></html>";
 		}

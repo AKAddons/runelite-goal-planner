@@ -180,6 +180,11 @@ public class GoalPlannerPlugin extends Plugin
 		com.goalplanner.data.BossKillData.init(gson);
 
 		goalStore.load();
+		// Pre-login the panel shows the LAST character seen on this profile -
+		// the same answer the main/leagues split gives for the same question.
+		// setAccount no-ops at 0 (fresh install), which leaves the pre-account
+		// namespace visible exactly as before this feature existed.
+		goalStore.setAccount(goalStore.getLastAccount());
 		goalStore.setAutoArchiveDefault(config.autoArchiveCompleted());
 		goalStore.setIndentDependenciesDefault(config.showDependenciesIndented());
 		seedCanonicalSystemTags();
@@ -216,6 +221,20 @@ public class GoalPlannerPlugin extends Plugin
 		// every skill chain goal) produce exactly one rebuild.
 		rebuildDebounce = new javax.swing.Timer(200, e -> panel.rebuild());
 		rebuildDebounce.setRepeats(false);
+
+		// Repeatable-goal rollover. A clock timer, NOT onGameTick: stage-1
+		// repeatable goals are CUSTOM goals that need no client data, and the
+		// day boundary is usually crossed while logged out - when no game tick
+		// fires. One minute is deliberate: the check is idempotent so a missed
+		// run self-heals, and second-granularity would buy nothing but repaints.
+		repeatResetService = new com.goalplanner.service.RepeatResetService(goalStore);
+		repeatResetTimer = new javax.swing.Timer(60_000, e -> applyRepeatResets());
+		repeatResetTimer.setRepeats(true);
+		repeatResetTimer.start();
+		// And once now, so a plugin that was closed overnight catches up on
+		// startup rather than a minute later.
+		applyRepeatResets();
+		wireRepeatBoundary();
 		goalTrackerApi.setOnGoalsChanged(() ->
 		{
 			javax.swing.SwingUtilities.invokeLater(rebuildDebounce::restart);
@@ -263,6 +282,13 @@ public class GoalPlannerPlugin extends Plugin
 		if (rebuildDebounce != null)
 		{
 			rebuildDebounce.stop();
+		}
+		// A repeating timer, unlike the debounces - it must be stopped or it
+		// keeps firing at a dead panel across a disable -> re-enable cycle.
+		if (repeatResetTimer != null)
+		{
+			repeatResetTimer.stop();
+			repeatResetTimer = null;
 		}
 		if (goalTrackerApi != null)
 		{
@@ -605,7 +631,7 @@ public class GoalPlannerPlugin extends Plugin
 		if ("showDependenciesIndented".equals(event.getKey()))
 		{
 			goalStore.setIndentDependenciesDefault(config.showDependenciesIndented());
-			goalStore.reconcileCompletedSection();
+			goalStore.reconcileDerivedSections();
 			goalStore.save();
 			if (panel != null)
 			{
@@ -617,7 +643,7 @@ public class GoalPlannerPlugin extends Plugin
 		if ("autoArchiveCompleted".equals(event.getKey()))
 		{
 			goalStore.setAutoArchiveDefault(config.autoArchiveCompleted());
-			goalStore.reconcileCompletedSection();
+			goalStore.reconcileDerivedSections();
 			goalStore.save();
 			if (panel != null)
 			{
@@ -670,6 +696,71 @@ public class GoalPlannerPlugin extends Plugin
 	/** Debounce timer coalescing rapid rebuild requests. Hoisted to a field so
 	 *  shutDown() can stop it (otherwise its ActionListener pins the panel). */
 	private javax.swing.Timer rebuildDebounce;
+
+	/** Repeating one-minute rollover check for repeatable goals. */
+	private javax.swing.Timer repeatResetTimer;
+	private com.goalplanner.service.RepeatResetService repeatResetService;
+
+	/**
+	 * Roll over any repeatable goal whose period has ended, and refresh the
+	 * panel if anything actually changed. Idempotent, so the minute timer, the
+	 * startup call, and a profile switch can all invoke it freely.
+	 */
+	/**
+	 * Hand the API the boundary config so goal views can carry "due by ..." for
+	 * repeating goals. The plugin owns the config; the API layer must not read
+	 * it directly.
+	 */
+	private void wireRepeatBoundary()
+	{
+		goalTrackerApi.setNextBoundaryFn(
+			period -> com.goalplanner.util.RepeatSchedule.nextBoundary(
+				period, java.time.Instant.now(),
+				com.goalplanner.util.RepeatSchedule.zoneFor(config.resetBoundary()),
+				com.goalplanner.util.RepeatSchedule.hourFor(
+					config.resetBoundary(), config.resetHour())),
+			() -> com.goalplanner.util.RepeatSchedule.zoneFor(config.resetBoundary()));
+	}
+
+	private void applyRepeatResets()
+	{
+		if (repeatResetService == null)
+		{
+			return;
+		}
+		int reset = repeatResetService.applyResets(
+			java.time.Instant.now(), config.resetBoundary(), config.resetHour());
+		if (panel == null)
+		{
+			return;
+		}
+		// A rollover always needs a repaint. Otherwise repaint only to advance the
+		// "resets in" countdowns, and only when a goal is actually showing one, so
+		// a player with no repeatable goals pays nothing. Once a minute is ~600x
+		// rarer than the per-event rebuilds the 0.4.0 perf pass removed. It is
+		// still a full rebuild: if this ever needs to tick faster than a minute it
+		// must mutate the label directly instead.
+		if (reset > 0 || hasRepeatingGoal())
+		{
+			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+		}
+	}
+
+	private boolean hasRepeatingGoal()
+	{
+		if (goalStore == null)
+		{
+			return false;
+		}
+		for (Goal g : goalStore.getGoals())
+		{
+			if (g.isRepeating())
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/** Set by onVarbitChanged/onStatChanged (which fire many times per tick) and
 	 *  drained once per tick in onGameTick, so the tracker suite runs at most once
@@ -773,7 +864,73 @@ public class GoalPlannerPlugin extends Plugin
 
 	private boolean isTrackingSuspended()
 	{
-		return System.currentTimeMillis() < trackingSuspendedUntil;
+		return System.currentTimeMillis() < trackingSuspendedUntil || !accountMatchesGoalSet();
+	}
+
+	private final com.goalplanner.util.AccountBindingGate accountGate =
+		new com.goalplanner.util.AccountBindingGate();
+
+	/**
+	 * Whether the loaded goal set belongs to the logged-in account. The decision
+	 * logic lives in {@link com.goalplanner.util.AccountBindingGate} so it can be
+	 * tested without a client - this method is only the client/store plumbing
+	 * around it.
+	 *
+	 * <p>{@link #PROFILE_SWITCH_SUSPEND_MS} does not cover this case: it waits
+	 * for client state to settle after a switch, which delays a wrong pairing by
+	 * five seconds rather than preventing it.
+	 */
+	private boolean accountMatchesGoalSet()
+	{
+		if (client == null || goalStore == null) return false;
+
+		long live = client.getAccountHash();
+		// Per-character namespace: follow the logged-in character BEFORE the
+		// binding gate evaluates, so the gate compares against the right plan.
+		// setAccount no-ops when unchanged; on a real switch it migrates,
+		// reloads, and this drain sits out the settle window like a profile hop.
+		if (live > 0 && live != goalStore.getActiveAccount())
+		{
+			goalStore.setAccount(live);
+			trackingSuspendedUntil = System.currentTimeMillis() + PROFILE_SWITCH_SUSPEND_MS;
+			lastMiscApproval = -1;
+			if (panel != null)
+			{
+				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+			}
+			return false; // this drain waits; next one sees the settled state
+		}
+		long bound = goalStore.getBoundAccountHash();
+		com.goalplanner.util.AccountBindingGate.Decision decision =
+			accountGate.evaluate(live, bound);
+
+		switch (decision)
+		{
+			case ADOPT:
+				goalStore.setBoundAccountHash(live);
+				log.info("Goal set for profile {} bound to the logged-in account",
+					goalStore.getActiveProfile());
+				return true;
+			case PAUSE:
+				// Loud on purpose. Silently freezing tracking just becomes a
+				// different bug report ("my goals stopped updating"), and the
+				// user is the only one who can tell which pairing is wrong.
+				if (accountGate.shouldAnnounceMismatch())
+				{
+					log.warn("Goal tracking paused: profile {} is bound to a different account",
+						goalStore.getActiveProfile());
+					postGameMessage("<col=ff3333>Goal Planner:</col> this profile's goals belong "
+						+ "to a different account, so tracking is paused - otherwise they would "
+						+ "complete themselves against the wrong account. Switch to this "
+						+ "account's RuneLite profile to resume.");
+				}
+				return false;
+			case TRACK:
+				return true;
+			case NO_ACCOUNT:
+			default:
+				return false;
+		}
 	}
 
 	/**
@@ -802,6 +959,12 @@ public class GoalPlannerPlugin extends Plugin
 	private String detectProfile()
 	{
 		java.util.Set<net.runelite.api.WorldType> wt = client.getWorldType();
+		// Deadman first: a DMM world could conceivably also read as seasonal,
+		// and its progress must never bleed into the leagues plan.
+		if (wt != null && wt.contains(net.runelite.api.WorldType.DEADMAN))
+		{
+			return com.goalplanner.persistence.GoalStore.PROFILE_DEADMAN;
+		}
 		boolean seasonal = wt != null && wt.contains(net.runelite.api.WorldType.SEASONAL);
 		int leagueAccount = client.getVarbitValue(net.runelite.api.gameval.VarbitID.LEAGUE_ACCOUNT);
 		return (seasonal || leagueAccount != 0)
@@ -2037,7 +2200,7 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		if (updated)
 		{
-			boolean sectionChanged = goalStore.reconcileCompletedSection();
+			boolean sectionChanged = goalStore.reconcileDerivedSections();
 			// Snapshot dirty IDs before save clears them
 			java.util.Set<String> dirtyIds = goalStore.getDirtyGoalIds();
 			goalStore.saveDirtyGoals();

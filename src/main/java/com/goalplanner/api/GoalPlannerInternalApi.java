@@ -297,7 +297,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * <p><b>Does NOT save, reconcile, or fire onGoalsChanged.</b> Trackers
 	 * run in batches on each game tick; the plugin's GameTick handler
-	 * performs a single {@code goalStore.save() + reconcileCompletedSection()
+	 * performs a single {@code goalStore.save() + reconcileDerivedSections()
 	 * + panel.rebuild()} once at the end of each tick if anything updated.
 	 * Firing the callback per goal would defeat the over-querying cleanup
 	 *
@@ -450,6 +450,15 @@ public interface GoalPlannerInternalApi
 	 * @return number of goals actually removed
 	 */
 	int bulkRemoveGoals(java.util.Set<String> goalIds);
+
+	/**
+	 * Clear completion on every completed goal in the selection, as one undoable
+	 * step. Recovery for goals completed against the wrong account: trackers
+	 * re-derive from live state on the next drain.
+	 *
+	 * @return how many goals were reopened
+	 */
+	int bulkMarkIncomplete(java.util.Set<String> goalIds);
 
 	/**
 	 * Move a batch of goals into the same target section as a single atomic

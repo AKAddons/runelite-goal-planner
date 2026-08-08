@@ -38,6 +38,17 @@ public class GoalShareDto
 	private int spriteId;
 	private String tooltip;
 	private int caTaskId = -1;
+
+	/** How often the goal repeats ({@code RepeatPeriod} name), or null/"NONE"
+	 *  for an ordinary one-shot. Additive to GPSHARE2: an older decoder simply
+	 *  ignores it and imports the goal as non-repeating. */
+	private String repeatEvery;
+
+	/** For a derived repeatable goal, the gain expected each period. Zero for a
+	 *  plain repeat. The recipient re-bases their own target off their OWN
+	 *  progress on import - the sender's absolute target is meaningless to
+	 *  them, which is exactly why the chunk travels and the target does not. */
+	private int repeatChunk;
 	private int customColorRgb = -1;
 	private boolean optional;
 	private boolean autoSeeded;
