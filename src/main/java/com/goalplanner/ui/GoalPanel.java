@@ -35,6 +35,10 @@ public class GoalPanel extends PluginPanel
 	private final GoalStore goalStore;
 	private final GoalReorderingService reorderingService;
 	private final com.goalplanner.api.GoalPlannerApiImpl api;
+	/** Permanent bottom control panel (ADR-0007). Selection-driven; the
+	 *  right-click menus remain alive alongside it until parity is verified. */
+	private final com.goalplanner.ui.dock.ActionDock actionDock =
+		new com.goalplanner.ui.dock.ActionDock();
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -370,6 +374,8 @@ public class GoalPanel extends PluginPanel
 
 		add(headerStack, BorderLayout.NORTH);
 		add(scrollPane, BorderLayout.CENTER);
+		add(actionDock, BorderLayout.SOUTH);
+		refreshDock();
 
 		// ESC cancels whichever pick mode is active. Registered on the
 		// whole panel so the key fires regardless of focus within the
@@ -635,6 +641,7 @@ public class GoalPanel extends PluginPanel
 			row.refreshSelectToggle();
 		}
 		refreshUndoRedoButtons();
+		refreshDock();
 	}
 
 	/** True when the section has goals and every one of them is selected. */
@@ -1607,5 +1614,99 @@ public class GoalPanel extends PluginPanel
 		return out;
 	}
 
+	/**
+	 * Rebuild the action dock for the current selection. ALL dock action
+	 * assembly lives here on purpose - the parity pass that migrates the 125
+	 * context-menu actions edits this one method (ADR-0007).
+	 *
+	 * <p>Initial slice: enough of each state to feel the interaction. The
+	 * context menus remain the complete surface until parity is verified.
+	 */
+	void refreshDock()
+	{
+		com.goalplanner.ui.dock.DockContext ctx =
+			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds());
+		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
+		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new java.util.ArrayList<>();
+		String hint = null;
 
+		switch (ctx.getState())
+		{
+			case GOAL:
+			{
+				String gid = ctx.getSoleGoalId();
+				Goal g = goalStore.findGoalById(gid);
+				if (g == null) break;
+				boolean manual = g.getType() == com.goalplanner.model.GoalType.CUSTOM
+					|| g.getType() == com.goalplanner.model.GoalType.ITEM_GRIND;
+				if (g.isComplete())
+				{
+					top.add(new com.goalplanner.ui.dock.ActionDock.Item("Reopen",
+						"Mark incomplete and let tracking re-derive it",
+						() -> api.markGoalIncomplete(gid)));
+				}
+				else if (manual)
+				{
+					top.add(new com.goalplanner.ui.dock.ActionDock.Item("Complete",
+						"Mark this goal complete",
+						() -> api.markGoalComplete(gid)));
+				}
+				top.add(new com.goalplanner.ui.dock.ActionDock.Item(
+					g.isOptional() ? "Required" : "Optional",
+					g.isOptional() ? "Mark required" : "Mark optional",
+					() -> api.setGoalOptional(gid, !g.isOptional())));
+				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Deselect",
+					"Clear the selection",
+					() -> api.clearGoalSelection()));
+				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Remove",
+					"Remove this goal (undoable)",
+					() -> api.removeGoal(gid)));
+				break;
+			}
+			case MULTI:
+			{
+				hint = ctx.getCount() + " selected";
+				java.util.Set<String> ids =
+					new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Reset done",
+					"Reopen every completed goal in the selection (one undo)",
+					() -> api.bulkMarkIncomplete(ids)));
+				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Remove",
+					"Remove every selected goal (one undo)",
+					() -> api.bulkRemoveGoals(ids)));
+				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Deselect",
+					"Clear the selection",
+					() -> api.clearGoalSelection()));
+				break;
+			}
+			case EMPTY:
+			default:
+			{
+				hint = "Select a goal for actions";
+				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Add Section",
+					"Create a new section",
+					this::promptAddSectionFromDock));
+				break;
+			}
+		}
+		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
+	}
+
+	private void promptAddSectionFromDock()
+	{
+		String input = javax.swing.JOptionPane.showInputDialog(this,
+			"Section name:", "Add Section", javax.swing.JOptionPane.PLAIN_MESSAGE);
+		if (input != null && !input.trim().isEmpty())
+		{
+			try
+			{
+				api.createSection(input.trim());
+			}
+			catch (IllegalArgumentException e)
+			{
+				javax.swing.JOptionPane.showMessageDialog(this, e.getMessage(),
+					"Add Section", javax.swing.JOptionPane.WARNING_MESSAGE);
+			}
+		}
+	}
 }
