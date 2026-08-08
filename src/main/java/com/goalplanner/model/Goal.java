@@ -185,6 +185,13 @@ public class Goal
 		{
 			return currentValue;
 		}
+		// Unsized (imported, no tracker read yet): targetValue 0 makes
+		// periodStart negative, which would display chunk/chunk (100%) on a
+		// goal with zero progress. Nothing has happened yet - show nothing.
+		if (targetValue <= 0)
+		{
+			return 0;
+		}
 		int periodStart = targetValue - repeatChunk;
 		return Math.max(0, Math.min(repeatChunk, currentValue - periodStart));
 	}

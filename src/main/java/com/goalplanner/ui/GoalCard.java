@@ -919,9 +919,16 @@ public class GoalCard extends JPanel
 					: FormatUtil.formatNumber(view.currentValue) + " / " + FormatUtil.formatNumber(view.targetValue);
 			}
 			String unit = "SKILL".equals(type) ? " left" : " kills left";
+			String counts = FormatUtil.formatNumber(view.currentValue) + " / "
+				+ FormatUtil.formatNumber(view.targetValue);
+			// The percent is a bonus, not load-bearing (the bar shows it too).
+			// Past ~10 chars, "0 / 300K (0%)" wraps the column into three
+			// clipped lines - so wide counts drop the percent token instead.
+			String top = counts.length() <= 10
+				? counts + " (" + String.format("%.0f%%", pct) + ")"
+				: counts;
 			return "<html>"
-				+ FormatUtil.formatNumber(view.currentValue) + " / " + FormatUtil.formatNumber(view.targetValue)
-				+ " (" + String.format("%.0f%%", pct) + ")"
+				+ top
 				+ "<br><span style='font-size:9px; color:#a0a0a0'>"
 				+ FormatUtil.formatNumber(remaining) + unit + "</span></html>";
 		}
