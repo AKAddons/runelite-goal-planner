@@ -77,13 +77,25 @@ rendering is screenshot-verified.
 
 ## Refined vision (the 1.0.0 target)
 
-The panel is **moded**, not selection-inferred - explicit `Select` / `Create`
-tabs. This fixes the "janky" scattered-chip read and reconciles with
-ADR-0007's anti-jitter rule: height changing on a MODE switch is a deliberate
-drawer-open; the rule only ever forbade height jumping around WITHIN a mode.
+The dock is **contextual, inferred from selection - NOT tabbed** (user
+correction 2026-08-08, superseding an earlier Select/Create tab sketch). The
+goal LIST stays exactly as it is today and never re-lays-out; only the DOCK
+changes. Nothing selected -> create surface; one+ goals/sections selected ->
+their actions. This is the original DockContext.of(selection) model. Guiding
+principle from the user: too much navigation is an anti-pattern - keep the
+user inside their goal list whenever possible, so create navigates INSIDE the
+dock, never at panel level.
 
-**Create mode fully replaces GoalDialogFactory** - the 1.0.0 thesis is "drive
-the plugin without knowing a right-click exists." Flow:
+Height tension (create needs room; the dock shares the panel with the list):
+resolved three ways together - (a) the dock is RESIZABLE via a top grab
+handle, user owns the split; (b) the create form uses PROGRESSIVE DISCLOSURE,
+minimal by default (type + primary field + Add), Repeat/Section/Tags behind a
+"more" expander; (c) the list stays visible/scrollable at every dock height -
+"unobstructed" means never-covered, not never-shorter.
+
+**The create surface fully replaces GoalDialogFactory** - the 1.0.0 thesis is
+"drive the plugin without knowing a right-click exists." Flow (all inside the
+dock):
 
 1. Type grid (Skill/Quest/Diary/Combat/Boss/Item/Account/Custom).
 2. Type-specific sub-view - navigation depth varies by type: Item = search +
@@ -94,17 +106,18 @@ the plugin without knowing a right-click exists." Flow:
    the period pills + per-period amount appear inline. The form reflects
    consequences (turn on Repeatable -> Section auto-locks to Repeatable).
 
-Create mode is tall (~340px) and should TAKE OVER the panel (overlay the list)
-when active, not split it - creating is a focused act.
+The create surface shares the panel with the list (list on top, dock at
+bottom); it does NOT take over or overlay. Resizable + progressively
+disclosed so it stays as compact as the moment needs.
 
-Search-to-create (this ADR's original subject) becomes: typing in Select mode
-surfaces matching goals AND a "create these" affordance that hands off into
-Create mode pre-seeded with the query and its connected goals.
+Search-to-create (this ADR's original subject): typing filters the list AND
+the empty-selection dock offers "create these" for the query + its connected
+goals, pre-seeding the create form - still no tab, still selection-inferred.
 
 Confirmed as the **1.0.0** milestone (user, 2026-08-08). Mockups: three
 show_widget passes this session (states; type grid + item sub-flow; skill form
 repeat off/on). Build is per-type, screenshot-loop, one sub-view at a time.
-The moded shell + Skill sub-view first (most parameters), then Item (richest
+The contextual dock + Skill sub-view first (most parameters), then Item (richest
 navigation), then the rest.
 
 ## More Information
