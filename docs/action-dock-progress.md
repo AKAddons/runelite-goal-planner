@@ -92,6 +92,126 @@ their own creation path). No competing side-by-side section affordance was
 reintroduced. `promptAddSectionFromDock` is currently unused (left in place for
 a future subordinate section control); the create grid title is "Add a goal".
 
+## Select surface (ADR-0007): GOAL + MULTI actions migrated
+
+The dock's SELECT side now carries the full goal-selection and
+multi-selection action surface — the dock replaces right-click on goals.
+All assembly is in `GoalPanel.refreshDock` → `buildGoalDock` /
+`buildMultiDock` plus private `dock*` helpers (single-place rule). Every
+button REUSES an existing dialog/flow; no dialog was rebuilt. The
+right-click menus (`GoalContextMenuBuilder`) + `GoalDialogFactory` remain
+fully intact — deletion is the later step once this is screenshot-verified.
+
+Layout: top row = lifecycle + primary edits; bottom row = the organize
+cluster, grouped by small-caps separators and reached by horizontal scroll
+when it overflows (ADR-0007 scroll-overflow, no per-state ceiling).
+
+### GOAL state (`buildGoalDock`) — dialogs/flows reused
+- **Complete / Reopen, Optional / Required, Remove, Deselect** — direct API.
+- **Change Amount** (`dockChangeAmount`) — SKILL routes to
+  `dialogFactory.showChangeSkillTargetDialog`; ITEM_GRIND/BOSS use a
+  quantity/kill-count `JOptionPane` prompt → `api.changeTarget` (mirrors the
+  menu's inline prompts). Omitted for types with no numeric target.
+- **Change Name / Description** (`dockChangeName` / `dockChangeDescription`)
+  — CUSTOM only, not-complete → `api.editCustomGoal`.
+- **Change Color** — reuses `dialogFactory.showGoalColorDialog`.
+- **Repeat** (`buildRepeatItem` + `dockSetCustomRepeat` / `dockEditRepeat` /
+  `dockDeriveRepeat` / `dockDeriveItemRepeat`) — one button, branch by goal:
+  CUSTOM sets a period (`setGoalRepeat`); an existing derived goal
+  (`repeatChunk > 0`) edits period/amount (`setGoalRepeat` /
+  `setGoalRepeatChunk`); a SKILL or derivable ITEM grind derives a per-period
+  slice (`createDerivedRepeatGoal`, run on the client thread — it reads live
+  XP / kill-count). Item goals with multiple activities pick the activity
+  first. Period×amount rendered as chained combo choosers.
+- **Add tag / Drop tags** (`dockAddTag` / `dockRemoveTags`, `removableTagsFor`)
+  — reuses `TagPickerDialog` and `MultiSelectDialog`; removable-tag rule
+  mirrors the menu (CUSTOM = any, else non-default only).
+- **Requires / Required by** — reuses `enterRelationMode` (click-to-link).
+  **Drop reqs / Drop dependents** (`dockRemoveRequirements` /
+  `dockRemoveDependents`) — `MultiSelectDialog`, shown only when edges exist.
+- **Add reqs to section** (`dockSeedReqs`, `goalHasSeedableReqs`) — QUEST/
+  DIARY/BOSS with game-data reqs; chooser offers incomplete-only vs all,
+  seeded on the client thread.
+- **Move to section / Copy to section** (`dockMoveToSection` /
+  `dockDuplicateToSection`) — combo chooser mirroring the menu's destination
+  logic (Default entry when the goal is outside it, every other user section,
+  New section...). Reuses `moveGoalToSection` / `moveGoalsToDefault` /
+  `duplicateGoalsToSection` and `createSection` (`promptNewSectionThen`).
+- **Restore defaults** — only when `api.isGoalOverridden`, via
+  `bulkRestoreDefaults`.
+- **Loadout Lab** — BOSS only, install-aware: enabled → `searchLoadoutLab`;
+  installed-but-disabled → a disabled "Lab is off" nudge; not installed →
+  absent (mirrors the menu exactly).
+- **Copy code / Save code** — single-goal share via `copyGoalsShareCode` /
+  `saveGoalsPlan`, gated on `isShareAvailable` / `isSavedPlansAvailable`.
+
+### MULTI state (`buildMultiDock`) — dialogs/flows reused
+- **Reset done, Remove, Deselect all** — direct bulk API.
+- **Complete** — only when every selected goal is CUSTOM (mirrors the bulk
+  menu); one compound.
+- **Optional / Required** (`bulkSetOptional`) — applies to the non-completed
+  goals; one compound each.
+- **Color** — reuses `dialogFactory.showBulkChangeColorDialog`.
+- **Add tag / Drop tags** — reuses `showBulkAddTagDialog` /
+  `showBulkRemoveTagDialog` (+ `getRemovableTagsForSelection`).
+- **Move to section / Copy to section** (`dockBulkMoveToSection` /
+  `dockBulkDuplicateToSection`) — combo chooser mirroring the bulk menu's
+  destination logic; reuses `bulkMoveGoalsToSection` / `moveGoalsToDefault` /
+  `duplicateGoalsToSection`.
+- **Restore defaults** — when any selected goal is overridden.
+- **Copy code / Save code** — one code for the whole selection.
+
+### Dropped per the parity table (intentional, not missing)
+Move up/down/top/bottom, add above/below this, deselect-this /
+deselect-all-but-this — drag-reorder and the dock's Deselect cover these.
+Submenu picks that the fixed-height strip can't nest (section, repeat
+period/amount, seed scope, activity) render through `dockChooser`, a
+single-choice combo prompt — the dock's stand-in for a menu submenu, so no
+popup is revived.
+
+### NOT wired (and why)
+- **Bulk relations** (bulk Requires / Required by, remove-common-requirements
+  / dependents): the bulk menu computes edge intersections and enters a
+  multi-source relation mode. `enterRelationMode(Set, boolean)` exists, but
+  the remove-common flows and the intersection UX are the fiddliest surface
+  and lower value than the rest; deferred to a follow-up. Single-goal
+  relations are fully wired.
+- **Leagues shortcut submenu** (direct-create league point/task goals at
+  tier milestones): a create-side, leagues-profile-only affordance that lives
+  on the goal-card "Add Goal" submenu, not a select action on the goal —
+  belongs with the create surface / section work, not this pass.
+
+### Needs the designer's in-client screenshot verification
+- The bottom organize row is long on a rich goal (tags + reqs + move + lab +
+  share + remove). Scroll-overflow is supposed to pan it; CONFIRM the tail is
+  reachable by wheel and that Remove/Deselect at the far right aren't stranded
+  — may want the most destructive/common actions pulled left, or a second
+  pass on top/bottom split.
+- Separator small-caps labels ("tag", "requires", "organize", "share",
+  "lab", "goal", "select") as cluster dividers inside a scrolling strip —
+  confirm they read as groups and aren't mistaken for buttons.
+- The `dockChooser` combo prompt (JOptionPane) for section/repeat/seed picks
+  — acceptable as a stand-in, but it IS a popup dialog; confirm the feel vs a
+  future inline dock row. The parity table calls these "dialog" disposition,
+  so a combo dialog is within spec, but the 1.0.0 thesis prefers staying in
+  the dock — an inline picker row is the eventual target.
+- Repeat's chained choosers (period → amount, or activity → period → amount)
+  are several dialogs deep for the derive path; confirm that's tolerable or
+  wants collapsing into one form (the create surface's repeatable disclosure
+  is the richer pattern to mirror later).
+- Label truncation: button labels are short ASCII ("Drop reqs", "Add reqs to
+  section", "Move to section"); confirm they fit and read clearly at font
+  scales 1.0 / 1.3.
+
+### Deferred glam (screenshot loop)
+- **Additive-green vs act-on-gray** (ADR-0007/0008): all dock buttons render
+  uniform gray today. `ActionDock.makeButton` would need an accent flag on
+  `Item`; deliberately skipped this pass (the human polishes color via
+  screenshots, per the build guidance). Add-tag / Requires / Add-reqs are the
+  additive candidates for green.
+- Exact grouping order, which actions earn a top-row slot vs the scrolling
+  bottom row, separator styling, spacing.
+
 ## Over the token cap — on purpose
 
 `checkTokens` is RED and expected to be: main source is ~200,365 / 200,000. Per
