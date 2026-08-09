@@ -7,6 +7,7 @@ import java.awt.FlowLayout;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
@@ -69,8 +70,13 @@ public class ActionDock extends JPanel
 
 	private static final int ROW_H = 26;
 	private static final int PEEK_H = 28;
+	/** Ceiling for the create surface's expanded height; taller forms scroll
+	 *  inside the dock rather than shoving the list off-screen (ADR-0008 says
+	 *  the form grows to fit, but the list must keep a usable minimum). */
+	private static final int CREATE_MAX_H = 300;
 
 	private final JPanel content = new JPanel();
+	private final JPanel centerHost = new JPanel(new BorderLayout());
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
 	private final JButton peekBar = new JButton();
@@ -78,6 +84,9 @@ public class ActionDock extends JPanel
 	private String peekText = "Add a goal";
 	private boolean peekAccent = true; // green when it is the create invitation
 	private Rows current = new Rows(null, List.of(), List.of());
+	/** The create-surface component currently mounted (grid or a type form),
+	 *  or null when the dock is in button-strip (selection) mode. */
+	private JComponent customView = null;
 
 	public ActionDock()
 	{
@@ -91,9 +100,12 @@ public class ActionDock extends JPanel
 		content.add(scrollStrip(topRow));
 		content.add(scrollStrip(bottomRow));
 
+		centerHost.setOpaque(false);
+		centerHost.add(content, BorderLayout.CENTER);
+
 		stylePeekBar();
 		add(peekBar, BorderLayout.NORTH);
-		add(content, BorderLayout.CENTER);
+		add(centerHost, BorderLayout.CENTER);
 		applyCollapsed();
 	}
 
@@ -109,12 +121,42 @@ public class ActionDock extends JPanel
 		applyCollapsed();
 	}
 
-	/** Replace the expanded content. Does not force the dock open. */
+	/** Replace the expanded content with the two button strips (selection
+	 *  mode). Does not force the dock open. */
 	public void setRows(Rows rows)
 	{
+		if (customView != null)
+		{
+			// Leave create mode: swap the strips back into the center host.
+			centerHost.removeAll();
+			centerHost.add(content, BorderLayout.CENTER);
+			customView = null;
+		}
 		this.current = rows;
 		rebuildStrip(topRow, rows.hint, rows.top);
 		rebuildStrip(bottomRow, null, rows.bottom);
+		revalidate();
+		repaint();
+	}
+
+	/**
+	 * Replace the expanded content with an arbitrary component - the create
+	 * surface (type grid or a type-specific form) from ADR-0008. The dock
+	 * grows to fit it, capped at {@link #CREATE_MAX_H}; beyond that the form
+	 * scrolls inside the dock. Does not force the dock open.
+	 */
+	public void setExpandedComponent(JComponent view)
+	{
+		this.customView = view;
+		centerHost.removeAll();
+		JScrollPane sp = new JScrollPane(view,
+			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
+			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		sp.setBorder(null);
+		sp.setOpaque(false);
+		sp.getViewport().setOpaque(false);
+		sp.getVerticalScrollBar().setUnitIncrement(16);
+		centerHost.add(sp, BorderLayout.CENTER);
 		revalidate();
 		repaint();
 	}
@@ -236,7 +278,7 @@ public class ActionDock extends JPanel
 
 	private void applyCollapsed()
 	{
-		content.setVisible(!collapsed);
+		centerHost.setVisible(!collapsed);
 		peekBar.setText((peekAccent ? "+  " : "") + peekText);
 		peekBar.setBackground(peekAccent ? PEEK_CREATE_BG : PEEK_NEUTRAL_BG);
 		peekBar.setForeground(peekAccent ? PEEK_CREATE_FG : PEEK_NEUTRAL_FG);
@@ -254,7 +296,17 @@ public class ActionDock extends JPanel
 	@Override
 	public Dimension getPreferredSize()
 	{
-		int h = PEEK_H + (collapsed ? 0 : 2 * (ROW_H + 4) + 2);
+		int expanded;
+		if (customView != null)
+		{
+			// Create surface: grow to the form's preferred height, capped.
+			expanded = Math.min(CREATE_MAX_H, customView.getPreferredSize().height + 4);
+		}
+		else
+		{
+			expanded = 2 * (ROW_H + 4) + 2;
+		}
+		int h = PEEK_H + (collapsed ? 0 : expanded);
 		return new Dimension(super.getPreferredSize().width, h);
 	}
 }
