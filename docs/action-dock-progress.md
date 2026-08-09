@@ -5,6 +5,123 @@ Everything here is **render-path** work that has NOT been verified in-client
 (no client available while the designer was AFK). Treat every layout/spacing
 choice as provisional until screenshot-verified.
 
+## Refinement pass (notes 2-6) — create/edit dock
+
+Five user refinements to the just-built create/edit dock. All assembly still
+lives in `GoalPanel.refreshDock` + its private `build*` helpers (single-place
+rule); `DockContext` untouched; `GoalContextMenuBuilder` + `GoalDialogFactory`
+still fully intact (deleted later). Commits, newest last:
+
+- `0f23ab7` notes 4 + 6
+- `049085b` note 2 (+ section-pick view scaffolding)
+- `0269bf5` note 3
+- `0e0a624` note 5
+
+### New nav / state fields (all on `GoalPanel`)
+- **`enum CreateNav { GRID, FORM, SECTION_NEW, SECTION_PICK }`** +
+  `CreateNav dockCreateNav` — replaces the old `dockCreateType==null?grid:form`
+  branch. `buildCreateSurface()` routes on it; `dockCreateType` still names the
+  FORM's type. Mount guard now tracks `(dockCreateMountedNav, dockCreateMountedType)`.
+  Helpers: `mountCreateSurface()`, `navigateCreateNav(CreateNav)`; `navigateCreate(type)`
+  sets nav = `type==null?GRID:FORM`.
+- **`Consumer<String> dockPendingCreate`** (note 3) — a validated goal-create
+  awaiting its landing section; run once by `chooseSection(sectionId)`.
+- **`CreateSeed dockCreateSeed`** (note 5) — `{ Skill skill; String bossName;
+  boolean repeatable; Integer targetXp; Integer targetCount; }`, prefill for a
+  freshly-opened create form; consumed once when the matching form builds.
+- **`enum EditGroup { DATA, RELATIONS, ACTIONS }`** + `EditGroup dockEditGroup`
+  (note 6) — which edit-chip drill-in group is open (null = top level); reset to
+  null when a different goal mounts.
+
+### Note 2 — Create Section opens an in-dock form
+`dockCreateSection`'s JOptionPane is gone. `ActionDock`'s Create Section header
+button now EXPANDS the dock (mirrors Create Goal's toggle) and runs its callback,
+which sets `dockCreateNav=SECTION_NEW` and mounts `buildSectionNewForm()`: an
+autofocus "New section name" field + a primary "Create section" button, in the
+same `surfaceShell("Create", true, ...)` as the goal forms. Enter or the button
+commits `api.createSection(name.trim())` (blank ignored) then returns to the
+type grid. Like Create Goal, tapping the header button while already expanded
+just collapses (toggle parity) — from the grid there is no header jump into the
+section form; that is the accepted mirror of Create Goal.
+
+### Note 3 — pick a landing section as a separate step
+Every goal form's primary button is now **"Next: choose section"**. Its `onAdd`
+validates, builds a pending `Consumer<String sectionId>`, and calls
+`goToSectionPick(consumer)` (nav -> SECTION_PICK) instead of creating. The
+consumer does the create then `api.moveGoalToSection(newId, sectionId)`. For a
+repeatable skill/boss goal the PARENT lands in the chosen section (inside the
+client-thread compound) and the derived slice still auto-lands in Repeatable.
+`buildSectionPickForm()` lists the default **Incomplete** section first
+(highlighted green as the preselected choice), then every user section, then a
+"+ New section" reveal (inline name field, creates-and-selects in one go via
+`chooseSection`). Picking runs the pending consumer + returns to the grid.
+"< Back" abandons the pending create and returns to the type grid. Applies to
+all eight forms. **Known limitation:** Back does not preserve form field values
+(forward flow is the norm) — flagged in the chip tooltip and here.
+
+### Note 4 — absolute goals show a disabled completion box
+`editFormScaffold`: `absolute = QUEST || DIARY || COMBAT_ACHIEVEMENT` now ALWAYS
+renders the Complete/Reopen checkbox but **disabled + greyed** (`setEnabled(false)`,
+`setSelected(g.isComplete())`, no listener) with tooltip "Tracked by game
+progress - can't be set manually." Replaces the old show-Reopen-only-when-complete
+behavior. SKILL/BOSS/ACCOUNT and CUSTOM/ITEM keep their existing `complete||manual`
+enabled checkbox unchanged.
+
+### Note 5 — Make repeatable hands off to the create flow
+The edit "Make repeatable" chip no longer prompts. SKILL -> `makeRepeatableFromSkill(g)`
+sets `dockCreateSeed{skill, repeatable=true, targetXp=g.getTargetValue()}`,
+`api.clearGoalSelection()`, then `navigateCreate(SKILL)`. BOSS ->
+`makeRepeatableFromBoss(g)` (analogous, `targetCount`). `buildSkillForm` /
+`buildBossForm` consume the seed: preselect the skill icon / boss combo, prefill
+the target, and open the repeat disclosure pre-checked (new
+`addRepeatDisclosure(body, label, startOpen)` overload). The item-source path
+(`dockDeriveItemRepeat`, item -> boss-kill slice) has no single obvious create
+form, so it KEEPS its existing chooser (flagged). Seeding creates a fresh parent
++ slice through the normal create flow, as intended. Sequencing note: the
+selection model clears synchronously (the `onSelectionChanged` callback is
+`invokeLater`), so `navigateCreate` sees EMPTY state and the seed survives; the
+later async `refreshSelection` refresh hits the mount guard and no-ops.
+
+### Note 6 — edit chips tree into drill-in groups
+`buildEditChips` restructured from ~15 flat chips into a drill-in tree. Top level
+(`buildEditChipsTop`): `[Make repeatable?] [Data] [Relations] [Actions] [Deselect]`.
+Tapping a group swaps the row for that group's member chips + a "< Back" (via
+`dockEditGroup` + `refreshEditForm`). Membership (every prior gate/handler
+preserved verbatim):
+- **Data** (`buildDataChips`): Optional/Required (when !complete), Color, Add tag,
+  Drop tags (when present), Restore defaults (when overridden).
+- **Relations** (`buildRelationsChips`): Requires, Required by, Drop reqs, Drop
+  dependents (all when !complete + edges), Add reqs to section (when seedable).
+- **Actions** (`buildActionsChips`): Move to section, Copy to section, Loadout Lab
+  (boss + install-aware), Copy code / Save code (when available), Remove.
+The completion checkbox stays at the form top (not in a group). A same-goal
+`refreshEditForm` keeps the open group; a different goal resets it to top level.
+
+## NEEDS-SCREENSHOT (this refinement pass) — heavy render path
+
+- **Section-pick step feel + default selection** (note 3): does the highlighted
+  "Incomplete (default)" row read as preselected? Row height/spacing, the list
+  scrolling inside the dock when there are many user sections, and that picking
+  lands the goal in the right section + jumps to its edit form.
+- **Inline "+ New section" field** in the section picker (note 3) and the
+  standalone new-section form (note 2): autofocus actually lands, Enter commits,
+  the reveal grows the dock without clipping.
+- **Create Section expand** (note 2): the header button expands the dock into the
+  section form (not a prompt); confirm the toggle-collapse-when-open behavior is
+  acceptable or wants a grid-level entry.
+- **Drill-in group nav + Back** (note 6): tapping Data/Relations/Actions swaps the
+  chip row cleanly, "< Back" returns, the dock regrows/shrinks per group size, and
+  a same-goal action (e.g. Optional) stays in-group while a reselect resets to top.
+- **Disabled absolute checkbox** (note 4): greyed + unclickable on QUEST/DIARY/CA,
+  correct label (Complete vs Completed) and tooltip, at font scales 1.0 / 1.3.
+- **Make-repeatable pre-seed landing** (note 5): the SKILL/BOSS chip lands on the
+  right create form with skill/boss preselected, target prefilled, repeat
+  disclosure already open + checked; the per-period amount is intentionally blank
+  (validates on Next). Confirm the selection-clear -> create-surface transition
+  has no flicker back to the edit form.
+- **"Next: choose section" button** wording/width at both font scales.
+- Known limitation to eyeball: **Back from section-pick loses form field values.**
+
 ## What was built
 
 ### 1. Dock can render an arbitrary expanded surface (`ActionDock`)
