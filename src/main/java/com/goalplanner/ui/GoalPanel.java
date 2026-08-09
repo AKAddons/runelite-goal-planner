@@ -59,6 +59,18 @@ public class GoalPanel extends PluginPanel
 	 *  performs the actual create + move once the user picks a sectionId in the
 	 *  SECTION_PICK sub-view. Cleared once run or when navigation leaves the flow. */
 	private java.util.function.Consumer<String> dockPendingCreate = null;
+	/** Prefill for a freshly-opened create form (note 5): "Make repeatable" on a
+	 *  plain grind hands off to the create flow pre-seeded for a repeatable goal.
+	 *  Consumed once when the matching form builds, then cleared. */
+	private static final class CreateSeed
+	{
+		net.runelite.api.Skill skill;
+		String bossName;
+		boolean repeatable;
+		Integer targetXp;
+		Integer targetCount;
+	}
+	private CreateSeed dockCreateSeed = null;
 	/** Whether the create surface is currently mounted in the dock, and for which
 	 *  nav/type - lets {@link #refreshDock()} skip rebuilding it on unrelated
 	 *  refreshes so in-progress form input is not wiped. */
@@ -1675,6 +1687,10 @@ public class GoalPanel extends PluginPanel
 			dockCreateMounted = false;
 			dockCreateMountedNav = null;
 			dockCreateMountedType = null;
+			// A pending seed survives only the transition INTO the create surface
+			// (selection just cleared -> EMPTY), so it must not be cleared here.
+			// makeRepeatableFrom* sets it, then clears the selection; by the time
+			// this runs the state is already EMPTY, so this branch is skipped.
 		}
 		// Anything but a single-goal selection drops the mounted EDIT form, so a
 		// fresh selection remounts it (and MULTI/EMPTY do not keep it around).
@@ -2490,6 +2506,36 @@ public class GoalPanel extends PluginPanel
 	/** Derive a repeatable slice from a skill goal (activityName null) or a
 	 *  resolved item activity. Picks a period, then an amount, then creates on
 	 *  the client thread (the derive reads live XP / kill-count). */
+	/** "Make repeatable" on a plain SKILL grind (note 5): hand off to the create
+	 *  flow pre-seeded for a repeatable skill goal (skill preselected, repeat
+	 *  disclosure ON, target prefilled). Clears the selection first so the dock
+	 *  leaves the edit surface for the create surface. May create a fresh parent +
+	 *  slice - that is the create flow and matches the ask. */
+	private void makeRepeatableFromSkill(Goal g)
+	{
+		CreateSeed seed = new CreateSeed();
+		seed.skill = skillOf(g);
+		seed.repeatable = true;
+		seed.targetXp = g.getTargetValue();
+		dockCreateSeed = seed;
+		api.clearGoalSelection();
+		navigateCreate(GoalType.SKILL);
+	}
+
+	/** "Make repeatable" on a plain BOSS grind (note 5): hand off to the create
+	 *  flow pre-seeded for a repeatable boss goal (boss preselected, repeat ON,
+	 *  target kill count prefilled). */
+	private void makeRepeatableFromBoss(Goal g)
+	{
+		CreateSeed seed = new CreateSeed();
+		seed.bossName = g.getBossName();
+		seed.repeatable = true;
+		seed.targetCount = g.getTargetValue();
+		dockCreateSeed = seed;
+		api.clearGoalSelection();
+		navigateCreate(GoalType.BOSS);
+	}
+
 	private void dockDeriveRepeat(Goal g, String activityName)
 	{
 		boolean skill = g.getType() == GoalType.SKILL;
@@ -2924,6 +2970,7 @@ public class GoalPanel extends PluginPanel
 		if (type == null)
 		{
 			dockPendingCreate = null;
+			dockCreateSeed = null;
 		}
 		refreshDock();
 	}
@@ -3274,21 +3321,32 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildSkillForm()
 	{
+		// A "Make repeatable" hand-off (note 5) pre-seeds the skill, target, and an
+		// open repeat disclosure. Consumed once here, then cleared.
+		final CreateSeed seed = dockCreateSeed;
+		dockCreateSeed = null;
+		final boolean seedRepeat = seed != null && seed.repeatable;
+
 		JPanel body = formBody();
 
 		// Skill picker is a grid of icon buttons (user feedback: the dropdown was
 		// unscannable). picked[0] holds the current selection; tapping an icon
-		// swaps it and re-highlights.
-		final net.runelite.api.Skill[] picked = { null };
+		// swaps it and re-highlights. A seed preselects the skill.
+		final net.runelite.api.Skill[] picked = { seed != null ? seed.skill : null };
 		addFormRow(body, "Skill", buildSkillPickerGrid(picked));
 
 		SkillTargetForm target = new SkillTargetForm(99);
+		if (seed != null && seed.targetXp != null)
+		{
+			target.setTargetXp(seed.targetXp);
+		}
 		addFormRow(body, "Target level or XP", target);
 
 		// Progressive disclosure (ADR-0008): a "More options" row reveals the
 		// Repeatable toggle. When on, Add creates the long-term goal AND derives a
-		// per-period slice off it, which lands in the Repeatable section.
-		RepeatControls repeat = addRepeatDisclosure(body, "XP each period");
+		// per-period slice off it, which lands in the Repeatable section. A seed
+		// opens it pre-checked.
+		RepeatControls repeat = addRepeatDisclosure(body, "XP each period", seedRepeat);
 
 		Runnable onAdd = () ->
 		{
@@ -3463,20 +3521,35 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildBossForm()
 	{
+		// A "Make repeatable" hand-off (note 5) pre-seeds the boss, target, and an
+		// open repeat disclosure. Consumed once here, then cleared.
+		final CreateSeed seed = dockCreateSeed;
+		dockCreateSeed = null;
+		final boolean seedRepeat = seed != null && seed.repeatable;
+
 		JPanel body = formBody();
 
 		String[] bosses = com.goalplanner.data.BossKillData.getBossNames();
 		JComboBox<String> bossCombo = new JComboBox<>(bosses);
 		styleField(bossCombo);
+		if (seed != null && seed.bossName != null)
+		{
+			bossCombo.setSelectedItem(seed.bossName);
+		}
 		addFormRow(body, "Boss", bossCombo);
 
 		JTextField kcField = new JTextField(8);
 		styleField(kcField);
+		if (seed != null && seed.targetCount != null)
+		{
+			kcField.setText(Integer.toString(seed.targetCount));
+		}
 		addFormRow(body, "Target kill count", kcField);
 
 		// Boss goals support the same repeatable slice as skills; the derived
-		// activity is the selected boss (buildActivityChunk keys off its name).
-		RepeatControls repeat = addRepeatDisclosure(body, "Kills each period");
+		// activity is the selected boss (buildActivityChunk keys off its name). A
+		// seed opens the disclosure pre-checked.
+		RepeatControls repeat = addRepeatDisclosure(body, "Kills each period", seedRepeat);
 
 		Runnable onAdd = () ->
 		{
@@ -3915,6 +3988,14 @@ public class GoalPanel extends PluginPanel
 	 *  "XP each period", "Kills each period"). Returns the state handle. */
 	private RepeatControls addRepeatDisclosure(JPanel body, String amountLabel)
 	{
+		return addRepeatDisclosure(body, amountLabel, false);
+	}
+
+	/** As above, but {@code startOpen} pre-expands the disclosure with Repeatable
+	 *  already checked - used when the create form is pre-seeded for a repeatable
+	 *  goal (note 5). */
+	private RepeatControls addRepeatDisclosure(JPanel body, String amountLabel, boolean startOpen)
+	{
 		final javax.swing.JCheckBox toggle = new javax.swing.JCheckBox("Repeatable");
 		toggle.setOpaque(false);
 		toggle.setForeground(CREATE_FG);
@@ -3974,6 +4055,16 @@ public class GoalPanel extends PluginPanel
 		body.add(more);
 		body.add(Box.createVerticalStrut(4));
 		body.add(opts);
+
+		if (startOpen)
+		{
+			// Pre-seeded repeatable create (note 5): reveal the options block with
+			// Repeatable already checked so the pills + amount field are visible.
+			opts.setVisible(true);
+			more.setText("Fewer options");
+			toggle.setSelected(true);
+			detail.setVisible(true);
+		}
 		return new RepeatControls(toggle, period, amount);
 	}
 
@@ -4651,14 +4742,21 @@ public class GoalPanel extends PluginPanel
 	{
 		final GoalType type = g.getType();
 
-		// Make repeatable stays prominent at the top level (note 5 re-points these
-		// handlers). A plain grind with no derived slice can spin one off.
+		// Make repeatable stays prominent at the top level (note 5). A plain grind
+		// with no derived slice can spin one off; the SKILL/BOSS paths hand off to
+		// the pre-seeded create flow, the item path keeps its derive chooser (no
+		// single obvious create form for the item->boss-kill slice).
 		if (g.getRepeatChunk() <= 0)
 		{
 			if (type == GoalType.SKILL && g.getSkillName() != null)
 			{
-				wrap.add(chip("Make repeatable", "Turn this into a per-period XP slice",
-					() -> dockDeriveRepeat(g, null)));
+				wrap.add(chip("Make repeatable", "Set up a per-period XP slice",
+					() -> makeRepeatableFromSkill(g)));
+			}
+			else if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
+			{
+				wrap.add(chip("Make repeatable", "Set up a per-period kill slice",
+					() -> makeRepeatableFromBoss(g)));
 			}
 			else if (g.getItemId() > 0
 				&& !com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId()).isEmpty())
