@@ -166,6 +166,33 @@ public class SkillTargetForm extends JPanel
 		return xp;
 	}
 
+	/**
+	 * Seed the form to an absolute target XP (edit mode). Writing the XP field
+	 * lets the sync listener fill in the matching level, so both rows agree.
+	 */
+	public void setTargetXp(int xp)
+	{
+		xpField.setText(Integer.toString(xp));
+	}
+
+	/**
+	 * Run {@code commit} whenever the user finishes editing either field -
+	 * pressing Enter in it, or moving focus away. Used by the unified edit form
+	 * (ADR-0008) to apply the new target on commit rather than via a button.
+	 */
+	public void onCommit(Runnable commit)
+	{
+		java.awt.event.FocusAdapter blur = new java.awt.event.FocusAdapter()
+		{
+			@Override public void focusLost(java.awt.event.FocusEvent e) { commit.run(); }
+		};
+		java.awt.event.ActionListener enter = e -> commit.run();
+		levelField.addFocusListener(blur);
+		xpField.addFocusListener(blur);
+		levelField.addActionListener(enter);
+		xpField.addActionListener(enter);
+	}
+
 	private static Integer parseInt(String s)
 	{
 		if (s == null) return null;

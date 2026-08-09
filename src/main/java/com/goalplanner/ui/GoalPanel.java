@@ -54,6 +54,13 @@ public class GoalPanel extends PluginPanel
 	 *  refreshes so in-progress form input is not wiped. */
 	private boolean dockCreateMounted = false;
 	private com.goalplanner.model.GoalType dockCreateMountedType = null;
+	/** Whether the unified EDIT form (ADR-0008) is currently mounted in the dock,
+	 *  and for which goal - lets {@link #refreshDock()} skip rebuilding it while
+	 *  the same goal stays selected, so an in-progress field edit is not wiped
+	 *  out from under the cursor. Cleared by lifecycle actions that change the
+	 *  goal's structure so the form re-renders to reflect them. */
+	private boolean dockEditMounted = false;
+	private String dockEditMountedGoalId = null;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1651,6 +1658,13 @@ public class GoalPanel extends PluginPanel
 			dockCreateMounted = false;
 			dockCreateMountedType = null;
 		}
+		// Anything but a single-goal selection drops the mounted EDIT form, so a
+		// fresh selection remounts it (and MULTI/EMPTY do not keep it around).
+		if (ctx.getState() != com.goalplanner.ui.dock.DockContext.State.GOAL)
+		{
+			dockEditMounted = false;
+			dockEditMountedGoalId = null;
+		}
 
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new java.util.ArrayList<>();
@@ -1663,6 +1677,23 @@ public class GoalPanel extends PluginPanel
 				String gid = ctx.getSoleGoalId();
 				Goal g = goalStore.findGoalById(gid);
 				if (g == null) break;
+				// Unified create/edit form (ADR-0008): a selected goal shows the
+				// SAME per-type form as create, pre-filled, with its parameters as
+				// inline commit-on-blur fields plus the lifecycle action chips.
+				// It is a custom component (like the create surface), so mount it
+				// via setExpandedComponent and return early. Guard the remount so a
+				// same-goal refresh does not wipe an in-progress field edit.
+				if (usesUnifiedEditForm(g.getType()))
+				{
+					actionDock.setPeek("1 selected", false);
+					if (!dockEditMounted || !gid.equals(dockEditMountedGoalId))
+					{
+						actionDock.setExpandedComponent(buildEditSurface(g));
+						dockEditMounted = true;
+						dockEditMountedGoalId = gid;
+					}
+					return;
+				}
 				buildGoalDock(g, top, bottom);
 				break;
 			}
@@ -2805,6 +2836,12 @@ public class GoalPanel extends PluginPanel
 	/** Highlight for the selected icon-button in a picker grid (skill/boss/etc). */
 	private static final Color CREATE_SEL_BG = new Color(0x2E, 0x4D, 0x32);
 	private static final Color CREATE_SEL_BORDER = new Color(0x5A, 0x9A, 0x5A);
+	/** Full-width context-indicator bar (ADR-0008): green "CREATE" tone for the
+	 *  create surface, neutral "SELECTED" tone for the edit surface. */
+	private static final Color IND_CREATE_BG = new Color(0x1D, 0x2A, 0x1F);
+	private static final Color IND_CREATE_FG = new Color(0xBF, 0xE0, 0xBF);
+	private static final Color IND_EDIT_BG = new Color(0x24, 0x24, 0x28);
+	private static final Color IND_EDIT_FG = new Color(0xBC, 0xBC, 0xBC);
 
 	/** Every trainable skill (Skill.values() minus OVERALL) for the skill picker
 	 *  grid - OVERALL is the account "Total Level" metric, not a skill goal. */
@@ -2832,14 +2869,14 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildCreateGrid()
 	{
-		JPanel root = new JPanel(new BorderLayout(0, 6));
-		root.setOpaque(false);
-		root.setBorder(new EmptyBorder(6, 8, 8, 8));
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
 		JLabel title = new JLabel("Add a goal");
 		title.setForeground(CREATE_FG);
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
-		root.add(title, BorderLayout.NORTH);
+		inner.add(title, BorderLayout.NORTH);
 
 		JPanel grid = new JPanel(new GridLayout(2, 4, 5, 5));
 		grid.setOpaque(false);
@@ -2847,13 +2884,40 @@ public class GoalPanel extends PluginPanel
 		{
 			grid.add(buildTypeTile(t));
 		}
-		root.add(grid, BorderLayout.CENTER);
+		inner.add(grid, BorderLayout.CENTER);
 		// "New Section" removed from here: it read as confusing nested under
 		// "Add a goal" and cost vertical space. Adding a goal is about goals;
 		// section creation belongs to a separate affordance (TODO: a prominent
 		// primary "Add a goal" knob + a subordinate section action - blocked on
 		// the token cap, see docs/action-dock-progress.md).
+		return surfaceShell("Create", true, inner);
+	}
+
+	/** Wrap a create/edit surface body in a shell headed by a FULL-WIDTH context
+	 *  indicator bar (ADR-0008): a green "CREATE" bar for create, a neutral
+	 *  "SELECTED" bar for edit. The bar bleeds edge-to-edge (no side inset); the
+	 *  body carries its own padding. */
+	private JComponent surfaceShell(String indicator, boolean createTone, JComponent inner)
+	{
+		ScrollablePanel root = new ScrollablePanel(new BorderLayout());
+		root.setOpaque(false);
+		root.add(indicatorBar(indicator, createTone), BorderLayout.NORTH);
+		root.add(inner, BorderLayout.CENTER);
 		return root;
+	}
+
+	/** The full-width small-caps context bar for {@link #surfaceShell}. */
+	private JComponent indicatorBar(String text, boolean createTone)
+	{
+		JLabel bar = new JLabel(text.toUpperCase(java.util.Locale.ROOT));
+		bar.setOpaque(true);
+		bar.setBackground(createTone ? IND_CREATE_BG : IND_EDIT_BG);
+		bar.setForeground(createTone ? IND_CREATE_FG : IND_EDIT_FG);
+		bar.setFont(bar.getFont().deriveFont(Font.BOLD, 10f));
+		bar.setBorder(new EmptyBorder(4, 10, 4, 10));
+		// Span the dock's width whatever the form's preferred width.
+		bar.setMaximumSize(new Dimension(Integer.MAX_VALUE, bar.getPreferredSize().height));
+		return bar;
 	}
 
 	private JButton buildTypeTile(com.goalplanner.model.GoalType type)
@@ -3649,14 +3713,15 @@ public class GoalPanel extends PluginPanel
 
 	// ----- create-surface shared UI helpers -----
 
-	/** Wrap a form's body in the standard scaffold: a Back + title header, the
-	 *  body, and a primary Add button. */
+	/** Wrap a create form's body in the standard scaffold: a full-width CREATE
+	 *  indicator bar, a Back + type-title header, the body, and a primary Add
+	 *  button. */
 	private JComponent createFormScaffold(com.goalplanner.model.GoalType type,
 		JComponent body, Runnable onAdd)
 	{
-		JPanel root = new JPanel(new BorderLayout(0, 6));
-		root.setOpaque(false);
-		root.setBorder(new EmptyBorder(6, 8, 8, 8));
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
@@ -3667,9 +3732,9 @@ public class GoalPanel extends PluginPanel
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
 		header.add(back, BorderLayout.WEST);
 		header.add(title, BorderLayout.CENTER);
-		root.add(header, BorderLayout.NORTH);
+		inner.add(header, BorderLayout.NORTH);
 
-		root.add(body, BorderLayout.CENTER);
+		inner.add(body, BorderLayout.CENTER);
 
 		if (onAdd != null)
 		{
@@ -3678,9 +3743,9 @@ public class GoalPanel extends PluginPanel
 			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
 			footer.setOpaque(false);
 			footer.add(add);
-			root.add(footer, BorderLayout.SOUTH);
+			inner.add(footer, BorderLayout.SOUTH);
 		}
-		return root;
+		return surfaceShell("Create", true, inner);
 	}
 
 	private JPanel formBody()
@@ -3794,5 +3859,607 @@ public class GoalPanel extends PluginPanel
 	{
 		javax.swing.JOptionPane.showMessageDialog(this, msg, "Add goal",
 			javax.swing.JOptionPane.WARNING_MESSAGE);
+	}
+
+	// ============================================================
+	// Unified EDIT surface (ADR-0008): a selected goal renders the SAME per-type
+	// form as create, pre-filled, with its PARAMETERS as inline commit-on-blur
+	// fields plus the lifecycle ACTION chips. Mounted from refreshDock()'s GOAL
+	// case via buildEditSurface (the single-place rule). Every chip REUSES an
+	// existing dock* handler / dialog - none is rebuilt. Field commits go
+	// straight to the API (each API method no-ops on an unchanged value, so an
+	// idle blur never spams undo history).
+	// ============================================================
+
+	/** Whether {@code type} routes through the unified edit form yet. Types not
+	 *  listed fall back to the legacy button-strip {@link #buildGoalDock} during
+	 *  the incremental migration. */
+	private boolean usesUnifiedEditForm(GoalType type)
+	{
+		switch (type)
+		{
+			case SKILL:
+			case ITEM_GRIND:
+			case BOSS:
+			case CUSTOM:
+			case ACCOUNT:
+			case QUEST:
+			case DIARY:
+			case COMBAT_ACHIEVEMENT:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/** Build the pre-filled edit surface for {@code g}: the complete checkbox, the
+	 *  type's parameter fields, and the lifecycle action chips, under a full-width
+	 *  SELECTED indicator bar. */
+	private JComponent buildEditSurface(Goal g)
+	{
+		JComponent body;
+		switch (g.getType())
+		{
+			case SKILL:       body = buildSkillEditBody(g); break;
+			case ITEM_GRIND:  body = buildItemEditBody(g); break;
+			case BOSS:        body = buildBossEditBody(g); break;
+			case CUSTOM:      body = buildCustomEditBody(g); break;
+			case ACCOUNT:     body = buildAccountEditBody(g); break;
+			default:          body = buildThinEditBody(g); break; // QUEST/DIARY/CA
+		}
+		return editFormScaffold(g, body);
+	}
+
+	/** Wrap an edit body in the SELECTED scaffold: a full-width indicator bar, a
+	 *  Complete/Reopen checkbox heading the form, the parameter fields, and the
+	 *  lifecycle action chips. No Add button (edits apply on commit). */
+	private JComponent editFormScaffold(Goal g, JComponent body)
+	{
+		final String gid = g.getId();
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		// Complete / Reopen as a checkbox at the top (ADR-0008). Toggling it
+		// changes the goal's structure, so force the form to re-render.
+		JCheckBox done = new JCheckBox("Complete");
+		done.setOpaque(false);
+		done.setForeground(CREATE_FG);
+		done.setFont(done.getFont().deriveFont(11f));
+		done.setSelected(g.isComplete());
+		done.addActionListener(e ->
+		{
+			if (done.isSelected())
+			{
+				api.markGoalComplete(gid);
+			}
+			else
+			{
+				api.markGoalIncomplete(gid);
+			}
+			refreshEditForm();
+		});
+		inner.add(done, BorderLayout.NORTH);
+
+		inner.add(body, BorderLayout.CENTER);
+		inner.add(buildEditChips(g), BorderLayout.SOUTH);
+		return surfaceShell("Selected", false, inner);
+	}
+
+	/** Re-render the mounted edit form (after a structural change) by dropping
+	 *  the mount guard and refreshing. */
+	private void refreshEditForm()
+	{
+		dockEditMounted = false;
+		refreshDock();
+	}
+
+	/** Run {@code commit} when the user finishes a text field: Enter, or blur. */
+	private void commitOnBlurOrEnter(JTextField f, Runnable commit)
+	{
+		f.addActionListener(e -> commit.run());
+		f.addFocusListener(new java.awt.event.FocusAdapter()
+		{
+			@Override public void focusLost(java.awt.event.FocusEvent e) { commit.run(); }
+		});
+	}
+
+	private static net.runelite.api.Skill skillOf(Goal g)
+	{
+		if (g.getSkillName() == null) return null;
+		try { return net.runelite.api.Skill.valueOf(g.getSkillName()); }
+		catch (IllegalArgumentException e) { return null; }
+	}
+
+	// ----- per-type edit bodies -----
+
+	private JComponent buildSkillEditBody(Goal g)
+	{
+		final String gid = g.getId();
+		final boolean derived = g.getRepeatChunk() > 0;
+		JPanel body = formBody();
+
+		// Skill is read-only in edit: there is no API to change a goal's skill,
+		// and changing it would be a different goal. Show it as an icon + name.
+		net.runelite.api.Skill skill = skillOf(g);
+		if (skill != null)
+		{
+			JPanel skillRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+			skillRow.setOpaque(false);
+			skillRow.add(new JLabel(new ImageIcon(skillIconManager.getSkillImage(skill, true))));
+			JLabel name = new JLabel(skill.getName());
+			name.setForeground(CREATE_FG);
+			name.setFont(name.getFont().deriveFont(12f));
+			skillRow.add(name);
+			addFormRow(body, "Skill", skillRow);
+		}
+
+		// A derived per-period slice's target re-bases each period off its chunk,
+		// so its editable "amount" is the chunk (in the repeat block), not the raw
+		// target. A plain grind edits its absolute target here.
+		if (!derived)
+		{
+			SkillTargetForm target = new SkillTargetForm(99);
+			target.setTargetXp(g.getTargetValue());
+			target.onCommit(() ->
+			{
+				int xp = target.getTargetXp();
+				if (xp <= 0) { target.setTargetXp(g.getTargetValue()); return; }
+				api.changeTarget(gid, xp);
+			});
+			addFormRow(body, "Target level or XP", target);
+		}
+
+		addEditRepeatControls(body, g, "XP each period");
+		return body;
+	}
+
+	private JComponent buildBossEditBody(Goal g)
+	{
+		final String gid = g.getId();
+		final boolean derived = g.getRepeatChunk() > 0;
+		JPanel body = formBody();
+
+		if (g.getBossName() != null)
+		{
+			JLabel boss = new JLabel(g.getBossName());
+			boss.setForeground(CREATE_FG);
+			boss.setFont(boss.getFont().deriveFont(12f));
+			addFormRow(body, "Boss", boss);
+		}
+
+		if (!derived)
+		{
+			JTextField kcField = new JTextField(8);
+			styleField(kcField);
+			kcField.setText(Integer.toString(g.getTargetValue()));
+			commitOnBlurOrEnter(kcField, () ->
+			{
+				int kc = parsePositiveInt(kcField.getText());
+				if (kc <= 0) { kcField.setText(Integer.toString(g.getTargetValue())); return; }
+				api.changeTarget(gid, kc);
+			});
+			addFormRow(body, "Target kill count", kcField);
+		}
+
+		addEditRepeatControls(body, g, "Kills each period");
+		return body;
+	}
+
+	private JComponent buildItemEditBody(Goal g)
+	{
+		final String gid = g.getId();
+		JPanel body = formBody();
+
+		JTextField qtyField = new JTextField(8);
+		styleField(qtyField);
+		qtyField.setText(Integer.toString(g.getTargetValue()));
+		commitOnBlurOrEnter(qtyField, () ->
+		{
+			int qty = parsePositiveInt(qtyField.getText());
+			if (qty <= 0) { qtyField.setText(Integer.toString(g.getTargetValue())); return; }
+			api.changeTarget(gid, qty);
+		});
+		addFormRow(body, "Quantity", qtyField);
+
+		addEditRepeatControls(body, g, "Amount each period");
+		return body;
+	}
+
+	private JComponent buildCustomEditBody(Goal g)
+	{
+		final String gid = g.getId();
+		JPanel body = formBody();
+
+		JTextField nameField = new JTextField(16);
+		styleField(nameField);
+		nameField.setText(g.getName() != null ? g.getName() : "");
+		commitOnBlurOrEnter(nameField, () ->
+		{
+			String name = nameField.getText().trim();
+			if (name.isEmpty()) { nameField.setText(g.getName() != null ? g.getName() : ""); return; }
+			api.editCustomGoal(gid, name, null);
+		});
+		addFormRow(body, "Name", nameField);
+
+		JTextField descField = new JTextField(16);
+		styleField(descField);
+		descField.setText(g.getDescription() != null ? g.getDescription() : "");
+		commitOnBlurOrEnter(descField, () -> api.editCustomGoal(gid, null, descField.getText().trim()));
+		addFormRow(body, "Description (optional)", descField);
+
+		addEditRepeatControls(body, g, "Amount each period");
+		return body;
+	}
+
+	private JComponent buildAccountEditBody(Goal g)
+	{
+		final String gid = g.getId();
+		JPanel body = formBody();
+
+		// The metric is fixed for an existing account goal; show it read-only.
+		String metricLabel = g.getName() != null ? g.getName() : "Account metric";
+		JLabel metric = new JLabel(metricLabel);
+		metric.setForeground(CREATE_FG);
+		metric.setFont(metric.getFont().deriveFont(12f));
+		addFormRow(body, "Metric", metric);
+
+		JTextField targetField = new JTextField(10);
+		styleField(targetField);
+		targetField.setText(Integer.toString(g.getTargetValue()));
+		commitOnBlurOrEnter(targetField, () ->
+		{
+			int t = parsePositiveInt(targetField.getText());
+			if (t <= 0) { targetField.setText(Integer.toString(g.getTargetValue())); return; }
+			api.changeTarget(gid, t);
+		});
+		addFormRow(body, "Target", targetField);
+		return body;
+	}
+
+	/** QUEST / DIARY / COMBAT_ACHIEVEMENT: their target is immutable, so the edit
+	 *  form is just a read-only name plus the lifecycle chips. */
+	private JComponent buildThinEditBody(Goal g)
+	{
+		JPanel body = formBody();
+		JLabel name = new JLabel("<html>" + escapeHtml(g.getName() != null ? g.getName() : "") + "</html>");
+		name.setForeground(CREATE_FG);
+		name.setFont(name.getFont().deriveFont(12f));
+		addFormRow(body, tileLabel(g.getType()), name);
+		if (g.getDescription() != null && !g.getDescription().isEmpty())
+		{
+			JLabel desc = new JLabel("<html>" + escapeHtml(g.getDescription()) + "</html>");
+			desc.setForeground(CREATE_FG_DIM);
+			desc.setFont(desc.getFont().deriveFont(10f));
+			desc.setAlignmentX(Component.LEFT_ALIGNMENT);
+			body.add(desc);
+			body.add(Box.createVerticalStrut(6));
+		}
+		return body;
+	}
+
+	private static String escapeHtml(String s)
+	{
+		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+	}
+
+	/** Inline repeat controls for edit mode (ADR-0008), replacing the repeat
+	 *  JOptionPane choosers. Renders only for goals that carry their OWN repeat
+	 *  state - CUSTOM goals and derived per-period slices (repeatChunk > 0). A
+	 *  plain auto-tracked grind has no own-repeat; it derives a slice via the
+	 *  "Make repeatable" chip instead. */
+	private void addEditRepeatControls(JPanel body, Goal g, String amountLabel)
+	{
+		final String gid = g.getId();
+		final boolean hasChunk = g.getRepeatChunk() > 0;
+		if (g.getType() != GoalType.CUSTOM && !hasChunk)
+		{
+			return;
+		}
+
+		final com.goalplanner.model.RepeatPeriod[] period = {
+			g.getRepeatEvery().isRepeating() ? g.getRepeatEvery()
+				: com.goalplanner.model.RepeatPeriod.DAILY };
+
+		JCheckBox toggle = new JCheckBox("Repeatable");
+		toggle.setOpaque(false);
+		toggle.setForeground(CREATE_FG);
+		toggle.setFont(toggle.getFont().deriveFont(11f));
+		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+		toggle.setSelected(g.getRepeatEvery().isRepeating());
+
+		JPanel detail = new JPanel();
+		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
+		detail.setOpaque(false);
+		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.setVisible(toggle.isSelected());
+		detail.add(Box.createVerticalStrut(4));
+		detail.add(buildEditPeriodPills(gid, period));
+		detail.add(Box.createVerticalStrut(4));
+		if (hasChunk)
+		{
+			JTextField chunk = new JTextField(8);
+			styleField(chunk);
+			chunk.setText(Integer.toString(g.getRepeatChunk()));
+			commitOnBlurOrEnter(chunk, () ->
+			{
+				int v = parsePositiveInt(chunk.getText());
+				if (v <= 0) { chunk.setText(Integer.toString(g.getRepeatChunk())); return; }
+				api.setGoalRepeatChunk(gid, v);
+			});
+			addFormRow(detail, amountLabel, chunk);
+		}
+
+		toggle.addActionListener(e ->
+		{
+			api.setGoalRepeat(gid, toggle.isSelected()
+				? period[0] : com.goalplanner.model.RepeatPeriod.NONE);
+			detail.setVisible(toggle.isSelected());
+			remeasureDock();
+		});
+
+		JLabel head = new JLabel("Repeat");
+		head.setForeground(CREATE_FG_DIM);
+		head.setFont(head.getFont().deriveFont(10f));
+		head.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(Box.createVerticalStrut(2));
+		body.add(head);
+		body.add(Box.createVerticalStrut(2));
+		body.add(toggle);
+		body.add(detail);
+		body.add(Box.createVerticalStrut(6));
+	}
+
+	/** Daily / Weekly / Monthly pills for edit mode: the tapped one is highlighted
+	 *  AND committed to the goal via {@code setGoalRepeat}. */
+	private JComponent buildEditPeriodPills(String gid, com.goalplanner.model.RepeatPeriod[] out)
+	{
+		com.goalplanner.model.RepeatPeriod[] periods = {
+			com.goalplanner.model.RepeatPeriod.DAILY,
+			com.goalplanner.model.RepeatPeriod.WEEKLY,
+			com.goalplanner.model.RepeatPeriod.MONTHLY };
+		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		row.setOpaque(false);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		java.util.List<JButton> pills = new ArrayList<>();
+		java.util.Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
+		Runnable refresh = () ->
+		{
+			for (JButton b : pills)
+			{
+				boolean sel = owner.get(b) == out[0];
+				b.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+				b.setForeground(sel ? CREATE_PRIMARY_FG : CREATE_FG);
+			}
+		};
+		for (com.goalplanner.model.RepeatPeriod p : periods)
+		{
+			JButton b = new JButton(p.getLabel());
+			b.setOpaque(true);
+			b.setFocusPainted(false);
+			b.setBorderPainted(false);
+			b.setContentAreaFilled(true);
+			b.setFont(b.getFont().deriveFont(11f));
+			b.setBorder(new EmptyBorder(3, 10, 3, 10));
+			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			pills.add(b);
+			owner.put(b, p);
+			b.addActionListener(e ->
+			{
+				out[0] = p;
+				refresh.run();
+				api.setGoalRepeat(gid, p);
+			});
+			row.add(b);
+		}
+		refresh.run();
+		return row;
+	}
+
+	// ----- edit-mode lifecycle action chips -----
+
+	/** The lifecycle + relations chips for the edit form. Each REUSES an existing
+	 *  dock* handler / dialog. Structural in-place edits force a form re-render;
+	 *  chips that change the selection or panel mode leave the refresh to the
+	 *  panel's own selection handling. */
+	private JComponent buildEditChips(Goal g)
+	{
+		final String gid = g.getId();
+		final GoalType type = g.getType();
+		final boolean complete = g.isComplete();
+
+		JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		wrap.setOpaque(false);
+
+		if (!complete)
+		{
+			wrap.add(chip(g.isOptional() ? "Required" : "Optional",
+				g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
+				() -> { api.setGoalOptional(gid, !g.isOptional()); refreshEditForm(); }));
+		}
+
+		// Derive a repeatable slice off a plain grind (the inline repeat controls
+		// only edit a goal's own repeat state; deriving creates a NEW slice goal).
+		if (g.getRepeatChunk() <= 0)
+		{
+			if (type == GoalType.SKILL && g.getSkillName() != null)
+			{
+				wrap.add(chip("Make repeatable", "Turn this into a per-period XP slice",
+					() -> dockDeriveRepeat(g, null)));
+			}
+			else if (g.getItemId() > 0
+				&& !com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId()).isEmpty())
+			{
+				wrap.add(chip("Make repeatable", "Turn this into a per-period kill slice",
+					() -> dockDeriveItemRepeat(g)));
+			}
+		}
+
+		wrap.add(chip("Color", "Change this goal's color",
+			() -> dialogFactory.showGoalColorDialog(g)));
+
+		wrap.add(chip("Add tag", "Add a tag to this goal",
+			() -> { dockAddTag(g); refreshEditForm(); }));
+		java.util.List<Tag> removable = removableTagsFor(g);
+		if (!removable.isEmpty())
+		{
+			wrap.add(chip("Drop tags", "Remove tags from this goal",
+				() -> { dockRemoveTags(g, removable); refreshEditForm(); }));
+		}
+
+		if (!complete)
+		{
+			wrap.add(chip("Requires", "Then click another goal to require it",
+				() -> enterRelationMode(gid, true)));
+			wrap.add(chip("Required by", "Then click another goal that should require this",
+				() -> enterRelationMode(gid, false)));
+			if (!api.getRequirements(gid).isEmpty())
+			{
+				wrap.add(chip("Drop reqs", "Remove requirements of this goal",
+					() -> { dockRemoveRequirements(g); refreshEditForm(); }));
+			}
+			if (!api.getDependents(gid).isEmpty())
+			{
+				wrap.add(chip("Drop dependents", "Remove dependents of this goal",
+					() -> { dockRemoveDependents(g); refreshEditForm(); }));
+			}
+		}
+
+		if (goalHasSeedableReqs(g))
+		{
+			wrap.add(chip("Add reqs to section",
+				"Add this goal's requirements into its section", () -> dockSeedReqs(g)));
+		}
+
+		wrap.add(chip("Move to section", "Move this goal to another section",
+			() -> dockMoveToSection(g)));
+		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
+			() -> dockDuplicateToSection(g)));
+		if (api.isGoalOverridden(gid))
+		{
+			wrap.add(chip("Restore defaults", "Reset tags and color to their defaults",
+				() -> { api.bulkRestoreDefaults(java.util.Collections.singleton(gid)); refreshEditForm(); }));
+		}
+
+		if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
+		{
+			LoadoutLabState labState = loadoutLabState();
+			if (labState == LoadoutLabState.ENABLED)
+			{
+				final String monster = g.getBossName();
+				wrap.add(chip("Loadout Lab", "Search this boss in Loadout Lab",
+					() -> searchLoadoutLab(monster)));
+			}
+			else if (labState == LoadoutLabState.INSTALLED_DISABLED)
+			{
+				JButton off = flatButton("Lab is off", false);
+				off.setToolTipText("Loadout Lab is installed but disabled");
+				off.setEnabled(false);
+				wrap.add(off);
+			}
+		}
+
+		if (isShareAvailable())
+		{
+			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
+			wrap.add(chip("Copy code", "Copy a share code for this goal",
+				() -> copyGoalsShareCode(shareIds)));
+			if (isSavedPlansAvailable())
+			{
+				wrap.add(chip("Save code", "Save a share code for this goal",
+					() -> saveGoalsPlan(shareIds)));
+			}
+		}
+
+		wrap.add(chip("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
+		wrap.add(chip("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
+		return wrap;
+	}
+
+	private JButton chip(String label, String tooltip, Runnable action)
+	{
+		JButton b = flatButton(label, false);
+		b.setToolTipText(tooltip);
+		b.addActionListener(e -> action.run());
+		return b;
+	}
+
+	/** A panel that fills the dock's width when hosted in the expanded scroll
+	 *  area, so the BoxLayout rows and the {@link WrapLayout} chip flow lay out
+	 *  against the real dock width. A plain JPanel would take only its preferred
+	 *  width and clip (the dock suppresses horizontal scrolling), and the
+	 *  full-width indicator bar would not span the dock. */
+	private static final class ScrollablePanel extends JPanel implements javax.swing.Scrollable
+	{
+		ScrollablePanel(java.awt.LayoutManager lm) { super(lm); }
+		@Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
+		@Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) { return 16; }
+		@Override public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) { return 48; }
+		@Override public boolean getScrollableTracksViewportWidth() { return true; }
+		@Override public boolean getScrollableTracksViewportHeight() { return false; }
+	}
+
+	/** A {@link FlowLayout} that reports a wrapped preferred size, so chips flow
+	 *  onto multiple lines and grow the dock vertically instead of overflowing a
+	 *  fixed-width, horizontal-scroll-suppressed surface. */
+	private static final class WrapLayout extends FlowLayout
+	{
+		WrapLayout(int align, int hgap, int vgap) { super(align, hgap, vgap); }
+
+		@Override public Dimension preferredLayoutSize(Container target) { return layoutSize(target, true); }
+
+		@Override public Dimension minimumLayoutSize(Container target)
+		{
+			Dimension d = layoutSize(target, false);
+			d.width -= (getHgap() + 1);
+			return d;
+		}
+
+		private Dimension layoutSize(Container target, boolean preferred)
+		{
+			synchronized (target.getTreeLock())
+			{
+				int targetWidth = target.getSize().width;
+				if (targetWidth == 0)
+				{
+					targetWidth = Integer.MAX_VALUE;
+				}
+				int hgap = getHgap();
+				int vgap = getVgap();
+				java.awt.Insets insets = target.getInsets();
+				int maxWidth = targetWidth - (insets.left + insets.right + hgap * 2);
+				Dimension dim = new Dimension(0, 0);
+				int rowWidth = 0;
+				int rowHeight = 0;
+				int n = target.getComponentCount();
+				for (int i = 0; i < n; i++)
+				{
+					Component m = target.getComponent(i);
+					if (!m.isVisible())
+					{
+						continue;
+					}
+					Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
+					if (rowWidth + d.width > maxWidth && rowWidth > 0)
+					{
+						dim.width = Math.max(dim.width, rowWidth);
+						dim.height += rowHeight + vgap;
+						rowWidth = 0;
+						rowHeight = 0;
+					}
+					if (rowWidth != 0)
+					{
+						rowWidth += hgap;
+					}
+					rowWidth += d.width;
+					rowHeight = Math.max(rowHeight, d.height);
+				}
+				dim.width = Math.max(dim.width, rowWidth);
+				dim.height += rowHeight;
+				dim.width += insets.left + insets.right + hgap * 2;
+				dim.height += insets.top + insets.bottom + vgap * 2;
+				return dim;
+			}
+		}
 	}
 }
