@@ -4382,8 +4382,47 @@ public class GoalPanel extends PluginPanel
 		}
 
 		inner.add(body, BorderLayout.CENTER);
-		inner.add(buildEditChips(g), BorderLayout.SOUTH);
+
+		// "Added <date>" metadata sits just above the action chips. Hidden for
+		// goals created before the createdAt field existed (they deserialize as 0).
+		JComponent added = buildAddedLine(g);
+		JComponent chips = buildEditChips(g);
+		if (added != null)
+		{
+			JPanel south = new JPanel(new BorderLayout(0, 4));
+			south.setOpaque(false);
+			south.add(added, BorderLayout.NORTH);
+			south.add(chips, BorderLayout.CENTER);
+			inner.add(south, BorderLayout.SOUTH);
+		}
+		else
+		{
+			inner.add(chips, BorderLayout.SOUTH);
+		}
 		return surfaceShell("Selected", false, inner);
+	}
+
+	private static final java.time.format.DateTimeFormatter ADDED_DATE_FMT =
+		java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy", java.util.Locale.ENGLISH);
+
+	/** A muted "Added: &lt;date&gt;" line for the Selected view, in the player's local
+	 *  zone. Returns null when the goal predates the createdAt field (legacy goals
+	 *  deserialize it as 0), so no "Jan 1, 1970" leaks through. */
+	private JComponent buildAddedLine(Goal g)
+	{
+		long created = g.getCreatedAt();
+		if (created <= 0)
+		{
+			return null;
+		}
+		String date = java.time.Instant.ofEpochMilli(created)
+			.atZone(java.time.ZoneId.systemDefault())
+			.toLocalDate()
+			.format(ADDED_DATE_FMT);
+		JLabel l = new JLabel("Added: " + date);
+		l.setForeground(CREATE_FG_DIM);
+		l.setFont(l.getFont().deriveFont(10f));
+		return l;
 	}
 
 	/** Re-render the mounted edit form (after a structural change) by dropping
