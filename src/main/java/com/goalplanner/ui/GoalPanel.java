@@ -1830,14 +1830,11 @@ public class GoalPanel extends PluginPanel
 			grid.add(buildTypeTile(t));
 		}
 		root.add(grid, BorderLayout.CENTER);
-
-		// Panel-level secondary action carried over from the skeleton.
-		JButton newSection = flatButton("New Section", false);
-		newSection.addActionListener(e -> promptAddSectionFromDock());
-		JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-		footer.setOpaque(false);
-		footer.add(newSection);
-		root.add(footer, BorderLayout.SOUTH);
+		// "New Section" removed from here: it read as confusing nested under
+		// "Add a goal" and cost vertical space. Adding a goal is about goals;
+		// section creation belongs to a separate affordance (TODO: a prominent
+		// primary "Add a goal" knob + a subordinate section action - blocked on
+		// the token cap, see docs/action-dock-progress.md).
 		return root;
 	}
 
