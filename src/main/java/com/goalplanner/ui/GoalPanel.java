@@ -1,6 +1,10 @@
 package com.goalplanner.ui;
 
 import com.goalplanner.model.Goal;
+import com.goalplanner.model.GoalType;
+import com.goalplanner.model.RepeatPeriod;
+import com.goalplanner.model.Tag;
+import com.goalplanner.ui.dock.ActionDock;
 import com.goalplanner.persistence.GoalStore;
 import com.goalplanner.service.GoalReorderingService;
 import lombok.extern.slf4j.Slf4j;
@@ -1659,40 +1663,7 @@ public class GoalPanel extends PluginPanel
 				String gid = ctx.getSoleGoalId();
 				Goal g = goalStore.findGoalById(gid);
 				if (g == null) break;
-				boolean manual = g.getType() == com.goalplanner.model.GoalType.CUSTOM
-					|| g.getType() == com.goalplanner.model.GoalType.ITEM_GRIND;
-				if (g.isComplete())
-				{
-					top.add(new com.goalplanner.ui.dock.ActionDock.Item("Reopen",
-						"Mark incomplete and let tracking re-derive it",
-						() -> api.markGoalIncomplete(gid)));
-				}
-				else if (manual)
-				{
-					top.add(new com.goalplanner.ui.dock.ActionDock.Item("Complete",
-						"Mark this goal complete",
-						() -> api.markGoalComplete(gid)));
-				}
-				top.add(new com.goalplanner.ui.dock.ActionDock.Item(
-					g.isOptional() ? "Required" : "Optional",
-					g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
-					() -> api.setGoalOptional(gid, !g.isOptional())));
-
-				// Edit cluster (separator = Item with a null action).
-				final Goal editGoal = g;
-				if (g.getType() == com.goalplanner.model.GoalType.SKILL)
-				{
-					bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("edit", null, null));
-					bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Amount",
-						"Change the target XP / level",
-						() -> dialogFactory.showChangeSkillTargetDialog(editGoal)));
-				}
-				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Deselect",
-					"Clear the selection",
-					() -> api.clearGoalSelection()));
-				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Remove",
-					"Remove this goal (undoable)",
-					() -> api.removeGoal(gid)));
+				buildGoalDock(g, top, bottom);
 				break;
 			}
 			case MULTI:
@@ -1700,15 +1671,7 @@ public class GoalPanel extends PluginPanel
 				hint = ctx.getCount() + " selected";
 				java.util.Set<String> ids =
 					new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
-				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Reset done",
-					"Reopen every completed goal in the selection (one undo)",
-					() -> api.bulkMarkIncomplete(ids)));
-				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Remove",
-					"Remove every selected goal (one undo)",
-					() -> api.bulkRemoveGoals(ids)));
-				bottom.add(new com.goalplanner.ui.dock.ActionDock.Item("Deselect",
-					"Clear the selection",
-					() -> api.clearGoalSelection()));
+				buildMultiDock(ids, top, bottom);
 				break;
 			}
 			case EMPTY:
@@ -1742,6 +1705,1051 @@ public class GoalPanel extends PluginPanel
 				break;
 		}
 		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
+	}
+
+	// ============================================================
+	// Select-surface (ADR-0007): the GOAL and MULTI action strips.
+	//
+	// Every goal-selection and multi-selection action from the right-click
+	// menus (GoalContextMenuBuilder) is migrated here, so the dock replaces
+	// right-click on goals. Assembly lives ONLY in these helpers, reached from
+	// refreshDock() (the single-place rule). The right-click menus + the dialogs
+	// they open stay alive alongside until in-client parity is verified; every
+	// dock button here REUSES an existing dialog/flow rather than rebuilding one.
+	// Positional menu-isms (move up/down/top/bottom, add above/below,
+	// deselect-this / all-but-this) are intentionally dropped per the parity
+	// table - drag-reorder and the dock's Deselect cover them.
+	// ============================================================
+
+	/** XP chunk presets offered when deriving a repeatable skill slice. */
+	private static final int[] DOCK_XP_CHUNKS = {10_000, 50_000, 100_000, 300_000, 1_000_000};
+	/** Kill-count chunk presets offered when deriving a repeatable activity slice. */
+	private static final int[] DOCK_KILL_CHUNKS = {5, 10, 20, 50};
+
+	/** A dock action button. */
+	private static ActionDock.Item item(String label, String tooltip, Runnable action)
+	{
+		return new ActionDock.Item(label, tooltip, action);
+	}
+
+	/** A group separator in a dock strip (small-caps label, no action). */
+	private static ActionDock.Item sep(String label)
+	{
+		return new ActionDock.Item(label, null, null);
+	}
+
+	/**
+	 * Assemble the one-goal action strips. Top row carries the lifecycle +
+	 * primary edits (complete, optional, amount, repeat, color); the bottom row
+	 * carries the organize cluster (tags, requirements, move, share, remove),
+	 * grouped by separators and reached by horizontal scroll when it overflows.
+	 */
+	private void buildGoalDock(Goal g,
+		java.util.List<ActionDock.Item> top,
+		java.util.List<ActionDock.Item> bottom)
+	{
+		final String gid = g.getId();
+		final GoalType type = g.getType();
+		final boolean complete = g.isComplete();
+		final boolean manual = type == GoalType.CUSTOM || type == GoalType.ITEM_GRIND;
+
+		// --- TOP: lifecycle + primary edits ---
+		if (complete)
+		{
+			top.add(item("Reopen", "Mark incomplete and let tracking re-derive it",
+				() -> api.markGoalIncomplete(gid)));
+		}
+		else if (manual)
+		{
+			top.add(item("Complete", "Mark this goal complete",
+				() -> api.markGoalComplete(gid)));
+		}
+		if (!complete)
+		{
+			top.add(item(g.isOptional() ? "Required" : "Optional",
+				g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
+				() -> api.setGoalOptional(gid, !g.isOptional())));
+		}
+
+		// Change Amount - SKILL / ITEM_GRIND / BOSS carry a numeric target.
+		if (type == GoalType.SKILL || type == GoalType.ITEM_GRIND || type == GoalType.BOSS)
+		{
+			top.add(item("Amount", "Change this goal's target", () -> dockChangeAmount(g)));
+		}
+
+		// Repeat - CUSTOM (set a period), a derived slice (edit period/amount),
+		// or a SKILL/derivable-item grind (derive a per-period slice).
+		ActionDock.Item repeat = buildRepeatItem(g);
+		if (repeat != null)
+		{
+			top.add(repeat);
+		}
+
+		// Change Name / Description - CUSTOM goals only, and not once complete.
+		if (type == GoalType.CUSTOM && !complete)
+		{
+			top.add(item("Name", "Change this goal's name", () -> dockChangeName(g)));
+			top.add(item("Desc", "Change this goal's description", () -> dockChangeDescription(g)));
+		}
+
+		top.add(item("Color", "Change this goal's color",
+			() -> dialogFactory.showGoalColorDialog(g)));
+
+		// --- BOTTOM: organize ---
+		// Tags.
+		bottom.add(sep("tag"));
+		bottom.add(item("Add tag", "Add a tag to this goal", () -> dockAddTag(g)));
+		java.util.List<Tag> removable = removableTagsFor(g);
+		if (!removable.isEmpty())
+		{
+			bottom.add(item("Drop tags", "Remove tags from this goal",
+				() -> dockRemoveTags(g, removable)));
+		}
+
+		// Requirements graph - hidden on completed goals (reference history).
+		if (!complete)
+		{
+			bottom.add(sep("requires"));
+			bottom.add(item("Requires", "Then click another goal to require it",
+				() -> enterRelationMode(gid, /*sourceRequiresTarget=*/true)));
+			bottom.add(item("Required by", "Then click another goal that should require this",
+				() -> enterRelationMode(gid, /*sourceRequiresTarget=*/false)));
+			if (!api.getRequirements(gid).isEmpty())
+			{
+				bottom.add(item("Drop reqs", "Remove requirements of this goal",
+					() -> dockRemoveRequirements(g)));
+			}
+			if (!api.getDependents(gid).isEmpty())
+			{
+				bottom.add(item("Drop dependents", "Remove dependents of this goal",
+					() -> dockRemoveDependents(g)));
+			}
+		}
+
+		// Seed a quest/diary/boss goal's game-data requirements into its section.
+		if (goalHasSeedableReqs(g))
+		{
+			bottom.add(item("Add reqs to section",
+				"Add this goal's requirements into its section",
+				() -> dockSeedReqs(g)));
+		}
+
+		// Move / duplicate / restore.
+		bottom.add(sep("organize"));
+		bottom.add(item("Move to section", "Move this goal to another section",
+			() -> dockMoveToSection(g)));
+		bottom.add(item("Copy to section", "Duplicate this goal into another section",
+			() -> dockDuplicateToSection(g)));
+		if (api.isGoalOverridden(gid))
+		{
+			bottom.add(item("Restore defaults", "Reset tags and color to their defaults",
+				() -> api.bulkRestoreDefaults(java.util.Collections.singleton(gid))));
+		}
+
+		// Loadout Lab link-in - BOSS goals only, install-aware (mirrors the menu).
+		if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
+		{
+			LoadoutLabState labState = loadoutLabState();
+			if (labState == LoadoutLabState.ENABLED)
+			{
+				final String monster = g.getBossName();
+				bottom.add(sep("lab"));
+				bottom.add(item("Loadout Lab", "Search this boss in Loadout Lab",
+					() -> searchLoadoutLab(monster)));
+			}
+			else if (labState == LoadoutLabState.INSTALLED_DISABLED)
+			{
+				bottom.add(sep("lab"));
+				bottom.add(new ActionDock.Item("Lab is off",
+					"Loadout Lab is installed but disabled", () -> {}, false));
+			}
+		}
+
+		// Share this single goal as a paste-anywhere code.
+		if (isShareAvailable())
+		{
+			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
+			bottom.add(sep("share"));
+			bottom.add(item("Copy code", "Copy a share code for this goal",
+				() -> copyGoalsShareCode(shareIds)));
+			if (isSavedPlansAvailable())
+			{
+				bottom.add(item("Save code", "Save a share code for this goal",
+					() -> saveGoalsPlan(shareIds)));
+			}
+		}
+
+		// Deselect / Remove close out the strip.
+		bottom.add(sep("goal"));
+		bottom.add(item("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
+		bottom.add(item("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
+	}
+
+	/**
+	 * Assemble the multi-selection action strips. Mirrors the bulk right-click
+	 * menu: bulk lifecycle in the top row, bulk organize (move/duplicate, tags,
+	 * restore, share) in the bottom row.
+	 */
+	private void buildMultiDock(java.util.Set<String> ids,
+		java.util.List<ActionDock.Item> top,
+		java.util.List<ActionDock.Item> bottom)
+	{
+		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
+		java.util.List<Goal> goals = new ArrayList<>();
+		for (Goal g : goalStore.getGoals())
+		{
+			if (sel.contains(g.getId()))
+			{
+				goals.add(g);
+			}
+		}
+
+		// --- TOP: bulk lifecycle ---
+		top.add(item("Reset done",
+			"Reopen every completed goal in the selection (one undo)",
+			() -> api.bulkMarkIncomplete(sel)));
+		// Mark complete - only when every selected goal is manually completable
+		// (all CUSTOM), matching the bulk menu.
+		boolean allCustom = !goals.isEmpty();
+		for (Goal g : goals)
+		{
+			if (g.getType() != GoalType.CUSTOM)
+			{
+				allCustom = false;
+				break;
+			}
+		}
+		if (allCustom)
+		{
+			final java.util.List<Goal> completeTargets = new ArrayList<>(goals);
+			top.add(item("Complete", "Mark every selected goal complete (one undo)",
+				() -> {
+					api.beginCompound("Mark " + completeTargets.size() + " complete");
+					try
+					{
+						for (Goal g : completeTargets)
+						{
+							api.markGoalComplete(g.getId());
+						}
+					}
+					finally
+					{
+						api.endCompound();
+					}
+				}));
+		}
+		// Mark optional / required - applies to the non-completed goals.
+		final java.util.List<Goal> optionalTargets = new ArrayList<>();
+		for (Goal g : goals)
+		{
+			if (!g.isComplete())
+			{
+				optionalTargets.add(g);
+			}
+		}
+		if (!optionalTargets.isEmpty())
+		{
+			top.add(item("Optional", "Mark the selected goals optional (one undo)",
+				() -> bulkSetOptional(optionalTargets, true)));
+			top.add(item("Required", "Mark the selected goals required (one undo)",
+				() -> bulkSetOptional(optionalTargets, false)));
+		}
+		top.add(item("Remove", "Remove every selected goal (one undo)",
+			() -> api.bulkRemoveGoals(sel)));
+
+		// --- BOTTOM: bulk organize ---
+		final java.util.List<Goal> recolor = new ArrayList<>(goals);
+		if (!recolor.isEmpty())
+		{
+			bottom.add(sep("edit"));
+			bottom.add(item("Color", "Change the color of every selected goal",
+				() -> dialogFactory.showBulkChangeColorDialog(recolor)));
+		}
+
+		// Tags.
+		final java.util.List<Goal> tagAdd = new ArrayList<>(goals);
+		java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> removableOpts =
+			api.getRemovableTagsForSelection(sel);
+		if (!tagAdd.isEmpty() || !removableOpts.isEmpty())
+		{
+			bottom.add(sep("tag"));
+			if (!tagAdd.isEmpty())
+			{
+				bottom.add(item("Add tag", "Add a tag to every selected goal",
+					() -> dialogFactory.showBulkAddTagDialog(tagAdd)));
+			}
+			if (!removableOpts.isEmpty())
+			{
+				final java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> opts =
+					removableOpts;
+				bottom.add(item("Drop tags", "Remove tags from the selected goals",
+					() -> dialogFactory.showBulkRemoveTagDialog(sel, opts)));
+			}
+		}
+
+		// Move / duplicate / restore.
+		bottom.add(sep("organize"));
+		bottom.add(item("Move to section", "Move the selected goals to another section",
+			() -> dockBulkMoveToSection(goals, sel)));
+		bottom.add(item("Copy to section", "Duplicate the selected goals into another section",
+			() -> dockBulkDuplicateToSection(goals, sel)));
+		boolean anyOverridden = false;
+		for (String id : sel)
+		{
+			if (api.isGoalOverridden(id))
+			{
+				anyOverridden = true;
+				break;
+			}
+		}
+		if (anyOverridden)
+		{
+			bottom.add(item("Restore defaults",
+				"Reset tags and color to defaults for the selected goals",
+				() -> api.bulkRestoreDefaults(sel)));
+		}
+
+		// Share the selection as one code.
+		if (isShareAvailable())
+		{
+			final java.util.List<String> shareIds = new ArrayList<>(sel);
+			bottom.add(sep("share"));
+			bottom.add(item("Copy code", "Copy one share code for the selected goals",
+				() -> copyGoalsShareCode(shareIds)));
+			if (isSavedPlansAvailable())
+			{
+				bottom.add(item("Save code", "Save one share code for the selected goals",
+					() -> saveGoalsPlan(shareIds)));
+			}
+		}
+
+		bottom.add(sep("select"));
+		bottom.add(item("Deselect all", "Clear the selection", () -> api.clearGoalSelection()));
+	}
+
+	private void bulkSetOptional(java.util.List<Goal> targets, boolean optional)
+	{
+		api.beginCompound("Mark " + targets.size() + (optional ? " optional" : " required"));
+		try
+		{
+			for (Goal g : targets)
+			{
+				api.setGoalOptional(g.getId(), optional);
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+	}
+
+	// ------------------------------------------------------------
+	// Select-surface action helpers (all reuse an existing dialog/flow).
+	// ------------------------------------------------------------
+
+	/** A single-choice picker rendered as a combo prompt - the dock's stand-in
+	 *  for a menu submenu (Move to Section, Repeat period, etc.). Runs the action
+	 *  parallel to the chosen label; a cancel is a no-op. */
+	private void dockChooser(String title, java.util.List<String> labels,
+		java.util.List<Runnable> actions)
+	{
+		if (labels.isEmpty())
+		{
+			return;
+		}
+		Object sel = javax.swing.JOptionPane.showInputDialog(this, title, title,
+			javax.swing.JOptionPane.PLAIN_MESSAGE, null,
+			labels.toArray(), labels.get(0));
+		if (sel == null)
+		{
+			return;
+		}
+		int i = labels.indexOf(sel.toString());
+		if (i >= 0)
+		{
+			actions.get(i).run();
+		}
+	}
+
+	/** Route Change Amount to the right editor: the shared skill-target dialog,
+	 *  or a quantity/kill-count prompt for item/boss goals. */
+	private void dockChangeAmount(Goal g)
+	{
+		if (g.getType() == GoalType.SKILL)
+		{
+			dialogFactory.showChangeSkillTargetDialog(g);
+			return;
+		}
+		String noun = g.getType() == GoalType.BOSS ? "kill count" : "quantity";
+		String input = javax.swing.JOptionPane.showInputDialog(this,
+			"New target " + noun + " for " + g.getName() + ":",
+			String.valueOf(g.getTargetValue()));
+		if (input == null)
+		{
+			return;
+		}
+		try
+		{
+			int newTarget = Integer.parseInt(input.trim().replace(",", ""));
+			if (newTarget > 0)
+			{
+				api.changeTarget(g.getId(), newTarget);
+			}
+		}
+		catch (NumberFormatException ignored)
+		{
+		}
+	}
+
+	private void dockChangeName(Goal g)
+	{
+		String input = javax.swing.JOptionPane.showInputDialog(this, "New name:", g.getName());
+		if (input != null && !input.trim().isEmpty())
+		{
+			api.editCustomGoal(g.getId(), input.trim(), null);
+		}
+	}
+
+	private void dockChangeDescription(Goal g)
+	{
+		String input = javax.swing.JOptionPane.showInputDialog(this, "New description:",
+			g.getDescription() != null ? g.getDescription() : "");
+		if (input != null)
+		{
+			api.editCustomGoal(g.getId(), null, input.trim());
+		}
+	}
+
+	/** Tags removable from a goal: any tag for CUSTOM, else only user-added
+	 *  (non-default) tags. Mirrors the single-item menu's rule. */
+	private java.util.List<Tag> removableTagsFor(Goal g)
+	{
+		java.util.List<Tag> removable = new ArrayList<>();
+		if (g.getTagIds() == null || g.getTagIds().isEmpty())
+		{
+			return removable;
+		}
+		java.util.List<String> defaults = g.getDefaultTagIds() != null
+			? g.getDefaultTagIds() : java.util.Collections.emptyList();
+		for (String tagId : g.getTagIds())
+		{
+			Tag t = goalStore.findTag(tagId);
+			if (t == null)
+			{
+				continue;
+			}
+			if (g.getType() == GoalType.CUSTOM || !defaults.contains(tagId))
+			{
+				removable.add(t);
+			}
+		}
+		return removable;
+	}
+
+	private void dockAddTag(Goal g)
+	{
+		TagPickerDialog.Result picked = TagPickerDialog.show(this, "Add Tag", api);
+		if (picked != null)
+		{
+			api.addTagWithCategory(g.getId(), picked.label, picked.category.name());
+		}
+	}
+
+	private void dockRemoveTags(Goal g, java.util.List<Tag> removable)
+	{
+		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
+		for (Tag t : removable)
+		{
+			items.add(new MultiSelectDialog.Item(
+				t.getLabel(),
+				t.getLabel() + " (" + t.getCategory().getDisplayName() + ")"));
+		}
+		java.util.List<String> chosen = MultiSelectDialog.show(this, "Remove Tags", "Remove", items);
+		if (chosen.isEmpty())
+		{
+			return;
+		}
+		api.beginCompound("Remove " + chosen.size() + " tag(s)");
+		try
+		{
+			for (String label : chosen)
+			{
+				api.removeTag(g.getId(), label);
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+	}
+
+	private void dockRemoveRequirements(Goal g)
+	{
+		java.util.List<String> reqs = new ArrayList<>(api.getRequirements(g.getId()));
+		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
+		for (String reqId : reqs)
+		{
+			items.add(new MultiSelectDialog.Item(reqId, reorderController.goalNameById(reqId)));
+		}
+		java.util.List<String> chosen = MultiSelectDialog.show(this,
+			"Remove Requirements", "Remove", items);
+		if (chosen.isEmpty())
+		{
+			return;
+		}
+		api.beginCompound("Remove " + chosen.size() + " requirement(s)");
+		try
+		{
+			for (String reqId : chosen)
+			{
+				api.removeRequirement(g.getId(), reqId);
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+	}
+
+	private void dockRemoveDependents(Goal g)
+	{
+		java.util.List<String> deps = new ArrayList<>(api.getDependents(g.getId()));
+		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
+		for (String depId : deps)
+		{
+			items.add(new MultiSelectDialog.Item(depId, reorderController.goalNameById(depId)));
+		}
+		java.util.List<String> chosen = MultiSelectDialog.show(this,
+			"Remove Dependents", "Remove", items);
+		if (chosen.isEmpty())
+		{
+			return;
+		}
+		api.beginCompound("Remove " + chosen.size() + " dependent(s)");
+		try
+		{
+			for (String depId : chosen)
+			{
+				api.removeRequirement(depId, g.getId());
+			}
+		}
+		finally
+		{
+			api.endCompound();
+		}
+	}
+
+	/** True when a quest/diary/boss goal carries game-data requirements that can
+	 *  be seeded into its section. Mirrors the menu's gate. */
+	private boolean goalHasSeedableReqs(Goal g)
+	{
+		if (g.getType() == GoalType.QUEST && g.getQuestName() != null)
+		{
+			try
+			{
+				net.runelite.api.Quest q = net.runelite.api.Quest.valueOf(g.getQuestName());
+				return com.goalplanner.data.QuestRequirements.hasRequirements(q);
+			}
+			catch (IllegalArgumentException ignored)
+			{
+				return false;
+			}
+		}
+		if (g.getType() == GoalType.DIARY && g.getName() != null)
+		{
+			com.goalplanner.data.AchievementDiaryData.Tier tier = parseDiaryTier(g.getDescription());
+			return tier != null
+				&& com.goalplanner.data.DiaryRequirements.hasRequirements(g.getName(), tier);
+		}
+		return g.getType() == GoalType.BOSS && g.getBossName() != null
+			&& com.goalplanner.data.BossKillData.getPrereqs(g.getBossName()) != null;
+	}
+
+	private static com.goalplanner.data.AchievementDiaryData.Tier parseDiaryTier(String description)
+	{
+		if (description == null)
+		{
+			return null;
+		}
+		for (com.goalplanner.data.AchievementDiaryData.Tier t
+			: com.goalplanner.data.AchievementDiaryData.Tier.values())
+		{
+			if (description.startsWith(t.getDisplayName()))
+			{
+				return t;
+			}
+		}
+		return null;
+	}
+
+	/** Offer the "incomplete only" vs "all" requirement seed, then run it on the
+	 *  client thread (the incomplete variant reads live player state). */
+	private void dockSeedReqs(Goal g)
+	{
+		final String gid = g.getId();
+		final boolean diary = g.getType() == GoalType.DIARY;
+		final boolean boss = g.getType() == GoalType.BOSS;
+		java.util.List<String> labels = java.util.Arrays.asList(
+			"Incomplete only", "All (whole tree)");
+		java.util.List<Runnable> actions = java.util.Arrays.asList(
+			() -> seedReqsOnClientThread(gid, false, diary, boss),
+			() -> seedReqsOnClientThread(gid, true, diary, boss));
+		dockChooser("Add requirements to this section", labels, actions);
+	}
+
+	private void seedReqsOnClientThread(String goalId, boolean includeMet, boolean diary, boolean boss)
+	{
+		runOnClientThread(() -> {
+			if (diary)
+			{
+				api.seedDiaryRequirementsForGoal(goalId, includeMet);
+			}
+			else if (boss)
+			{
+				api.seedBossRequirementsForGoal(goalId, includeMet);
+			}
+			else
+			{
+				api.seedRequirementsForGoal(goalId, includeMet);
+			}
+		});
+	}
+
+	// ----- Repeat / repeatable -----
+
+	/** The Repeat dock button for this goal, or null when repeating does not
+	 *  apply (auto-tracked non-skill types with no derivable activity). */
+	private ActionDock.Item buildRepeatItem(Goal g)
+	{
+		if (g.getRepeatChunk() > 0)
+		{
+			return item("Repeat", "Change how often / how much this repeats",
+				() -> dockEditRepeat(g));
+		}
+		if (g.getType() == GoalType.CUSTOM)
+		{
+			return item("Repeat", "Repeat this goal every day / week / month",
+				() -> dockSetCustomRepeat(g));
+		}
+		if (g.getType() == GoalType.SKILL && g.getSkillName() != null)
+		{
+			return item("Repeat", "Turn this into a per-period XP slice",
+				() -> dockDeriveRepeat(g, null));
+		}
+		if (g.getItemId() > 0
+			&& !com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId()).isEmpty())
+		{
+			return item("Repeat", "Turn this into a per-period kill slice",
+				() -> dockDeriveItemRepeat(g));
+		}
+		return null;
+	}
+
+	private java.util.List<RepeatPeriod> derivePeriods()
+	{
+		return java.util.Arrays.asList(
+			RepeatPeriod.DAILY, RepeatPeriod.WEEKLY, RepeatPeriod.MONTHLY);
+	}
+
+	private void dockSetCustomRepeat(Goal g)
+	{
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		for (RepeatPeriod period : RepeatPeriod.values())
+		{
+			final RepeatPeriod p = period;
+			labels.add(g.getRepeatEvery() == period ? period.getLabel() + " (current)" : period.getLabel());
+			actions.add(() -> api.setGoalRepeat(g.getId(), p));
+		}
+		dockChooser("Repeat every", labels, actions);
+	}
+
+	/** Edit an existing derived/repeatable goal: change the period, or the
+	 *  per-period amount. Mirrors the menu's Repeats / Amount submenus. */
+	private void dockEditRepeat(Goal g)
+	{
+		java.util.List<String> labels = java.util.Arrays.asList("Change how often", "Change how much");
+		java.util.List<Runnable> actions = java.util.Arrays.asList(
+			() -> dockEditRepeatPeriod(g),
+			() -> dockEditRepeatAmount(g));
+		dockChooser("Repeat", labels, actions);
+	}
+
+	private void dockEditRepeatPeriod(Goal g)
+	{
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		for (RepeatPeriod period : derivePeriods())
+		{
+			final RepeatPeriod p = period;
+			labels.add(g.getRepeatEvery() == period ? period.getLabel() + " (current)" : period.getLabel());
+			actions.add(() -> api.setGoalRepeat(g.getId(), p));
+		}
+		dockChooser("Repeats every", labels, actions);
+	}
+
+	private void dockEditRepeatAmount(Goal g)
+	{
+		boolean skill = g.getType() == GoalType.SKILL;
+		int[] sizes = skill ? DOCK_XP_CHUNKS : DOCK_KILL_CHUNKS;
+		String unit = skill ? "XP" : "kills";
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		for (int size : sizes)
+		{
+			final int s = size;
+			String label = (skill ? com.goalplanner.util.FormatUtil.formatNumber(size) : String.valueOf(size))
+				+ " " + unit;
+			labels.add(g.getRepeatChunk() == size ? label + " (current)" : label);
+			actions.add(() -> api.setGoalRepeatChunk(g.getId(), s));
+		}
+		labels.add("Custom...");
+		actions.add(() -> {
+			Integer chunk = promptChunk(unit);
+			if (chunk != null)
+			{
+				api.setGoalRepeatChunk(g.getId(), chunk);
+			}
+		});
+		dockChooser("Amount per period", labels, actions);
+	}
+
+	/** Derive a repeatable slice from a skill goal (activityName null) or a
+	 *  resolved item activity. Picks a period, then an amount, then creates on
+	 *  the client thread (the derive reads live XP / kill-count). */
+	private void dockDeriveRepeat(Goal g, String activityName)
+	{
+		boolean skill = g.getType() == GoalType.SKILL;
+		final String unit = skill ? "XP" : "kills";
+		java.util.List<String> periodLabels = new ArrayList<>();
+		java.util.List<Runnable> periodActions = new ArrayList<>();
+		for (RepeatPeriod period : derivePeriods())
+		{
+			final RepeatPeriod p = period;
+			periodLabels.add(period.getLabel());
+			periodActions.add(() -> {
+				int[] sizes = skill ? DOCK_XP_CHUNKS : DOCK_KILL_CHUNKS;
+				java.util.List<String> labels = new ArrayList<>();
+				java.util.List<Runnable> actions = new ArrayList<>();
+				for (int size : sizes)
+				{
+					final int s = size;
+					String label = (skill ? com.goalplanner.util.FormatUtil.formatNumber(size)
+						: String.valueOf(size)) + " " + unit;
+					labels.add(label);
+					actions.add(() -> runOnClientThread(() ->
+						api.createDerivedRepeatGoal(g.getId(), p, s, activityName)));
+				}
+				labels.add("Custom...");
+				actions.add(() -> {
+					Integer chunk = promptChunk(unit);
+					if (chunk != null)
+					{
+						runOnClientThread(() ->
+							api.createDerivedRepeatGoal(g.getId(), p, chunk, activityName));
+					}
+				});
+				dockChooser("How much " + unit + " per period", labels, actions);
+			});
+		}
+		dockChooser("Repeat every", periodLabels, periodActions);
+	}
+
+	/** An item grind can drop from several activities (shared collection-log
+	 *  slots); pick which one to farm, then derive as usual. */
+	private void dockDeriveItemRepeat(Goal g)
+	{
+		java.util.List<com.goalplanner.data.ItemActivityResolver.Activity> activities =
+			com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId());
+		if (activities.isEmpty())
+		{
+			return;
+		}
+		if (activities.size() == 1)
+		{
+			dockDeriveRepeat(g, activities.get(0).getName());
+			return;
+		}
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		for (com.goalplanner.data.ItemActivityResolver.Activity a : activities)
+		{
+			final String name = a.getName();
+			labels.add(name);
+			actions.add(() -> dockDeriveRepeat(g, name));
+		}
+		dockChooser("Which activity?", labels, actions);
+	}
+
+	/** Prompt for a positive whole-number chunk, tolerating typed separators.
+	 *  Returns null on cancel or invalid input (with a nudge on invalid). */
+	private Integer promptChunk(String unit)
+	{
+		String input = javax.swing.JOptionPane.showInputDialog(this,
+			"How much " + unit + " per period?", "Repeatable goal",
+			javax.swing.JOptionPane.PLAIN_MESSAGE);
+		if (input == null)
+		{
+			return null;
+		}
+		String cleaned = input.trim().replace(",", "").replace(" ", "").replace("_", "");
+		int chunk;
+		try
+		{
+			chunk = Integer.parseInt(cleaned);
+		}
+		catch (NumberFormatException ex)
+		{
+			javax.swing.JOptionPane.showMessageDialog(this,
+				"Enter a whole number, for example 300000.",
+				"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+			return null;
+		}
+		if (chunk <= 0)
+		{
+			javax.swing.JOptionPane.showMessageDialog(this,
+				"Enter an amount greater than zero.",
+				"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+			return null;
+		}
+		return chunk;
+	}
+
+	// ----- Move / duplicate to section -----
+
+	/** Prompt for a new section name; on a non-blank name that creates cleanly,
+	 *  run the action with the new section id. Shared by move/duplicate. */
+	private void promptNewSectionThen(java.util.function.Consumer<String> action)
+	{
+		String input = javax.swing.JOptionPane.showInputDialog(this, "New section name:", "");
+		if (input != null && !input.trim().isEmpty())
+		{
+			String newId = api.createSection(input.trim());
+			if (newId != null)
+			{
+				action.accept(newId);
+			}
+		}
+	}
+
+	private void dockMoveToSection(Goal g)
+	{
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		boolean goalInDefault = false;
+		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
+		{
+			if (sv.builtIn)
+			{
+				if (sv.id.equals(g.getSectionId()))
+				{
+					goalInDefault = true;
+				}
+				continue;
+			}
+			if (sv.id.equals(g.getSectionId()))
+			{
+				continue;
+			}
+			destinations.add(sv);
+		}
+		if (!goalInDefault)
+		{
+			labels.add("Default (Incomplete / Completed)");
+			actions.add(() -> api.moveGoalsToDefault(java.util.Collections.singletonList(g.getId())));
+		}
+		for (com.goalplanner.api.SectionView dest : destinations)
+		{
+			final String destId = dest.id;
+			labels.add(dest.name);
+			actions.add(() -> api.moveGoalToSection(g.getId(), destId));
+		}
+		labels.add("New section...");
+		actions.add(() -> promptNewSectionThen(newId -> api.moveGoalToSection(g.getId(), newId)));
+		dockChooser("Move to section", labels, actions);
+	}
+
+	private void dockDuplicateToSection(Goal g)
+	{
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		String defaultIncompleteId = null;
+		boolean goalInDefault = false;
+		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
+		{
+			if ("INCOMPLETE".equals(sv.kind))
+			{
+				defaultIncompleteId = sv.id;
+			}
+			if (sv.builtIn)
+			{
+				if (sv.id.equals(g.getSectionId()))
+				{
+					goalInDefault = true;
+				}
+				continue;
+			}
+			if (sv.id.equals(g.getSectionId()))
+			{
+				continue;
+			}
+			destinations.add(sv);
+		}
+		if (!goalInDefault && defaultIncompleteId != null)
+		{
+			final String defId = defaultIncompleteId;
+			labels.add("Default (Incomplete / Completed)");
+			actions.add(() -> api.duplicateGoalsToSection(
+				java.util.Collections.singletonList(g.getId()), defId));
+		}
+		for (com.goalplanner.api.SectionView dest : destinations)
+		{
+			final String destId = dest.id;
+			labels.add(dest.name);
+			actions.add(() -> api.duplicateGoalsToSection(
+				java.util.Collections.singletonList(g.getId()), destId));
+		}
+		labels.add("New section...");
+		actions.add(() -> promptNewSectionThen(newId -> api.duplicateGoalsToSection(
+			java.util.Collections.singletonList(g.getId()), newId)));
+		dockChooser("Duplicate to section", labels, actions);
+	}
+
+	private void dockBulkMoveToSection(java.util.List<Goal> goals, java.util.Set<String> ids)
+	{
+		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		String defaultIncompleteId = null;
+		String defaultCompletedId = null;
+		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if ("INCOMPLETE".equals(sv.kind))
+			{
+				defaultIncompleteId = sv.id;
+			}
+			if ("COMPLETED".equals(sv.kind))
+			{
+				defaultCompletedId = sv.id;
+			}
+		}
+		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if (sv.builtIn)
+			{
+				continue;
+			}
+			boolean allAlreadyHere = true;
+			for (Goal g : goals)
+			{
+				if (!sv.id.equals(g.getSectionId()))
+				{
+					allAlreadyHere = false;
+					break;
+				}
+			}
+			if (allAlreadyHere)
+			{
+				continue;
+			}
+			destinations.add(sv);
+		}
+		boolean allInDefault = !goals.isEmpty();
+		for (Goal g : goals)
+		{
+			String sid = g.getSectionId();
+			if (sid == null || (!sid.equals(defaultIncompleteId) && !sid.equals(defaultCompletedId)))
+			{
+				allInDefault = false;
+				break;
+			}
+		}
+		if (!allInDefault)
+		{
+			labels.add("Default (Incomplete / Completed)");
+			actions.add(() -> api.moveGoalsToDefault(sel));
+		}
+		for (com.goalplanner.api.SectionView dest : destinations)
+		{
+			final String destId = dest.id;
+			labels.add(dest.name);
+			actions.add(() -> api.bulkMoveGoalsToSection(sel, destId));
+		}
+		labels.add("New section...");
+		actions.add(() -> promptNewSectionThen(newId -> api.bulkMoveGoalsToSection(sel, newId)));
+		dockChooser("Move " + goals.size() + " to section", labels, actions);
+	}
+
+	private void dockBulkDuplicateToSection(java.util.List<Goal> goals, java.util.Set<String> ids)
+	{
+		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
+		java.util.List<String> labels = new ArrayList<>();
+		java.util.List<Runnable> actions = new ArrayList<>();
+		String defaultIncompleteId = null;
+		String defaultCompletedId = null;
+		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if ("INCOMPLETE".equals(sv.kind))
+			{
+				defaultIncompleteId = sv.id;
+			}
+			if ("COMPLETED".equals(sv.kind))
+			{
+				defaultCompletedId = sv.id;
+			}
+		}
+		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if (sv.builtIn)
+			{
+				continue;
+			}
+			boolean allAlreadyHere = true;
+			for (Goal g : goals)
+			{
+				if (!sv.id.equals(g.getSectionId()))
+				{
+					allAlreadyHere = false;
+					break;
+				}
+			}
+			if (allAlreadyHere)
+			{
+				continue;
+			}
+			destinations.add(sv);
+		}
+		boolean allInDefault = !goals.isEmpty();
+		for (Goal g : goals)
+		{
+			String sid = g.getSectionId();
+			if (sid == null || (!sid.equals(defaultIncompleteId) && !sid.equals(defaultCompletedId)))
+			{
+				allInDefault = false;
+				break;
+			}
+		}
+		if (!allInDefault && defaultIncompleteId != null)
+		{
+			final String defId = defaultIncompleteId;
+			labels.add("Default (Incomplete / Completed)");
+			actions.add(() -> api.duplicateGoalsToSection(sel, defId));
+		}
+		for (com.goalplanner.api.SectionView dest : destinations)
+		{
+			final String destId = dest.id;
+			labels.add(dest.name);
+			actions.add(() -> api.duplicateGoalsToSection(sel, destId));
+		}
+		labels.add("New section...");
+		actions.add(() -> promptNewSectionThen(newId -> api.duplicateGoalsToSection(sel, newId)));
+		dockChooser("Duplicate " + goals.size() + " to section", labels, actions);
 	}
 
 	private void promptAddSectionFromDock()
