@@ -1891,11 +1891,10 @@ public class GoalPanel extends PluginPanel
 		switch (type)
 		{
 			case SKILL: return buildSkillForm();
-			// Only the Skill form is wired for now - the plugin sits at ~99% of
-			// the hub token cap, and the headroom to add the other type forms
-			// only arrives when the right-click menus are deleted (ADR-0007),
-			// which cannot happen while parity is unverified. Every other tile
-			// lands on a placeholder pointing at the existing add dialogs.
+			case ACCOUNT: return buildAccountForm();
+			case CUSTOM: return buildCustomForm();
+			// Any type not yet wired lands on a placeholder pointing at the
+			// existing right-click add dialogs (which stay until parity).
 			default: return buildPendingForm(type);
 		}
 	}
@@ -2014,6 +2013,71 @@ public class GoalPanel extends PluginPanel
 		}
 		refresh.run();
 		return grid;
+	}
+
+	private JComponent buildAccountForm()
+	{
+		JPanel body = formBody();
+
+		// Leagues-scoped metrics (League Points/Tasks) only make sense on a
+		// leagues profile - filter them out otherwise, matching the dialog.
+		boolean leaguesProfile = com.goalplanner.persistence.GoalStore.PROFILE_LEAGUES
+			.equals(goalStore.getActiveProfile());
+		com.goalplanner.model.AccountMetric[] metrics =
+			java.util.Arrays.stream(com.goalplanner.model.AccountMetric.values())
+				.filter(m -> leaguesProfile || !m.isLeagues())
+				.toArray(com.goalplanner.model.AccountMetric[]::new);
+		JComboBox<com.goalplanner.model.AccountMetric> metricCombo = new JComboBox<>(metrics);
+		metricCombo.setRenderer(textRenderer(
+			v -> ((com.goalplanner.model.AccountMetric) v).getDisplayName()));
+		styleField(metricCombo);
+		addFormRow(body, "Metric", metricCombo);
+
+		JTextField targetField = new JTextField(10);
+		styleField(targetField);
+		addFormRow(body, "Target", targetField);
+
+		Runnable onAdd = () ->
+		{
+			com.goalplanner.model.AccountMetric metric =
+				(com.goalplanner.model.AccountMetric) metricCombo.getSelectedItem();
+			if (metric == null) return;
+			int target = parsePositiveInt(targetField.getText());
+			if (target <= 0)
+			{
+				warnCreate("Enter a numeric target above zero.");
+				return;
+			}
+			api.addAccountGoal(metric.name(), target);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.ACCOUNT, body, onAdd);
+	}
+
+	private JComponent buildCustomForm()
+	{
+		JPanel body = formBody();
+
+		JTextField nameField = new JTextField(16);
+		styleField(nameField);
+		addFormRow(body, "Name", nameField);
+
+		JTextField descField = new JTextField(16);
+		styleField(descField);
+		addFormRow(body, "Description (optional)", descField);
+
+		Runnable onAdd = () ->
+		{
+			String name = nameField.getText().trim();
+			if (name.isEmpty())
+			{
+				warnCreate("Enter a name for the goal.");
+				return;
+			}
+			api.addCustomGoal(name, descField.getText().trim());
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.CUSTOM, body, onAdd);
 	}
 
 	// ----- repeatable progressive-disclosure (ADR-0008) -----
@@ -2296,6 +2360,22 @@ public class GoalPanel extends PluginPanel
 			case ACCOUNT: return "Account";
 			case CUSTOM: return "Custom";
 			default: return t.getDisplayName();
+		}
+	}
+
+	/** Parse a target/quantity field: strips commas, returns -1 when blank or
+	 *  not a positive integer. */
+	private static int parsePositiveInt(String s)
+	{
+		if (s == null) return -1;
+		try
+		{
+			int v = Integer.parseInt(s.trim().replace(",", ""));
+			return v > 0 ? v : -1;
+		}
+		catch (NumberFormatException e)
+		{
+			return -1;
 		}
 	}
 
