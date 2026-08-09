@@ -1794,6 +1794,16 @@ public class GoalPanel extends PluginPanel
 	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
 	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
 	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
+	/** Highlight for the selected icon-button in a picker grid (skill/boss/etc). */
+	private static final Color CREATE_SEL_BG = new Color(0x2E, 0x4D, 0x32);
+	private static final Color CREATE_SEL_BORDER = new Color(0x5A, 0x9A, 0x5A);
+
+	/** Every trainable skill (Skill.values() minus OVERALL) for the skill picker
+	 *  grid - OVERALL is the account "Total Level" metric, not a skill goal. */
+	private static final net.runelite.api.Skill[] GOAL_SKILLS =
+		java.util.Arrays.stream(net.runelite.api.Skill.values())
+			.filter(s -> s != net.runelite.api.Skill.OVERALL)
+			.toArray(net.runelite.api.Skill[]::new);
 
 	/** Build the surface for the current create navigation: the type grid when
 	 *  no type is chosen, otherwise that type's form. */
@@ -1908,25 +1918,23 @@ public class GoalPanel extends PluginPanel
 	{
 		JPanel body = formBody();
 
-		JComboBox<net.runelite.api.Skill> skillCombo =
-			new JComboBox<>(net.runelite.api.Skill.values());
-		skillCombo.setRenderer(textRenderer(v -> ((net.runelite.api.Skill) v).getName()));
-		styleField(skillCombo);
-		addFormRow(body, "Skill", skillCombo);
+		// Skill picker is a grid of icon buttons (user feedback: the dropdown was
+		// unscannable). picked[0] holds the current selection; tapping an icon
+		// swaps it and re-highlights.
+		final net.runelite.api.Skill[] picked = { null };
+		addFormRow(body, "Skill", buildSkillPickerGrid(picked));
 
 		SkillTargetForm target = new SkillTargetForm(99);
 		addFormRow(body, "Target level or XP", target);
 
-		// NOTE: the Repeatable "more options" flow (period pills + per-period XP,
-		// deriving a repeat goal via api.createDerivedRepeatGoal) is designed and
-		// specified in ADR-0008 but NOT wired here yet - the plugin sits at ~99%
-		// of the hub token cap and there is no headroom until the right-click
-		// menus are deleted (ADR-0007). This is the first thing to restore once
-		// that frees space. See docs/action-dock-progress.md.
 		Runnable onAdd = () ->
 		{
-			net.runelite.api.Skill skill = (net.runelite.api.Skill) skillCombo.getSelectedItem();
-			if (skill == null) return;
+			net.runelite.api.Skill skill = picked[0];
+			if (skill == null)
+			{
+				warnCreate("Pick a skill first.");
+				return;
+			}
 			int xp = target.getTargetXp();
 			if (xp <= 0)
 			{
@@ -1937,6 +1945,48 @@ public class GoalPanel extends PluginPanel
 			navigateCreate(null);
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd);
+	}
+
+	/** A grid of skill icon buttons (all trainable skills, ~3 rows of 8). Tapping
+	 *  one writes it to {@code out[0]} and highlights it. Icons come from
+	 *  {@link SkillIconManager}, the same source the goal cards use. */
+	private JComponent buildSkillPickerGrid(net.runelite.api.Skill[] out)
+	{
+		JPanel grid = new JPanel(new GridLayout(0, 8, 3, 3));
+		grid.setOpaque(false);
+		grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		java.util.List<JButton> buttons = new ArrayList<>();
+		java.util.Map<JButton, net.runelite.api.Skill> owner = new HashMap<>();
+		Runnable refresh = () ->
+		{
+			for (JButton b : buttons)
+			{
+				boolean sel = owner.get(b) == out[0];
+				b.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+				b.setBorder(BorderFactory.createLineBorder(
+					sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 2));
+			}
+		};
+
+		for (net.runelite.api.Skill skill : GOAL_SKILLS)
+		{
+			JButton b = new JButton(new ImageIcon(skillIconManager.getSkillImage(skill, true)));
+			b.setToolTipText(skill.getName());
+			b.setOpaque(true);
+			b.setBackground(CREATE_TILE_BG);
+			b.setFocusPainted(false);
+			b.setContentAreaFilled(true);
+			b.setBorderPainted(true);
+			b.setMargin(new Insets(1, 1, 1, 1));
+			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			buttons.add(b);
+			owner.put(b, skill);
+			b.addActionListener(e -> { out[0] = skill; refresh.run(); });
+			grid.add(b);
+		}
+		refresh.run();
+		return grid;
 	}
 
 	// ----- create-surface shared UI helpers -----
