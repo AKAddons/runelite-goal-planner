@@ -92,6 +92,124 @@ their own creation path). No competing side-by-side section affordance was
 reintroduced. `promptAddSectionFromDock` is currently unused (left in place for
 a future subordinate section control); the create grid title is "Add a goal".
 
+## Unified create/edit form (ADR-0008): GOAL state is now the edit form
+
+Selecting a single goal no longer renders the `buildGoalDock` button strip.
+`refreshDock()`'s GOAL case now mounts the **same per-type form as create**,
+pre-filled, via `setExpandedComponent` (like the create surface). The goal's
+PARAMETERS are inline commit-on-blur/Enter FIELDS; its lifecycle + relations
+are ACTION chips. This removes the `Amount` / `Name` / `Desc` / `Repeat`
+JOptionPane-chooser buttons for the routed types. All assembly stays in
+`GoalPanel` (`buildEditSurface` → `build*EditBody` + `editFormScaffold` +
+`buildEditChips`), single-place rule intact.
+
+`usesUnifiedEditForm(type)` gates the routing. It returns true for **SKILL,
+ITEM_GRIND, BOSS, CUSTOM, ACCOUNT, QUEST, DIARY, COMBAT_ACHIEVEMENT** — i.e.
+every user-selectable type. `buildGoalDock` (the legacy button strip) stays as
+the fallback for anything not routed (e.g. COLLECTION_LOG) and is otherwise
+now unreferenced by the GOAL path; it is a deletion candidate for the later
+menu-removal step, not removed here.
+
+### Mount guard (why in-progress edits survive)
+`dockEditMounted` / `dockEditMountedGoalId` mirror the create-surface guard:
+`refreshDock` re-mounts the edit form only when the selected goal id changes,
+so a same-goal refresh does not wipe a half-typed field. In practice a field
+commit does **not** even reach `refreshDock`: store mutations fire
+`onGoalsChanged` → the debounced `panel.rebuild()`, which rebuilds the goal
+LIST but never touches the dock, and `onSelectionChanged` only fires when a
+prune drops a now-missing selected id (never on an in-place edit of the
+selected goal). The guard is the belt-and-suspenders for the rare genuine
+`refreshDock`. Structural chip actions call `refreshEditForm()` (drops the
+guard + refreshes) so the form re-renders to reflect them.
+
+### FIELDS — inline, apply-on-commit (blur or Enter), one undo each
+Each commit calls the API directly; every API method already no-ops on an
+unchanged value, so an idle blur never spams undo history. An invalid entry
+(blank / non-positive) resets the field to the model value on commit.
+
+- **Target / level / amount** → `api.changeTarget(id, newTarget)`.
+  - SKILL: the shared `SkillTargetForm`, seeded by the new
+    `SkillTargetForm.setTargetXp(int)` and committed through the new
+    `SkillTargetForm.onCommit(Runnable)` (fires on Enter / blur of either the
+    Level or XP row). Target XP round-trip is unit-tested (`SkillTargetFormTest`).
+  - ITEM_GRIND (quantity), BOSS (kill count), ACCOUNT (target): a `JTextField`
+    via `commitOnBlurOrEnter`.
+  - The skill icon+name, boss name, and account metric are shown **read-only**
+    (there is no API to change a goal's skill/boss/metric — that is a different
+    goal).
+- **Name / Description** (CUSTOM only) → `api.editCustomGoal(id, name, desc)`
+  (name commit passes `desc=null` to keep it; desc commit passes `name=null`).
+- **Repeat** → INLINE now (the point of the change): a Repeatable toggle +
+  Daily/Weekly/Monthly pills (`buildEditPeriodPills`, each commits
+  `api.setGoalRepeat`) + a per-period amount field (`api.setGoalRepeatChunk`).
+  `addEditRepeatControls` renders this ONLY for goals that carry their own
+  repeat state — CUSTOM goals and derived per-period slices (`repeatChunk > 0`).
+  A derived slice edits its per-period **chunk** here and its raw target field
+  is suppressed (the chunk drives the target). Toggling off →
+  `setGoalRepeat(NONE)`.
+- **Color**: kept as an action chip reusing `dialogFactory.showGoalColorDialog`
+  — an inline color-swatch field is deferred glam (see below). This is the one
+  FIELD from ADR-0008 not yet inline.
+
+### ACTIONS — chips (edit mode only), each REUSES an existing handler
+`buildEditChips` lays the lifecycle + relations out in a `WrapLayout` flow
+(wraps to multiple lines, grows the dock vertically). Complete/Reopen is the
+checkbox at the form top (CUSTOM/ITEM manual-complete rule mirrored from
+`buildGoalDock`; auto-tracked types get Reopen only once complete). The chips:
+Optional/Required, **Make repeatable** (derive — a plain SKILL / derivable
+ITEM grind; deriving creates a NEW slice goal, so it is an action not the
+inline toggle), Color, Add tag / Drop tags, Requires / Required by / Drop reqs
+/ Drop dependents (gated on `!complete` + edges), Add reqs to section,
+Move/Copy to section, Restore defaults, Loadout Lab (BOSS, install-aware),
+Copy/Save code, Deselect, Remove. Every one calls the same `dock*` helper /
+dialog `buildGoalDock` used — no dialog rebuilt.
+
+### Full-width indicator + width-tracking surface
+Both surfaces are headed by a **full-width** context bar (`indicatorBar` inside
+`surfaceShell`): green **CREATE** for the create grid/forms, neutral
+**SELECTED** for the edit form. To make the bar actually span the fixed-width
+RuneLite side panel — and to let BoxLayout rows and the chip `WrapLayout` lay
+out against the real dock width instead of clipping — the shell root is a new
+`ScrollablePanel` (`Scrollable`, `getScrollableTracksViewportWidth()=true`).
+Create forms now also fill the dock width as a side effect (previously they
+took only their preferred width). `buildCreateGrid` + `createFormScaffold` were
+re-wrapped through `surfaceShell`.
+
+### QUEST / DIARY / COMBAT_ACHIEVEMENT — thin edit
+Immutable targets, so `buildThinEditBody` is just a read-only name (+ optional
+description) plus the lifecycle chips. No editable parameter field.
+
+### Needs the designer's in-client screenshot verification (HEAVY render path)
+- **Commit-on-blur feel**: does tabbing/clicking away from the target/name/desc
+  field commit cleanly, with no focus jump (the form is NOT rebuilt on commit,
+  so focus should be stable) and no surprise undo entries on an untouched blur?
+- **Inline repeat controls**: the toggle → pills → amount reveal, the pill
+  selected-state colors, the chunk field, and that toggling grows/shrinks the
+  dock (`remeasureDock`) without clipping. Highest-risk visual after the create
+  disclosure.
+- **Full-width indicator bar**: confirm it truly spans edge-to-edge in both
+  modes and reads as a context header, not a button.
+- **WrapLayout chip flow**: confirm chips wrap onto multiple lines against the
+  panel width and the dock grows to fit (capped at 300px, then scrolls). First
+  measure before the panel is realized can under-report height (targetWidth 0 →
+  single row); a revalidate corrects it — confirm no lasting clip.
+- **Layout when the form grows**: a rich BOSS/SKILL edit (read-only header +
+  target + repeat block + ~15 chips) is the tallest surface; confirm the 300px
+  cap + internal scroll keeps the goal list usable and nothing is stranded.
+- **Auto-tracked staleness**: a field edit that flips completion (e.g. lowering
+  a target below current) updates the LIST card but not the mounted form's
+  checkbox until reselect — confirm this is acceptable or force a refresh.
+- Font scales 1.0 / 1.3 across all of the above.
+
+### Deferred glam (screenshot loop)
+- **Inline color field**: color stays a dialog chip; an inline swatch/preset
+  picker committing `api.setGoalColor` is the eventual FIELD form.
+- Additive-green vs act-on-gray chip accents (same deferral as the strip).
+- Read-only header styling (skill icon size, boss/metric label), the
+  SELECTED bar wording (currently just "SELECTED" — could carry the goal name).
+- Whether post-edit the form should also live-refresh structural chips without
+  a reselect.
+
 ## Select surface (ADR-0007): GOAL + MULTI actions migrated
 
 The dock's SELECT side now carries the full goal-selection and
