@@ -1896,6 +1896,7 @@ public class GoalPanel extends PluginPanel
 			case BOSS: return buildBossForm();
 			case QUEST: return buildQuestForm();
 			case DIARY: return buildDiaryForm();
+			case ITEM_GRIND: return buildItemForm();
 			// Any type not yet wired lands on a placeholder pointing at the
 			// existing right-click add dialogs (which stay until parity).
 			default: return buildPendingForm(type);
@@ -2203,6 +2204,148 @@ public class GoalPanel extends PluginPanel
 			navigateCreate(null);
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.DIARY, body, onAdd);
+	}
+
+	private JComponent buildItemForm()
+	{
+		JPanel body = formBody();
+
+		final int[] selectedId = { -1 };
+		JLabel selectedLabel = new JLabel("No item selected");
+		selectedLabel.setForeground(CREATE_FG_DIM);
+		selectedLabel.setFont(selectedLabel.getFont().deriveFont(10f));
+		selectedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		JPanel results = new JPanel();
+		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
+		results.setOpaque(false);
+		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		JTextField searchField = new JTextField(14);
+		styleField(searchField);
+
+		Runnable doSearch = () ->
+		{
+			String query = searchField.getText().trim();
+			results.removeAll();
+			selectedId[0] = -1;
+			selectedLabel.setText("No item selected");
+			if (!query.isEmpty() && itemManager != null)
+			{
+				try
+				{
+					// Same source the icon picker uses; cap the list so the dock
+					// stays compact (it scrolls past this cap anyway).
+					java.util.List<net.runelite.http.api.item.ItemPrice> found =
+						itemManager.search(query);
+					int max = Math.min(found.size(), 8);
+					for (int i = 0; i < max; i++)
+					{
+						net.runelite.http.api.item.ItemPrice it = found.get(i);
+						results.add(buildItemResultRow(it.getId(), it.getName(),
+							selectedId, selectedLabel, results));
+					}
+				}
+				catch (Exception ignored) { }
+			}
+			results.revalidate();
+			remeasureDock();
+		};
+		searchField.addActionListener(e -> doSearch.run());
+		JButton searchBtn = flatButton("Search", false);
+		searchBtn.addActionListener(e -> doSearch.run());
+
+		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
+		searchRow.setOpaque(false);
+		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			searchField.getPreferredSize().height));
+		searchRow.add(searchField, BorderLayout.CENTER);
+		searchRow.add(searchBtn, BorderLayout.EAST);
+
+		JLabel itemLabel = new JLabel("Item");
+		itemLabel.setForeground(CREATE_FG_DIM);
+		itemLabel.setFont(itemLabel.getFont().deriveFont(10f));
+		itemLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(itemLabel);
+		body.add(Box.createVerticalStrut(2));
+		body.add(searchRow);
+		body.add(Box.createVerticalStrut(4));
+		body.add(results);
+		body.add(Box.createVerticalStrut(4));
+		body.add(selectedLabel);
+		body.add(Box.createVerticalStrut(6));
+
+		JTextField qtyField = new JTextField(8);
+		styleField(qtyField);
+		addFormRow(body, "Quantity", qtyField);
+
+		Runnable onAdd = () ->
+		{
+			if (selectedId[0] <= 0)
+			{
+				warnCreate("Search for an item and pick one from the results.");
+				return;
+			}
+			int qty = parsePositiveInt(qtyField.getText());
+			if (qty <= 0)
+			{
+				warnCreate("Enter a quantity above zero.");
+				return;
+			}
+			api.addItemGoal(selectedId[0], qty);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd);
+	}
+
+	/** One tappable item search result: icon + name. Tapping selects it and
+	 *  re-highlights the row (the other rows in {@code results} reset). */
+	private JComponent buildItemResultRow(int itemId, String name, int[] selectedId,
+		JLabel selectedLabel, JPanel results)
+	{
+		JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setOpaque(true);
+		row.setBackground(CREATE_TILE_BG);
+		row.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
+			new EmptyBorder(2, 4, 2, 4)));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+		JLabel icon = new JLabel();
+		try { itemManager.getImage(itemId).addTo(icon); }
+		catch (Exception ignored) { }
+		row.add(icon, BorderLayout.WEST);
+
+		JLabel nm = new JLabel(name);
+		nm.setForeground(CREATE_FG);
+		nm.setFont(nm.getFont().deriveFont(11f));
+		row.add(nm, BorderLayout.CENTER);
+
+		row.addMouseListener(new MouseAdapter()
+		{
+			@Override public void mouseClicked(MouseEvent e)
+			{
+				selectedId[0] = itemId;
+				selectedLabel.setText("Selected: " + name);
+				for (Component c : results.getComponents())
+				{
+					boolean sel = c == row;
+					c.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+					if (c instanceof JComponent)
+					{
+						((JComponent) c).setBorder(BorderFactory.createCompoundBorder(
+							BorderFactory.createLineBorder(
+								sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
+							new EmptyBorder(2, 4, 2, 4)));
+					}
+				}
+				results.repaint();
+			}
+		});
+		return row;
 	}
 
 	/** "EASY" -> "Easy". Small helper for enum-name rendering in the create forms. */
