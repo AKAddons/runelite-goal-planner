@@ -538,7 +538,15 @@ class GoalMutationService
 				g.getId(), g.getTargetValue());
 		}
 
-		if (g.getCurrentValue() == newValue && !justSized) return false;
+		// Also proceed when the completion state is STALE - complete but no
+		// longer meeting target, or (the reported bug) reopened yet still maxed.
+		// Otherwise reopening a 99/maxed auto-tracked goal never re-completes:
+		// its XP/KC never changes, so the tracker reads the same value, this
+		// guard no-ops, and completion is never re-evaluated. With the stale
+		// check, a genuinely-met reopen self-heals to complete next tick; a
+		// falsely-completed one (wrong-account recovery) stays open.
+		boolean stale = g.isComplete() != g.meetsTarget();
+		if (g.getCurrentValue() == newValue && !justSized && !stale) return false;
 
 		g.setCurrentValue(newValue);
 

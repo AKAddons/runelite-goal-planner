@@ -2735,6 +2735,41 @@ class GoalPlannerApiImplTest
 		}
 
 		@Test
+		@DisplayName("a reopened but still-maxed goal re-completes on the next unchanged tracker read")
+		void reopenedMaxedGoalSelfHeals()
+		{
+			// The reported bug: reopen a 99/maxed goal, its value never changes,
+			// so the tracker reads the SAME value - the no-op guard must not
+			// swallow it, or the goal stays incomplete forever.
+			Goal g = completed(GoalType.SKILL, "Maxed skill");
+			assertTrue(api.markGoalIncomplete(g.getId()));
+			assertFalse(g.isComplete(), "reopened");
+
+			// Tracker drain reports the unchanged, still-at-target value.
+			api.recordGoalProgress(g.getId(), 100);
+
+			assertTrue(g.isComplete(),
+				"a genuinely-met goal must re-complete even when the value did not change");
+		}
+
+		@Test
+		@DisplayName("a reopened goal that no longer meets target stays open on an unchanged read")
+		void reopenedUnmetGoalStaysOpen()
+		{
+			// Wrong-account recovery: the goal was falsely completed and the real
+			// value is below target. An unchanged read must NOT re-complete it.
+			Goal g = Goal.builder().type(GoalType.SKILL).name("Not really done")
+				.targetValue(100).currentValue(40)
+				.status(GoalStatus.COMPLETE).completedAt(1_000L).build();
+			store.addGoal(g);
+			assertTrue(api.markGoalIncomplete(g.getId()));
+
+			api.recordGoalProgress(g.getId(), 40);
+
+			assertFalse(g.isComplete(), "40 < 100 target - recovery must hold it open");
+		}
+
+		@Test
 		@DisplayName("reopening an already-open goal is a no-op")
 		void openGoalIsNoOp()
 		{
