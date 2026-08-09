@@ -61,6 +61,10 @@ public class GoalPanel extends PluginPanel
 	 *  goal's structure so the form re-renders to reflect them. */
 	private boolean dockEditMounted = false;
 	private String dockEditMountedGoalId = null;
+	/** Which edit-chip drill-in group is open (note 6), or null for the top-level
+	 *  Data/Relations/Actions group chips. Reset to null whenever a different goal
+	 *  mounts, so a new selection always starts at the top level. */
+	private EditGroup dockEditGroup = null;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1664,6 +1668,7 @@ public class GoalPanel extends PluginPanel
 		{
 			dockEditMounted = false;
 			dockEditMountedGoalId = null;
+			dockEditGroup = null;
 		}
 
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
@@ -1688,6 +1693,12 @@ public class GoalPanel extends PluginPanel
 					actionDock.setPeek("1 selected", false);
 					if (!dockEditMounted || !gid.equals(dockEditMountedGoalId))
 					{
+						// A genuinely different goal resets the chip drill-in to the
+						// top level; a same-goal re-render (refreshEditForm) keeps it.
+						if (!gid.equals(dockEditMountedGoalId))
+						{
+							dockEditGroup = null;
+						}
 						actionDock.setExpandedComponent(buildEditSurface(g));
 						dockEditMounted = true;
 						dockEditMountedGoalId = gid;
@@ -3940,14 +3951,33 @@ public class GoalPanel extends PluginPanel
 		// auto-tracked type completes off live data, so it gets a Reopen once done
 		// but no manual "Complete" while incomplete.
 		final boolean manual = g.getType() == GoalType.CUSTOM || g.getType() == GoalType.ITEM_GRIND;
+		// Absolute goals (QUEST/DIARY/COMBAT_ACHIEVEMENT) complete purely off game
+		// progress varbits - the user can never set completion by hand (note 4).
+		final boolean absolute = g.getType() == GoalType.QUEST
+			|| g.getType() == GoalType.DIARY
+			|| g.getType() == GoalType.COMBAT_ACHIEVEMENT;
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
 		inner.setOpaque(false);
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
-		// Complete / Reopen as a checkbox heading the form (ADR-0008). Toggling it
-		// changes the goal's structure, so force the form to re-render. Omitted for
-		// an auto-tracked goal that is not yet complete (no manual completion).
-		if (complete || manual)
+		// Complete / Reopen as a checkbox heading the form (ADR-0008).
+		if (absolute)
+		{
+			// An absolute goal ALWAYS shows the checkbox but greyed + disabled: it
+			// reflects game-tracked state and can never be toggled by hand (note 4).
+			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
+			done.setOpaque(false);
+			done.setForeground(CREATE_FG_DIM);
+			done.setFont(done.getFont().deriveFont(11f));
+			done.setSelected(complete);
+			done.setEnabled(false);
+			done.setToolTipText("Tracked by game progress - can't be set manually.");
+			inner.add(done, BorderLayout.NORTH);
+		}
+		// Toggling completion changes the goal's structure, so force the form to
+		// re-render. Omitted for an auto-tracked goal that is not yet complete (no
+		// manual completion).
+		else if (complete || manual)
 		{
 			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
 			done.setOpaque(false);
@@ -4295,28 +4325,46 @@ public class GoalPanel extends PluginPanel
 
 	// ----- edit-mode lifecycle action chips -----
 
-	/** The lifecycle + relations chips for the edit form. Each REUSES an existing
-	 *  dock* handler / dialog. Structural in-place edits force a form re-render;
-	 *  chips that change the selection or panel mode leave the refresh to the
-	 *  panel's own selection handling. */
+	/** The drill-in groups the edit chips tree into (note 6). */
+	private enum EditGroup { DATA, RELATIONS, ACTIONS }
+
+	/** The lifecycle + relations chips for the edit form, grouped into a drill-in
+	 *  tree (note 6): the top level shows an optional Make-repeatable chip, three
+	 *  group chips (Data / Relations / Actions), and Deselect. Tapping a group
+	 *  swaps the row for that group's member chips plus a "< Back". Membership and
+	 *  gating are unchanged from the old flat list; every chip REUSES its existing
+	 *  handler. Group navigation is held in {@link #dockEditGroup} and re-rendered
+	 *  via {@link #refreshEditForm()}. */
 	private JComponent buildEditChips(Goal g)
 	{
-		final String gid = g.getId();
-		final GoalType type = g.getType();
-		final boolean complete = g.isComplete();
-
 		JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
 		wrap.setOpaque(false);
 
-		if (!complete)
+		if (dockEditGroup == null)
 		{
-			wrap.add(chip(g.isOptional() ? "Required" : "Optional",
-				g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
-				() -> { api.setGoalOptional(gid, !g.isOptional()); refreshEditForm(); }));
+			buildEditChipsTop(g, wrap);
+			return wrap;
 		}
 
-		// Derive a repeatable slice off a plain grind (the inline repeat controls
-		// only edit a goal's own repeat state; deriving creates a NEW slice goal).
+		wrap.add(chip("< Back", "Back to groups",
+			() -> { dockEditGroup = null; refreshEditForm(); }));
+		switch (dockEditGroup)
+		{
+			case DATA:      buildDataChips(g, wrap); break;
+			case RELATIONS: buildRelationsChips(g, wrap); break;
+			case ACTIONS:   buildActionsChips(g, wrap); break;
+			default:        break;
+		}
+		return wrap;
+	}
+
+	/** Top level: [Make repeatable?] [Data] [Relations] [Actions] [Deselect]. */
+	private void buildEditChipsTop(Goal g, JPanel wrap)
+	{
+		final GoalType type = g.getType();
+
+		// Make repeatable stays prominent at the top level (note 5 re-points these
+		// handlers). A plain grind with no derived slice can spin one off.
 		if (g.getRepeatChunk() <= 0)
 		{
 			if (type == GoalType.SKILL && g.getSkillName() != null)
@@ -4332,9 +4380,29 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		wrap.add(chip("Data", "Optional, color, tags",
+			() -> { dockEditGroup = EditGroup.DATA; refreshEditForm(); }));
+		wrap.add(chip("Relations", "Requirements and dependents",
+			() -> { dockEditGroup = EditGroup.RELATIONS; refreshEditForm(); }));
+		wrap.add(chip("Actions", "Move, copy, share, remove",
+			() -> { dockEditGroup = EditGroup.ACTIONS; refreshEditForm(); }));
+		wrap.add(chip("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
+	}
+
+	/** Data group: optional/required, color, tags, restore defaults. */
+	private void buildDataChips(Goal g, JPanel wrap)
+	{
+		final String gid = g.getId();
+		final boolean complete = g.isComplete();
+
+		if (!complete)
+		{
+			wrap.add(chip(g.isOptional() ? "Required" : "Optional",
+				g.isOptional() ? "Mark this goal required" : "Mark this goal optional",
+				() -> { api.setGoalOptional(gid, !g.isOptional()); refreshEditForm(); }));
+		}
 		wrap.add(chip("Color", "Change this goal's color",
 			() -> dialogFactory.showGoalColorDialog(g)));
-
 		wrap.add(chip("Add tag", "Add a tag to this goal",
 			() -> { dockAddTag(g); refreshEditForm(); }));
 		java.util.List<Tag> removable = removableTagsFor(g);
@@ -4343,6 +4411,18 @@ public class GoalPanel extends PluginPanel
 			wrap.add(chip("Drop tags", "Remove tags from this goal",
 				() -> { dockRemoveTags(g, removable); refreshEditForm(); }));
 		}
+		if (api.isGoalOverridden(gid))
+		{
+			wrap.add(chip("Restore defaults", "Reset tags and color to their defaults",
+				() -> { api.bulkRestoreDefaults(java.util.Collections.singleton(gid)); refreshEditForm(); }));
+		}
+	}
+
+	/** Relations group: requires, required by, drop reqs/dependents, seed reqs. */
+	private void buildRelationsChips(Goal g, JPanel wrap)
+	{
+		final String gid = g.getId();
+		final boolean complete = g.isComplete();
 
 		if (!complete)
 		{
@@ -4361,22 +4441,23 @@ public class GoalPanel extends PluginPanel
 					() -> { dockRemoveDependents(g); refreshEditForm(); }));
 			}
 		}
-
 		if (goalHasSeedableReqs(g))
 		{
 			wrap.add(chip("Add reqs to section",
 				"Add this goal's requirements into its section", () -> dockSeedReqs(g)));
 		}
+	}
+
+	/** Actions group: move/copy to section, Loadout Lab, share codes, remove. */
+	private void buildActionsChips(Goal g, JPanel wrap)
+	{
+		final String gid = g.getId();
+		final GoalType type = g.getType();
 
 		wrap.add(chip("Move to section", "Move this goal to another section",
 			() -> dockMoveToSection(g)));
 		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
 			() -> dockDuplicateToSection(g)));
-		if (api.isGoalOverridden(gid))
-		{
-			wrap.add(chip("Restore defaults", "Reset tags and color to their defaults",
-				() -> { api.bulkRestoreDefaults(java.util.Collections.singleton(gid)); refreshEditForm(); }));
-		}
 
 		if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
 		{
@@ -4408,9 +4489,7 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
-		wrap.add(chip("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
 		wrap.add(chip("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
-		return wrap;
 	}
 
 	private JButton chip(String label, String tooltip, Runnable action)
