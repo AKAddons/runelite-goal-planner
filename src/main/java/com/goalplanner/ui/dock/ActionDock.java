@@ -4,6 +4,7 @@ import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GridLayout;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -80,6 +81,15 @@ public class ActionDock extends JPanel
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
 	private final JButton peekBar = new JButton();
+	// The NORTH header swaps between the single peek bar (selection states) and
+	// the two-button create row (nothing selected): Create Goal / Create Section.
+	private final JPanel peekHost = new JPanel(new BorderLayout());
+	private final JButton createGoalBtn = new JButton("Create Goal");
+	private final JButton createSectionBtn = new JButton("Create Section");
+	private final JPanel peekCreateRow = new JPanel(new GridLayout(1, 2, 1, 0));
+	private boolean createPeekMode = false;
+	private Runnable onCreateGoal = null;
+	private Runnable onCreateSection = null;
 	private boolean collapsed = true; // rest state is the one-line peek
 	private String peekText = "Add a goal";
 	private boolean peekAccent = true; // green when it is the create invitation
@@ -104,7 +114,10 @@ public class ActionDock extends JPanel
 		centerHost.add(content, BorderLayout.CENTER);
 
 		stylePeekBar();
-		add(peekBar, BorderLayout.NORTH);
+		buildCreatePeekRow();
+		peekHost.setOpaque(false);
+		peekHost.add(peekBar, BorderLayout.CENTER);
+		add(peekHost, BorderLayout.NORTH);
 		add(centerHost, BorderLayout.CENTER);
 		applyCollapsed();
 	}
@@ -118,6 +131,34 @@ public class ActionDock extends JPanel
 	{
 		this.peekText = text != null ? text : "";
 		this.peekAccent = accent;
+		if (createPeekMode)
+		{
+			// Leaving the create invitation: restore the single peek bar.
+			createPeekMode = false;
+			peekHost.removeAll();
+			peekHost.add(peekBar, BorderLayout.CENTER);
+		}
+		applyCollapsed();
+	}
+
+	/**
+	 * Put the create invitation in the header as two side-by-side buttons,
+	 * Create Goal and Create Section (ADR-0008), replacing the single "+ Add a
+	 * goal" bar. Create Goal toggles the create surface open (and runs
+	 * {@code onCreateGoal} when expanding, so the caller can reset the surface
+	 * to its type grid); Create Section runs {@code onCreateSection} directly -
+	 * it is a prompt, not a dock expansion.
+	 */
+	public void setCreatePeek(Runnable onCreateGoal, Runnable onCreateSection)
+	{
+		this.onCreateGoal = onCreateGoal;
+		this.onCreateSection = onCreateSection;
+		if (!createPeekMode)
+		{
+			createPeekMode = true;
+			peekHost.removeAll();
+			peekHost.add(peekCreateRow, BorderLayout.CENTER);
+		}
 		applyCollapsed();
 	}
 
@@ -276,6 +317,56 @@ public class ActionDock extends JPanel
 		});
 	}
 
+	private static final java.awt.Color PEEK_SECTION_BG = new java.awt.Color(0x1E, 0x26, 0x30);
+	private static final java.awt.Color PEEK_SECTION_FG = new java.awt.Color(0xAF, 0xC8, 0xE6);
+
+	private void buildCreatePeekRow()
+	{
+		peekCreateRow.setOpaque(false);
+		styleCreateButton(createGoalBtn, PEEK_CREATE_BG, PEEK_CREATE_FG);
+		styleCreateButton(createSectionBtn, PEEK_SECTION_BG, PEEK_SECTION_FG);
+		// Create Goal opens the create surface below (toggle), like the peek bar;
+		// on expand it runs onCreateGoal so the caller can reset to the grid.
+		createGoalBtn.addActionListener(e -> {
+			boolean expanding = collapsed;
+			collapsed = !collapsed;
+			if (expanding && onCreateGoal != null)
+			{
+				onCreateGoal.run();
+			}
+			applyCollapsed();
+		});
+		// Create Section is a direct action (a name prompt), not a dock expansion.
+		createSectionBtn.addActionListener(e -> {
+			if (onCreateSection != null)
+			{
+				onCreateSection.run();
+			}
+		});
+		peekCreateRow.add(createGoalBtn);
+		peekCreateRow.add(createSectionBtn);
+	}
+
+	private void styleCreateButton(JButton b, java.awt.Color bg, java.awt.Color fg)
+	{
+		b.setFocusPainted(false);
+		b.setBorderPainted(false);
+		b.setContentAreaFilled(true);
+		b.setOpaque(true);
+		b.setBackground(bg);
+		b.setForeground(fg);
+		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 12f));
+		b.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+		b.setPreferredSize(new Dimension(0, PEEK_H));
+		b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+		java.awt.Color hover = bg.brighter();
+		b.addMouseListener(new java.awt.event.MouseAdapter()
+		{
+			@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(hover); }
+			@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(bg); }
+		});
+	}
+
 	private void applyCollapsed()
 	{
 		centerHost.setVisible(!collapsed);
@@ -289,6 +380,16 @@ public class ActionDock extends JPanel
 			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
 		peekBar.setIconTextGap(8);
 		peekBar.setToolTipText(collapsed ? "Open" : "Close");
+		// In two-button create mode, the chevron rides Create Goal so its
+		// open/close direction stays truthful as the surface toggles.
+		createGoalBtn.setText("Create Goal");
+		createGoalBtn.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
+		createGoalBtn.setIcon(collapsed
+			? com.goalplanner.ui.ShapeIcons.upTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A))
+			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
+		createGoalBtn.setIconTextGap(6);
+		createGoalBtn.setToolTipText(collapsed ? "Open goal creation" : "Close");
+		createSectionBtn.setToolTipText("Create a new section");
 		revalidate();
 		repaint();
 	}

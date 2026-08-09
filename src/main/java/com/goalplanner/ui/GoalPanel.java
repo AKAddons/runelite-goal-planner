@@ -1714,7 +1714,17 @@ public class GoalPanel extends PluginPanel
 				// case returns early. Rebuild only when the mounted view no
 				// longer matches the requested navigation, so a half-filled form
 				// survives unrelated dock refreshes.
-				actionDock.setPeek("Add a goal", true);
+				// Create invitation = two header buttons (ADR-0008): Create Goal
+				// opens the type grid below; Create Section prompts for a name.
+				// Create Goal resets the surface to the grid when it expands.
+				actionDock.setCreatePeek(
+					() -> {
+						dockCreateType = null;
+						actionDock.setExpandedComponent(buildCreateSurface());
+						dockCreateMounted = true;
+						dockCreateMountedType = null;
+					},
+					this::dockCreateSection);
 				if (!dockCreateMounted || dockCreateMountedType != dockCreateType)
 				{
 					actionDock.setExpandedComponent(buildCreateSurface());
@@ -2885,12 +2895,21 @@ public class GoalPanel extends PluginPanel
 			grid.add(buildTypeTile(t));
 		}
 		inner.add(grid, BorderLayout.CENTER);
-		// "New Section" removed from here: it read as confusing nested under
-		// "Add a goal" and cost vertical space. Adding a goal is about goals;
-		// section creation belongs to a separate affordance (TODO: a prominent
-		// primary "Add a goal" knob + a subordinate section action - blocked on
-		// the token cap, see docs/action-dock-progress.md).
+		// "New Section" is no longer nested here: section creation is now its own
+		// Create Section button in the dock header, beside Create Goal (see
+		// #dockCreateSection). Adding a goal is about goals; the grid stays clean.
 		return surfaceShell("Create", true, inner);
+	}
+
+	/** Create Section button (dock header): prompt for a name and create an empty
+	 *  section. Fired directly from the header, so it does not expand the dock. */
+	private void dockCreateSection()
+	{
+		String input = JOptionPane.showInputDialog(this, "New section name:", "");
+		if (input != null && !input.trim().isEmpty())
+		{
+			api.createSection(input.trim());
+		}
 	}
 
 	/** Wrap a create/edit surface body in a shell headed by a FULL-WIDTH context
