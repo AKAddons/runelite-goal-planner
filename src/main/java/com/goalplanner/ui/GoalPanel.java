@@ -3916,30 +3916,42 @@ public class GoalPanel extends PluginPanel
 	private JComponent editFormScaffold(Goal g, JComponent body)
 	{
 		final String gid = g.getId();
+		final boolean complete = g.isComplete();
+		// Manual completion is CUSTOM/ITEM-only (mirrors buildGoalDock): an
+		// auto-tracked type completes off live data, so it gets a Reopen once done
+		// but no manual "Complete" while incomplete.
+		final boolean manual = g.getType() == GoalType.CUSTOM || g.getType() == GoalType.ITEM_GRIND;
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
 		inner.setOpaque(false);
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
-		// Complete / Reopen as a checkbox at the top (ADR-0008). Toggling it
-		// changes the goal's structure, so force the form to re-render.
-		JCheckBox done = new JCheckBox("Complete");
-		done.setOpaque(false);
-		done.setForeground(CREATE_FG);
-		done.setFont(done.getFont().deriveFont(11f));
-		done.setSelected(g.isComplete());
-		done.addActionListener(e ->
+		// Complete / Reopen as a checkbox heading the form (ADR-0008). Toggling it
+		// changes the goal's structure, so force the form to re-render. Omitted for
+		// an auto-tracked goal that is not yet complete (no manual completion).
+		if (complete || manual)
 		{
-			if (done.isSelected())
+			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
+			done.setOpaque(false);
+			done.setForeground(CREATE_FG);
+			done.setFont(done.getFont().deriveFont(11f));
+			done.setSelected(complete);
+			done.setToolTipText(complete
+				? "Mark incomplete and let tracking re-derive it"
+				: "Mark this goal complete");
+			done.addActionListener(e ->
 			{
-				api.markGoalComplete(gid);
-			}
-			else
-			{
-				api.markGoalIncomplete(gid);
-			}
-			refreshEditForm();
-		});
-		inner.add(done, BorderLayout.NORTH);
+				if (done.isSelected())
+				{
+					api.markGoalComplete(gid);
+				}
+				else
+				{
+					api.markGoalIncomplete(gid);
+				}
+				refreshEditForm();
+			});
+			inner.add(done, BorderLayout.NORTH);
+		}
 
 		inner.add(body, BorderLayout.CENTER);
 		inner.add(buildEditChips(g), BorderLayout.SOUTH);
@@ -4049,18 +4061,24 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildItemEditBody(Goal g)
 	{
 		final String gid = g.getId();
+		final boolean derived = g.getRepeatChunk() > 0;
 		JPanel body = formBody();
 
-		JTextField qtyField = new JTextField(8);
-		styleField(qtyField);
-		qtyField.setText(Integer.toString(g.getTargetValue()));
-		commitOnBlurOrEnter(qtyField, () ->
+		// A derived slice's amount is its per-period chunk (in the repeat block),
+		// not the raw target - so only a plain item grind edits its quantity here.
+		if (!derived)
 		{
-			int qty = parsePositiveInt(qtyField.getText());
-			if (qty <= 0) { qtyField.setText(Integer.toString(g.getTargetValue())); return; }
-			api.changeTarget(gid, qty);
-		});
-		addFormRow(body, "Quantity", qtyField);
+			JTextField qtyField = new JTextField(8);
+			styleField(qtyField);
+			qtyField.setText(Integer.toString(g.getTargetValue()));
+			commitOnBlurOrEnter(qtyField, () ->
+			{
+				int qty = parsePositiveInt(qtyField.getText());
+				if (qty <= 0) { qtyField.setText(Integer.toString(g.getTargetValue())); return; }
+				api.changeTarget(gid, qty);
+			});
+			addFormRow(body, "Quantity", qtyField);
+		}
 
 		addEditRepeatControls(body, g, "Amount each period");
 		return body;
