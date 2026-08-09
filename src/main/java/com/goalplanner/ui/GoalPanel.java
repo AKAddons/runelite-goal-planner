@@ -1897,6 +1897,7 @@ public class GoalPanel extends PluginPanel
 			case QUEST: return buildQuestForm();
 			case DIARY: return buildDiaryForm();
 			case ITEM_GRIND: return buildItemForm();
+			case COMBAT_ACHIEVEMENT: return buildCombatForm();
 			// Any type not yet wired lands on a placeholder pointing at the
 			// existing right-click add dialogs (which stay until parity).
 			default: return buildPendingForm(type);
@@ -2297,6 +2298,132 @@ public class GoalPanel extends PluginPanel
 			navigateCreate(null);
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd);
+	}
+
+	private JComponent buildCombatForm()
+	{
+		JPanel body = formBody();
+
+		final int[] selectedId = { -1 };
+		JLabel selectedLabel = new JLabel("No task selected");
+		selectedLabel.setForeground(CREATE_FG_DIM);
+		selectedLabel.setFont(selectedLabel.getFont().deriveFont(10f));
+		selectedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		JPanel results = new JPanel();
+		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
+		results.setOpaque(false);
+		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		JTextField searchField = new JTextField(14);
+		styleField(searchField);
+
+		Runnable doSearch = () ->
+		{
+			String query = searchField.getText().trim();
+			results.removeAll();
+			selectedId[0] = -1;
+			selectedLabel.setText("No task selected");
+			java.util.List<com.goalplanner.data.WikiCaRepository.CaInfo> found =
+				api.searchCombatAchievements(query, 8);
+			if (found.isEmpty() && !query.isEmpty())
+			{
+				JLabel none = new JLabel("No matches (task data still loading?)");
+				none.setForeground(CREATE_FG_DIM);
+				none.setFont(none.getFont().deriveFont(10f));
+				none.setAlignmentX(Component.LEFT_ALIGNMENT);
+				results.add(none);
+			}
+			for (com.goalplanner.data.WikiCaRepository.CaInfo ca : found)
+			{
+				String label = ca.name != null ? ca.name : ca.task;
+				String tip = ca.tier != null ? ca.tier + " - " + ca.task : ca.task;
+				results.add(buildPickRow(label, tip, ca.id, selectedId, selectedLabel, results));
+			}
+			results.revalidate();
+			remeasureDock();
+		};
+		searchField.addActionListener(e -> doSearch.run());
+		JButton searchBtn = flatButton("Search", false);
+		searchBtn.addActionListener(e -> doSearch.run());
+
+		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
+		searchRow.setOpaque(false);
+		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			searchField.getPreferredSize().height));
+		searchRow.add(searchField, BorderLayout.CENTER);
+		searchRow.add(searchBtn, BorderLayout.EAST);
+
+		JLabel taskLabel = new JLabel("Task");
+		taskLabel.setForeground(CREATE_FG_DIM);
+		taskLabel.setFont(taskLabel.getFont().deriveFont(10f));
+		taskLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(taskLabel);
+		body.add(Box.createVerticalStrut(2));
+		body.add(searchRow);
+		body.add(Box.createVerticalStrut(4));
+		body.add(results);
+		body.add(Box.createVerticalStrut(4));
+		body.add(selectedLabel);
+
+		Runnable onAdd = () ->
+		{
+			if (selectedId[0] <= 0)
+			{
+				warnCreate("Search for a combat task and pick one.");
+				return;
+			}
+			api.addCombatAchievementGoal(selectedId[0]);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.COMBAT_ACHIEVEMENT, body, onAdd);
+	}
+
+	/** A tappable text search-result row (label + tooltip) carrying an int id.
+	 *  Shared by the Combat picker; selecting writes {@code id} to
+	 *  {@code selectedId[0]} and re-highlights within {@code results}. */
+	private JComponent buildPickRow(String label, String tooltip, int id, int[] selectedId,
+		JLabel selectedLabel, JPanel results)
+	{
+		JPanel row = new JPanel(new BorderLayout());
+		row.setOpaque(true);
+		row.setBackground(CREATE_TILE_BG);
+		row.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
+			new EmptyBorder(3, 5, 3, 5)));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		row.setToolTipText(tooltip);
+
+		JLabel nm = new JLabel(label);
+		nm.setForeground(CREATE_FG);
+		nm.setFont(nm.getFont().deriveFont(11f));
+		row.add(nm, BorderLayout.CENTER);
+
+		row.addMouseListener(new MouseAdapter()
+		{
+			@Override public void mouseClicked(MouseEvent e)
+			{
+				selectedId[0] = id;
+				selectedLabel.setText("Selected: " + label);
+				for (Component c : results.getComponents())
+				{
+					boolean sel = c == row;
+					c.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+					if (c instanceof JComponent)
+					{
+						((JComponent) c).setBorder(BorderFactory.createCompoundBorder(
+							BorderFactory.createLineBorder(
+								sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
+							new EmptyBorder(3, 5, 3, 5)));
+					}
+				}
+				results.repaint();
+			}
+		});
+		return row;
 	}
 
 	/** One tappable item search result: icon + name. Tapping selects it and

@@ -124,6 +124,32 @@ public class WikiCaRepository
 		return byName.size();
 	}
 
+	/**
+	 * Case-insensitive substring search over CA name and task text, for the
+	 * create surface's Combat task picker. Returns up to {@code limit} matches
+	 * sorted by id (stable). Empty when the repository has not loaded yet.
+	 */
+	public java.util.List<CaInfo> search(String query, int limit)
+	{
+		java.util.List<CaInfo> out = new java.util.ArrayList<>();
+		if (query == null || query.trim().isEmpty())
+		{
+			return out;
+		}
+		String q = query.trim().toLowerCase(Locale.ROOT);
+		for (CaInfo info : byName.values())
+		{
+			String name = info.name != null ? info.name.toLowerCase(Locale.ROOT) : "";
+			String task = info.task != null ? info.task.toLowerCase(Locale.ROOT) : "";
+			if (name.contains(q) || task.contains(q))
+			{
+				out.add(info);
+			}
+		}
+		out.sort(java.util.Comparator.comparingInt(c -> c.id));
+		return out.size() > limit ? out.subList(0, limit) : out;
+	}
+
 	private void fetchFromWiki()
 	{
 		HttpUrl url = WIKI_API.newBuilder()

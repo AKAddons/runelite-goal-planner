@@ -207,6 +207,10 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 		return true;
 	}
 	@Override public String addCombatAchievementGoal(int caTaskId) { String id = creationService.addCombatAchievementGoal(caTaskId); selectAfterCreate(id); return id; }
+	/** Search loaded combat achievements by name/task for the create surface's
+	 *  Combat picker (WikiCaRepository is package-private; the dock reaches it
+	 *  through this accessor). Empty until the wiki data has loaded. */
+	public java.util.List<WikiCaRepository.CaInfo> searchCombatAchievements(String query, int limit) { return wikiCaRepository.search(query, limit); }
 	@Override public String addBossGoal(String bossName, int targetKills) { String id = creationService.addBossGoal(bossName, targetKills); selectAfterCreate(id); return id; }
 	@Override public String addAccountGoal(String metricName, int target) { String id = creationService.addAccountGoal(metricName, target); selectAfterCreate(id); return id; }
 	public String addCustomGoal(String name, String description) { return creationService.addCustomGoal(name, description); }
