@@ -1893,6 +1893,9 @@ public class GoalPanel extends PluginPanel
 			case SKILL: return buildSkillForm();
 			case ACCOUNT: return buildAccountForm();
 			case CUSTOM: return buildCustomForm();
+			case BOSS: return buildBossForm();
+			case QUEST: return buildQuestForm();
+			case DIARY: return buildDiaryForm();
 			// Any type not yet wired lands on a placeholder pointing at the
 			// existing right-click add dialogs (which stay until parity).
 			default: return buildPendingForm(type);
@@ -2085,6 +2088,129 @@ public class GoalPanel extends PluginPanel
 			navigateCreate(null);
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.CUSTOM, body, onAdd);
+	}
+
+	private JComponent buildBossForm()
+	{
+		JPanel body = formBody();
+
+		String[] bosses = com.goalplanner.data.BossKillData.getBossNames();
+		JComboBox<String> bossCombo = new JComboBox<>(bosses);
+		styleField(bossCombo);
+		addFormRow(body, "Boss", bossCombo);
+
+		JTextField kcField = new JTextField(8);
+		styleField(kcField);
+		addFormRow(body, "Target kill count", kcField);
+
+		// Boss goals support the same repeatable slice as skills; the derived
+		// activity is the selected boss (buildActivityChunk keys off its name).
+		RepeatControls repeat = addRepeatDisclosure(body, "Kills each period");
+
+		Runnable onAdd = () ->
+		{
+			String boss = (String) bossCombo.getSelectedItem();
+			if (boss == null) return;
+			int kc = parsePositiveInt(kcField.getText());
+			if (kc <= 0)
+			{
+				warnCreate("Enter a target kill count above zero.");
+				return;
+			}
+			if (repeat.isOn())
+			{
+				int chunk = repeat.amount();
+				if (chunk <= 0)
+				{
+					warnCreate("Enter how many kills to add each period.");
+					return;
+				}
+				// buildActivityChunk reads the live kill-count varp - client thread.
+				com.goalplanner.model.RepeatPeriod period = repeat.period();
+				runOnClientThread(() ->
+				{
+					api.beginCompound("Add repeatable boss goal");
+					try
+					{
+						String parentId = api.addBossGoal(boss, kc);
+						api.createDerivedRepeatGoal(parentId, period, chunk, boss);
+					}
+					finally
+					{
+						api.endCompound();
+					}
+				});
+			}
+			else
+			{
+				api.addBossGoal(boss, kc);
+			}
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd);
+	}
+
+	private JComponent buildQuestForm()
+	{
+		JPanel body = formBody();
+
+		net.runelite.api.Quest[] quests = net.runelite.api.Quest.values();
+		JComboBox<net.runelite.api.Quest> questCombo = new JComboBox<>(quests);
+		questCombo.setRenderer(textRenderer(v -> ((net.runelite.api.Quest) v).getName()));
+		styleField(questCombo);
+		addFormRow(body, "Quest", questCombo);
+
+		Runnable onAdd = () ->
+		{
+			net.runelite.api.Quest quest = (net.runelite.api.Quest) questCombo.getSelectedItem();
+			if (quest == null) return;
+			api.addQuestGoal(quest);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
+	}
+
+	/** Diary area display names, in AREA_KEYS order. Kept as the in-game journal
+	 *  names so they read right and normalize back to their tracking key
+	 *  (AchievementDiaryData.normalizeAreaKey special-cases Kourend/Western). */
+	private static final String[] DIARY_AREAS = {
+		"Ardougne", "Desert", "Falador", "Fremennik", "Kandarin", "Karamja",
+		"Kourend & Kebos", "Lumbridge & Draynor", "Morytania", "Varrock",
+		"Western Provinces", "Wilderness"
+	};
+
+	private JComponent buildDiaryForm()
+	{
+		JPanel body = formBody();
+
+		JComboBox<String> areaCombo = new JComboBox<>(DIARY_AREAS);
+		styleField(areaCombo);
+		addFormRow(body, "Area", areaCombo);
+
+		JComboBox<com.goalplanner.api.GoalPlannerApi.DiaryTier> tierCombo =
+			new JComboBox<>(com.goalplanner.api.GoalPlannerApi.DiaryTier.values());
+		tierCombo.setRenderer(textRenderer(v -> capitalize(((Enum<?>) v).name())));
+		styleField(tierCombo);
+		addFormRow(body, "Tier", tierCombo);
+
+		Runnable onAdd = () ->
+		{
+			String area = (String) areaCombo.getSelectedItem();
+			com.goalplanner.api.GoalPlannerApi.DiaryTier tier =
+				(com.goalplanner.api.GoalPlannerApi.DiaryTier) tierCombo.getSelectedItem();
+			if (area == null || tier == null) return;
+			api.addDiaryGoal(area, tier);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.DIARY, body, onAdd);
+	}
+
+	/** "EASY" -> "Easy". Small helper for enum-name rendering in the create forms. */
+	private static String capitalize(String s)
+	{
+		if (s == null || s.isEmpty()) return s;
+		return s.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
+			+ s.substring(1).toLowerCase(java.util.Locale.ROOT);
 	}
 
 	// ----- repeatable progressive-disclosure (ADR-0008) -----
