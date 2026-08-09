@@ -380,14 +380,8 @@ public class ActionDock extends JPanel
 			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
 		peekBar.setIconTextGap(8);
 		peekBar.setToolTipText(collapsed ? "Open" : "Close");
-		// In two-button create mode, the chevron rides Create Goal so its
-		// open/close direction stays truthful as the surface toggles.
-		createGoalBtn.setText("Create Goal");
-		createGoalBtn.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
-		createGoalBtn.setIcon(collapsed
-			? com.goalplanner.ui.ShapeIcons.upTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A))
-			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
-		createGoalBtn.setIconTextGap(6);
+		// Create Goal / Create Section are plain buttons (no chevron): they read as
+		// actions, not a peek toggle.
 		createGoalBtn.setToolTipText(collapsed ? "Open goal creation" : "Close");
 		createSectionBtn.setToolTipText("Create a new section");
 		revalidate();
