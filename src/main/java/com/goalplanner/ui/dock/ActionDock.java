@@ -336,12 +336,17 @@ public class ActionDock extends JPanel
 			}
 			applyCollapsed();
 		});
-		// Create Section is a direct action (a name prompt), not a dock expansion.
+		// Create Section opens the create surface below (toggle), like Create Goal;
+		// on expand it runs onCreateSection so the caller can mount the in-dock
+		// new-section form (note 2).
 		createSectionBtn.addActionListener(e -> {
-			if (onCreateSection != null)
+			boolean expanding = collapsed;
+			collapsed = !collapsed;
+			if (expanding && onCreateSection != null)
 			{
 				onCreateSection.run();
 			}
+			applyCollapsed();
 		});
 		peekCreateRow.add(createGoalBtn);
 		peekCreateRow.add(createSectionBtn);

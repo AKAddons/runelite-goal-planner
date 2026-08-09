@@ -43,16 +43,27 @@ public class GoalPanel extends PluginPanel
 	 *  right-click menus remain alive alongside it until parity is verified. */
 	private final com.goalplanner.ui.dock.ActionDock actionDock =
 		new com.goalplanner.ui.dock.ActionDock();
+	/** The create sub-views the dock navigates between (ADR-0008, notes 2 + 3). */
+	private enum CreateNav { GRID, FORM, SECTION_NEW, SECTION_PICK }
 	/** Create-surface navigation (ADR-0008), read by {@link #refreshDock()}.
-	 *  Null = show the 8-tile type grid; a type = show that type's create form.
-	 *  Orthogonal to the selection-driven {@code DockContext}, so it lives here
-	 *  rather than in the pure state resolver. Reset whenever a selection
-	 *  exists (the dock leaves the create surface for the action strips). */
+	 *  GRID = the 8-tile type grid; FORM = {@link #dockCreateType}'s create form;
+	 *  SECTION_NEW = the in-dock new-section form (note 2); SECTION_PICK = the
+	 *  landing-section chooser for a pending goal create (note 3). Orthogonal to
+	 *  the selection-driven {@code DockContext}, so it lives here rather than in
+	 *  the pure state resolver. Reset whenever a selection exists (the dock leaves
+	 *  the create surface for the action strips). */
+	private CreateNav dockCreateNav = CreateNav.GRID;
+	/** Which type's form to show when {@link #dockCreateNav} is FORM. */
 	private com.goalplanner.model.GoalType dockCreateType = null;
-	/** Whether the create surface is currently mounted in the dock, and for
-	 *  which type - lets {@link #refreshDock()} skip rebuilding it on unrelated
+	/** A validated goal-create awaiting its landing section (note 3): the consumer
+	 *  performs the actual create + move once the user picks a sectionId in the
+	 *  SECTION_PICK sub-view. Cleared once run or when navigation leaves the flow. */
+	private java.util.function.Consumer<String> dockPendingCreate = null;
+	/** Whether the create surface is currently mounted in the dock, and for which
+	 *  nav/type - lets {@link #refreshDock()} skip rebuilding it on unrelated
 	 *  refreshes so in-progress form input is not wiped. */
 	private boolean dockCreateMounted = false;
+	private CreateNav dockCreateMountedNav = null;
 	private com.goalplanner.model.GoalType dockCreateMountedType = null;
 	/** Whether the unified EDIT form (ADR-0008) is currently mounted in the dock,
 	 *  and for which goal - lets {@link #refreshDock()} skip rebuilding it while
@@ -1658,8 +1669,11 @@ public class GoalPanel extends PluginPanel
 		// the type grid, and forget the mounted create view.
 		if (ctx.getState() != com.goalplanner.ui.dock.DockContext.State.EMPTY)
 		{
+			dockCreateNav = CreateNav.GRID;
 			dockCreateType = null;
+			dockPendingCreate = null;
 			dockCreateMounted = false;
+			dockCreateMountedNav = null;
 			dockCreateMountedType = null;
 		}
 		// Anything but a single-goal selection drops the mounted EDIT form, so a
@@ -1730,17 +1744,24 @@ public class GoalPanel extends PluginPanel
 				// Create Goal resets the surface to the grid when it expands.
 				actionDock.setCreatePeek(
 					() -> {
+						dockCreateNav = CreateNav.GRID;
 						dockCreateType = null;
-						actionDock.setExpandedComponent(buildCreateSurface());
-						dockCreateMounted = true;
-						dockCreateMountedType = null;
+						dockPendingCreate = null;
+						mountCreateSurface();
 					},
-					this::dockCreateSection);
-				if (!dockCreateMounted || dockCreateMountedType != dockCreateType)
+					// Create Section expands the dock into the in-dock new-section
+					// form (note 2), mirroring Create Goal rather than prompting.
+					() -> {
+						dockCreateNav = CreateNav.SECTION_NEW;
+						dockCreateType = null;
+						dockPendingCreate = null;
+						mountCreateSurface();
+					});
+				if (!dockCreateMounted
+					|| dockCreateMountedNav != dockCreateNav
+					|| dockCreateMountedType != dockCreateType)
 				{
-					actionDock.setExpandedComponent(buildCreateSurface());
-					dockCreateMounted = true;
-					dockCreateMountedType = dockCreateType;
+					mountCreateSurface();
 				}
 				return;
 			}
@@ -2871,20 +2892,47 @@ public class GoalPanel extends PluginPanel
 			.filter(s -> s != net.runelite.api.Skill.OVERALL)
 			.toArray(net.runelite.api.Skill[]::new);
 
-	/** Build the surface for the current create navigation: the type grid when
-	 *  no type is chosen, otherwise that type's form. */
+	/** Build the surface for the current create navigation (note 2 + 3). */
 	private JComponent buildCreateSurface()
 	{
-		return dockCreateType == null
-			? buildCreateGrid()
-			: buildCreateForm(dockCreateType);
+		switch (dockCreateNav)
+		{
+			case FORM:         return buildCreateForm(dockCreateType);
+			case SECTION_NEW:  return buildSectionNewForm();
+			case SECTION_PICK: return buildSectionPickForm();
+			case GRID:
+			default:           return buildCreateGrid();
+		}
 	}
 
-	/** Set the create navigation and re-render the dock. {@code null} returns to
-	 *  the type grid (used by Back and after a successful create). */
+	/** Mount the current create surface into the dock and record what was mounted,
+	 *  so the guard in {@link #refreshDock()} can skip needless rebuilds. */
+	private void mountCreateSurface()
+	{
+		actionDock.setExpandedComponent(buildCreateSurface());
+		dockCreateMounted = true;
+		dockCreateMountedNav = dockCreateNav;
+		dockCreateMountedType = dockCreateType;
+	}
+
+	/** Set the create navigation to a type form ({@code null} returns to the type
+	 *  grid - used by Back and after a successful create) and re-render the dock. */
 	private void navigateCreate(com.goalplanner.model.GoalType type)
 	{
 		dockCreateType = type;
+		dockCreateNav = type == null ? CreateNav.GRID : CreateNav.FORM;
+		if (type == null)
+		{
+			dockPendingCreate = null;
+		}
+		refreshDock();
+	}
+
+	/** Set the create navigation to a non-form sub-view (grid / section new /
+	 *  section pick) and re-render the dock. */
+	private void navigateCreateNav(CreateNav nav)
+	{
+		dockCreateNav = nav;
 		refreshDock();
 	}
 
@@ -2907,20 +2955,224 @@ public class GoalPanel extends PluginPanel
 		}
 		inner.add(grid, BorderLayout.CENTER);
 		// "New Section" is no longer nested here: section creation is now its own
-		// Create Section button in the dock header, beside Create Goal (see
-		// #dockCreateSection). Adding a goal is about goals; the grid stays clean.
+		// Create Section button in the dock header, beside Create Goal, which
+		// mounts the in-dock new-section form (buildSectionNewForm). Adding a goal
+		// is about goals; the grid stays clean.
 		return surfaceShell("Create", true, inner);
 	}
 
-	/** Create Section button (dock header): prompt for a name and create an empty
-	 *  section. Fired directly from the header, so it does not expand the dock. */
-	private void dockCreateSection()
+	/** The in-dock new-section form (note 2): a name field (autofocus) + a primary
+	 *  "Create section" button, wrapped in the same CREATE shell as the goal
+	 *  forms. Enter or the button commits {@link com.goalplanner.api.GoalPlannerApiImpl#createSection}
+	 *  (blank ignored), then returns to the type grid. */
+	private JComponent buildSectionNewForm()
 	{
-		String input = JOptionPane.showInputDialog(this, "New section name:", "");
-		if (input != null && !input.trim().isEmpty())
+		JPanel body = formBody();
+
+		JTextField nameField = new JTextField(16);
+		styleField(nameField);
+		addFormRow(body, "New section name", nameField);
+		autofocus(nameField);
+
+		Runnable commit = () ->
 		{
-			api.createSection(input.trim());
+			String name = nameField.getText().trim();
+			if (name.isEmpty())
+			{
+				return;
+			}
+			api.createSection(name);
+			navigateCreate(null);
+		};
+		nameField.addActionListener(e -> commit.run());
+
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel header = new JPanel(new BorderLayout(6, 0));
+		header.setOpaque(false);
+		JButton back = flatButton("Back", false);
+		back.addActionListener(e -> navigateCreate(null));
+		JLabel title = new JLabel("New section");
+		title.setForeground(CREATE_FG);
+		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
+		header.add(back, BorderLayout.WEST);
+		header.add(title, BorderLayout.CENTER);
+		inner.add(header, BorderLayout.NORTH);
+
+		inner.add(body, BorderLayout.CENTER);
+
+		JButton create = flatButton("Create section", true);
+		create.addActionListener(e -> commit.run());
+		JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		footer.setOpaque(false);
+		footer.add(create);
+		inner.add(footer, BorderLayout.SOUTH);
+
+		return surfaceShell("Create", true, inner);
+	}
+
+	/** Request focus for a field once its window is realized (a field mounted into
+	 *  the dock is not focusable until it is shown). */
+	private static void autofocus(JComponent field)
+	{
+		javax.swing.SwingUtilities.invokeLater(field::requestFocusInWindow);
+	}
+
+	/** Stash a validated goal-create and navigate to the landing-section chooser
+	 *  (note 3). The consumer runs once the user picks a section. */
+	private void goToSectionPick(java.util.function.Consumer<String> pending)
+	{
+		dockPendingCreate = pending;
+		navigateCreateNav(CreateNav.SECTION_PICK);
+	}
+
+	/** Run the pending goal-create against the chosen section, then return to the
+	 *  type grid (note 3). */
+	private void chooseSection(String sectionId)
+	{
+		java.util.function.Consumer<String> pending = dockPendingCreate;
+		dockPendingCreate = null;
+		if (pending != null)
+		{
+			pending.accept(sectionId);
 		}
+		navigateCreate(null);
+	}
+
+	/** The landing-section chooser (note 3): the pending goal-create's target. The
+	 *  default Incomplete section is offered first (preselected/highlighted), then
+	 *  every user section, then a "+ New section" option that reveals an inline
+	 *  name field (note 2's field UI) creating-and-selecting in one go. A "< Back"
+	 *  abandons the pending create and returns to the type grid (form field values
+	 *  are NOT preserved across Back - forward flow is the norm; known limitation). */
+	private JComponent buildSectionPickForm()
+	{
+		JPanel body = formBody();
+
+		JLabel prompt = new JLabel("Choose a section for this goal");
+		prompt.setForeground(CREATE_FG_DIM);
+		prompt.setFont(prompt.getFont().deriveFont(10f));
+		prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(prompt);
+		body.add(Box.createVerticalStrut(4));
+
+		String incompleteId = null;
+		java.util.List<com.goalplanner.api.SectionView> userSections = new ArrayList<>();
+		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
+		{
+			if ("INCOMPLETE".equals(sv.kind))
+			{
+				incompleteId = sv.id;
+			}
+			else if (!sv.builtIn)
+			{
+				userSections.add(sv);
+			}
+		}
+
+		// Default: the built-in Incomplete section, offered first + highlighted.
+		if (incompleteId != null)
+		{
+			final String defId = incompleteId;
+			body.add(sectionPickRow("Incomplete (default)", true, () -> chooseSection(defId)));
+			body.add(Box.createVerticalStrut(3));
+		}
+		for (com.goalplanner.api.SectionView sv : userSections)
+		{
+			final String destId = sv.id;
+			body.add(sectionPickRow(sv.name, false, () -> chooseSection(destId)));
+			body.add(Box.createVerticalStrut(3));
+		}
+
+		// "+ New section": reveals an inline name field creating-and-selecting.
+		final JTextField newName = new JTextField(16);
+		styleField(newName);
+		final JPanel newRow = new JPanel(new BorderLayout(4, 0));
+		newRow.setOpaque(false);
+		newRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		newRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, newName.getPreferredSize().height));
+		newRow.setVisible(false);
+		Runnable createUse = () ->
+		{
+			String name = newName.getText().trim();
+			if (name.isEmpty())
+			{
+				return;
+			}
+			String newId = api.createSection(name);
+			if (newId != null)
+			{
+				chooseSection(newId);
+			}
+		};
+		newName.addActionListener(e -> createUse.run());
+		JButton createUseBtn = flatButton("Create & use", true);
+		createUseBtn.addActionListener(e -> createUse.run());
+		newRow.add(newName, BorderLayout.CENTER);
+		newRow.add(createUseBtn, BorderLayout.EAST);
+
+		JButton newSection = flatButton("+ New section", false);
+		newSection.setAlignmentX(Component.LEFT_ALIGNMENT);
+		newSection.addActionListener(e ->
+		{
+			newRow.setVisible(!newRow.isVisible());
+			if (newRow.isVisible())
+			{
+				autofocus(newName);
+			}
+			remeasureDock();
+		});
+		body.add(Box.createVerticalStrut(2));
+		body.add(newSection);
+		body.add(Box.createVerticalStrut(3));
+		body.add(newRow);
+
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel header = new JPanel(new BorderLayout(6, 0));
+		header.setOpaque(false);
+		JButton back = flatButton("< Back", false);
+		back.setToolTipText("Back to the goal types (this goal is not created yet)");
+		back.addActionListener(e -> navigateCreate(null));
+		JLabel title = new JLabel("Choose section");
+		title.setForeground(CREATE_FG);
+		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
+		header.add(back, BorderLayout.WEST);
+		header.add(title, BorderLayout.CENTER);
+		inner.add(header, BorderLayout.NORTH);
+		inner.add(body, BorderLayout.CENTER);
+
+		return surfaceShell("Create", true, inner);
+	}
+
+	/** A tappable section row for the landing-section chooser; the default row is
+	 *  highlighted (green border) to mark the preselected choice. */
+	private JComponent sectionPickRow(String label, boolean isDefault, Runnable onPick)
+	{
+		JPanel row = new JPanel(new BorderLayout());
+		row.setOpaque(true);
+		row.setBackground(isDefault ? CREATE_SEL_BG : CREATE_TILE_BG);
+		row.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(isDefault ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
+			new EmptyBorder(4, 6, 4, 6)));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+
+		JLabel nm = new JLabel(label);
+		nm.setForeground(CREATE_FG);
+		nm.setFont(nm.getFont().deriveFont(11f));
+		row.add(nm, BorderLayout.CENTER);
+
+		row.addMouseListener(new MouseAdapter()
+		{
+			@Override public void mouseClicked(MouseEvent e) { onPick.run(); }
+		});
+		return row;
 	}
 
 	/** Wrap a create/edit surface body in a shell headed by a FULL-WIDTH context
