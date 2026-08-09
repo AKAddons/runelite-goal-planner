@@ -1953,16 +1953,23 @@ public class GoalPanel extends PluginPanel
 					warnCreate("Enter how much XP to gain each period.");
 					return;
 				}
-				api.beginCompound("Add repeatable skill goal");
-				try
+				// createDerivedRepeatGoal reads live XP, a client-thread op (an EDT
+				// read asserts under -ea and silently returns null); run the whole
+				// compound there so parent + slice land as one undo.
+				com.goalplanner.model.RepeatPeriod period = repeat.period();
+				runOnClientThread(() ->
 				{
-					String parentId = api.addSkillGoal(skill, xp);
-					api.createDerivedRepeatGoal(parentId, repeat.period(), chunk, null);
-				}
-				finally
-				{
-					api.endCompound();
-				}
+					api.beginCompound("Add repeatable skill goal");
+					try
+					{
+						String parentId = api.addSkillGoal(skill, xp);
+						api.createDerivedRepeatGoal(parentId, period, chunk, null);
+					}
+					finally
+					{
+						api.endCompound();
+					}
+				});
 			}
 			else
 			{
