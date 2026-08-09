@@ -3292,49 +3292,57 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			net.runelite.api.Skill skill = picked[0];
+			final net.runelite.api.Skill skill = picked[0];
 			if (skill == null)
 			{
 				warnCreate("Pick a skill first.");
 				return;
 			}
-			int xp = target.getTargetXp();
+			final int xp = target.getTargetXp();
 			if (xp <= 0)
 			{
 				warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
 				return;
 			}
-			if (repeat.isOn())
+			final boolean repeatOn = repeat.isOn();
+			final int chunk = repeatOn ? repeat.amount() : 0;
+			if (repeatOn && chunk <= 0)
 			{
-				int chunk = repeat.amount();
-				if (chunk <= 0)
+				warnCreate("Enter how much XP to gain each period.");
+				return;
+			}
+			final com.goalplanner.model.RepeatPeriod period = repeat.period();
+			// Validated: stash the create as a pending consumer and go choose the
+			// landing section (note 3). The parent lands in the chosen section; the
+			// derived slice still auto-lands in Repeatable.
+			goToSectionPick(sectionId ->
+			{
+				if (repeatOn)
 				{
-					warnCreate("Enter how much XP to gain each period.");
-					return;
+					// createDerivedRepeatGoal reads live XP, a client-thread op (an
+					// EDT read asserts under -ea and silently returns null); run the
+					// whole compound there so parent + slice land as one undo.
+					runOnClientThread(() ->
+					{
+						api.beginCompound("Add repeatable skill goal");
+						try
+						{
+							String parentId = api.addSkillGoal(skill, xp);
+							api.moveGoalToSection(parentId, sectionId);
+							api.createDerivedRepeatGoal(parentId, period, chunk, null);
+						}
+						finally
+						{
+							api.endCompound();
+						}
+					});
 				}
-				// createDerivedRepeatGoal reads live XP, a client-thread op (an EDT
-				// read asserts under -ea and silently returns null); run the whole
-				// compound there so parent + slice land as one undo.
-				com.goalplanner.model.RepeatPeriod period = repeat.period();
-				runOnClientThread(() ->
+				else
 				{
-					api.beginCompound("Add repeatable skill goal");
-					try
-					{
-						String parentId = api.addSkillGoal(skill, xp);
-						api.createDerivedRepeatGoal(parentId, period, chunk, null);
-					}
-					finally
-					{
-						api.endCompound();
-					}
-				});
-			}
-			else
-			{
-				api.addSkillGoal(skill, xp);
-			}
-			navigateCreate(null);
+					String id = api.addSkillGoal(skill, xp);
+					api.moveGoalToSection(id, sectionId);
+				}
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd);
 	}
@@ -3405,17 +3413,20 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			com.goalplanner.model.AccountMetric metric =
+			final com.goalplanner.model.AccountMetric metric =
 				(com.goalplanner.model.AccountMetric) metricCombo.getSelectedItem();
 			if (metric == null) return;
-			int target = parsePositiveInt(targetField.getText());
+			final int target = parsePositiveInt(targetField.getText());
 			if (target <= 0)
 			{
 				warnCreate("Enter a numeric target above zero.");
 				return;
 			}
-			api.addAccountGoal(metric.name(), target);
-			navigateCreate(null);
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addAccountGoal(metric.name(), target);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.ACCOUNT, body, onAdd);
 	}
@@ -3434,14 +3445,18 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			String name = nameField.getText().trim();
+			final String name = nameField.getText().trim();
 			if (name.isEmpty())
 			{
 				warnCreate("Enter a name for the goal.");
 				return;
 			}
-			api.addCustomGoal(name, descField.getText().trim());
-			navigateCreate(null);
+			final String desc = descField.getText().trim();
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addCustomGoal(name, desc);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.CUSTOM, body, onAdd);
 	}
@@ -3465,43 +3480,48 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			String boss = (String) bossCombo.getSelectedItem();
+			final String boss = (String) bossCombo.getSelectedItem();
 			if (boss == null) return;
-			int kc = parsePositiveInt(kcField.getText());
+			final int kc = parsePositiveInt(kcField.getText());
 			if (kc <= 0)
 			{
 				warnCreate("Enter a target kill count above zero.");
 				return;
 			}
-			if (repeat.isOn())
+			final boolean repeatOn = repeat.isOn();
+			final int chunk = repeatOn ? repeat.amount() : 0;
+			if (repeatOn && chunk <= 0)
 			{
-				int chunk = repeat.amount();
-				if (chunk <= 0)
+				warnCreate("Enter how many kills to add each period.");
+				return;
+			}
+			final com.goalplanner.model.RepeatPeriod period = repeat.period();
+			goToSectionPick(sectionId ->
+			{
+				if (repeatOn)
 				{
-					warnCreate("Enter how many kills to add each period.");
-					return;
+					// buildActivityChunk reads the live kill-count varp - client thread.
+					runOnClientThread(() ->
+					{
+						api.beginCompound("Add repeatable boss goal");
+						try
+						{
+							String parentId = api.addBossGoal(boss, kc);
+							api.moveGoalToSection(parentId, sectionId);
+							api.createDerivedRepeatGoal(parentId, period, chunk, boss);
+						}
+						finally
+						{
+							api.endCompound();
+						}
+					});
 				}
-				// buildActivityChunk reads the live kill-count varp - client thread.
-				com.goalplanner.model.RepeatPeriod period = repeat.period();
-				runOnClientThread(() ->
+				else
 				{
-					api.beginCompound("Add repeatable boss goal");
-					try
-					{
-						String parentId = api.addBossGoal(boss, kc);
-						api.createDerivedRepeatGoal(parentId, period, chunk, boss);
-					}
-					finally
-					{
-						api.endCompound();
-					}
-				});
-			}
-			else
-			{
-				api.addBossGoal(boss, kc);
-			}
-			navigateCreate(null);
+					String id = api.addBossGoal(boss, kc);
+					api.moveGoalToSection(id, sectionId);
+				}
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd);
 	}
@@ -3518,10 +3538,13 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			net.runelite.api.Quest quest = (net.runelite.api.Quest) questCombo.getSelectedItem();
+			final net.runelite.api.Quest quest = (net.runelite.api.Quest) questCombo.getSelectedItem();
 			if (quest == null) return;
-			api.addQuestGoal(quest);
-			navigateCreate(null);
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addQuestGoal(quest);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
 	}
@@ -3551,12 +3574,15 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			String area = (String) areaCombo.getSelectedItem();
-			com.goalplanner.api.GoalPlannerApi.DiaryTier tier =
+			final String area = (String) areaCombo.getSelectedItem();
+			final com.goalplanner.api.GoalPlannerApi.DiaryTier tier =
 				(com.goalplanner.api.GoalPlannerApi.DiaryTier) tierCombo.getSelectedItem();
 			if (area == null || tier == null) return;
-			api.addDiaryGoal(area, tier);
-			navigateCreate(null);
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addDiaryGoal(area, tier);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.DIARY, body, onAdd);
 	}
@@ -3642,14 +3668,18 @@ public class GoalPanel extends PluginPanel
 				warnCreate("Search for an item and pick one from the results.");
 				return;
 			}
-			int qty = parsePositiveInt(qtyField.getText());
+			final int itemId = selectedId[0];
+			final int qty = parsePositiveInt(qtyField.getText());
 			if (qty <= 0)
 			{
 				warnCreate("Enter a quantity above zero.");
 				return;
 			}
-			api.addItemGoal(selectedId[0], qty);
-			navigateCreate(null);
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addItemGoal(itemId, qty);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd);
 	}
@@ -3728,8 +3758,12 @@ public class GoalPanel extends PluginPanel
 				warnCreate("Search for a combat task and pick one.");
 				return;
 			}
-			api.addCombatAchievementGoal(selectedId[0]);
-			navigateCreate(null);
+			final int caId = selectedId[0];
+			goToSectionPick(sectionId ->
+			{
+				String id = api.addCombatAchievementGoal(caId);
+				api.moveGoalToSection(id, sectionId);
+			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.COMBAT_ACHIEVEMENT, body, onAdd);
 	}
@@ -4020,7 +4054,9 @@ public class GoalPanel extends PluginPanel
 
 		if (onAdd != null)
 		{
-			JButton add = flatButton("Add goal", true);
+			// The primary button no longer creates directly (note 3): it validates
+			// and advances to the landing-section chooser, which performs the create.
+			JButton add = flatButton("Next: choose section", true);
 			add.addActionListener(e -> onAdd.run());
 			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
 			footer.setOpaque(false);
