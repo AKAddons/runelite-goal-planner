@@ -30,76 +30,119 @@ All create-surface assembly lives in `GoalPanel`, reached only from
   nav, so a half-filled form survives unrelated dock refreshes.
 - **EMPTY state now renders the create surface** instead of the old lone
   "Add Section" strip. The type **GRID** shows all 8 tiles (Skill, Quest,
-  Diary, Combat, Boss, Item, Account, Custom) plus a "New Section" footer that
-  preserves the skeleton's one panel action. Each tile carries a colored top
-  rule for type identity and navigates the dock (no dialog, list never moves).
-- A **Back** control on every form returns to the grid; a successful create
-  also returns to the grid (`navigateCreate(null)`), and since creating does
-  not select the new goal, the dock stays in EMPTY/grid so the user can add
-  another.
+  Diary, Combat, Boss, Item, Account, Custom). "New Section" was removed from
+  the grid (it read as confusing nested under "Add a goal"); sections keep
+  their own creation path. Each tile carries a colored top rule for type
+  identity and navigates the dock (no dialog, list never moves).
+- A **Back** control on every form returns to the grid. On a successful create,
+  `navigateCreate(null)` resets the create-nav to the grid; note that
+  `selectAfterCreate` then selects the new goal, so the dock refreshes into that
+  goal's GOAL-state action strip (see the post-create note in the deferred
+  section).
 
-### 3. Skill create form (`buildSkillForm`) — the one wired form
-Skill picker (all skills, name-rendered) + the shared `SkillTargetForm`
-(synced Level/XP) + **Add goal**. On Add it validates the XP (1..200M) and
-calls `api.addSkillGoal(skill, xp)`. This is the priority-2 deliverable in its
-**core** form.
+### 3. Every create form is now wired (`GoalPanel.build*Form`)
+All eight type tiles route to a real, wired form (no placeholders left in the
+reachable path). Each form validates and calls the existing API; the dock
+returns toward the grid via `navigateCreate(null)` on success (selection then
+moves to the just-created goal, so the dock shows that goal's actions — the
+existing `selectAfterCreate` behavior).
 
-## What is NOT built (and exactly why)
+- **Skill** (`buildSkillForm`) — a GRID of `SkillIconManager` icon buttons
+  (all trainable skills, `Skill.values()` minus OVERALL, ~3 rows of 8; tap to
+  select + highlight) replacing the old dropdown, per live feedback. Then the
+  shared `SkillTargetForm` (synced Level/XP). `api.addSkillGoal(skill, xp)`.
+- **Repeatable disclosure** (`addRepeatDisclosure` + `buildPeriodPills` +
+  `RepeatControls`) on Skill and Boss — a "More options" row reveals a
+  Repeatable toggle; when on, Daily/Weekly/Monthly pills + a per-period amount
+  appear and the note says it lands in the Repeatable section. Add then creates
+  the long-term goal AND derives a per-period slice via
+  `api.createDerivedRepeatGoal(parentId, period, chunk, activityName)`, wrapped
+  in a `beginCompound/endCompound` for one undo, run through
+  `runOnClientThread` (the derive reads live XP/varp, which asserts on the EDT
+  under `-ea` and returns null — this is why the menu path also uses the client
+  thread). Skill passes `activityName=null`; Boss passes the boss name.
+- **Account** (`buildAccountForm`) — metric combo (leagues metrics filtered out
+  off a leagues profile, matching the dialog) + target → `api.addAccountGoal`.
+- **Custom** (`buildCustomForm`) — name + optional description →
+  `api.addCustomGoal`.
+- **Boss** (`buildBossForm`) — `BossKillData.getBossNames()` combo + target KC
+  → `api.addBossGoal`, plus the repeatable disclosure above.
+- **Quest** (`buildQuestForm`) — `Quest.values()` combo (name-rendered) →
+  `api.addQuestGoal`.
+- **Diary** (`buildDiaryForm`) — area combo (`DIARY_AREAS`, in-game journal
+  names that round-trip through `AchievementDiaryData.normalizeAreaKey`) + tier
+  combo (`GoalPlannerApi.DiaryTier`) → `api.addDiaryGoal`.
+- **Item** (`buildItemForm`) — `itemManager.search` (the icon picker's source)
+  renders up to 8 tappable icon+name result rows (`buildItemResultRow`); pick
+  one + quantity → `api.addItemGoal`. The ADR's "richest navigation" form.
+- **Combat** (`buildCombatForm`) — a real CA name/description search
+  (`buildPickRow`) replacing the numeric-id stopgap. Needed a new
+  `WikiCaRepository.search(query, limit)` and a `searchCombatAchievements`
+  accessor on `GoalPlannerApiImpl` (the repo is package-private). Pick →
+  `api.addCombatAchievementGoal(id)`.
 
-The plugin sits at ~99% of the Plugin Hub token cap. Baseline main source was
-192,135 tokens; the submit gate (`checkTokens`) fails at 195,000 (a deliberate
-5k safety buffer under the bot's hard 200,000). That left only ~2,865 tokens
-for this **entire** feature. The create shell (dock plumbing + grid + tiles +
-scaffold + form helpers + Skill form) already consumes essentially all of it —
-the branch currently sits at ~194,850, ~150 tokens under the gate.
+`buildPendingForm` remains only as a defensive fallback for a future GoalType
+tile with no form — it is unreachable for the current eight.
 
-The headroom to build the rest arrives when `GoalContextMenuBuilder` (~2,072
-lines / ~14,700 tokens) is deleted — but ADR-0007 says the menus are removed
-**last**, only after in-client parity is verified, which could not happen with
-the designer AFK. So the following were designed and (mostly) written, then
-**cut to stay under the gate**, in rough priority order to restore:
+### 4. Add-a-goal prominence (structure)
+Already satisfied structurally: the resting peek bar is the green
+"+ Add a goal" primary invitation (`ActionDock` `PEEK_CREATE_*`), and "New
+Section" is omitted from the create surface (removed in `a1a4fae`; sections have
+their own creation path). No competing side-by-side section affordance was
+reintroduced. `promptAddSectionFromDock` is currently unused (left in place for
+a future subordinate section control); the create grid title is "Add a goal".
 
-1. **Skill "Repeatable" progressive-disclosure flow** — the "More options" row
-   → Repeatable toggle → Daily/Weekly/Monthly period pills → per-period XP →
-   Section auto-locks to "Repeatable". Was fully written (incl. a
-   `buildPeriodPills` helper and a `createDerivedRepeatGoal` submit path) and
-   removed. **This is the single most important thing to restore** — it is the
-   "most parameters" reason Skill was built first.
-2. **Item form** — search (`itemManager.search`) + results list + quantity →
-   `api.addItemGoal`. Fully written and removed (ADR calls this the "richest
-   navigation"; it was the priority-3 deliverable).
-3. **Custom form** — name + description → `api.addCustomGoal`. Written, removed.
-4. **Quest / Boss / Diary / Account forms** — all written against existing API
-   (`addQuestGoal`, `addBossGoal`, `addDiaryGoal`, `addAccountGoal`) and
-   removed. Diary area display names and the leagues-metric filter were sorted
-   out and are in git history on this branch's earlier working tree if needed.
-5. **Combat (CA) form** — was a stopgap numeric task-id entry because
-   `WikiCaRepository` is not reachable from `GoalPanel` (package-private on the
-   API impl, no getter). A real CA-name search needs an accessor first.
-6. **Type-tile color swatch icon** — a `ShapeIcons.filledSquare` was added then
-   reverted; tiles use a colored top rule instead. Restore the icon for a
-   richer grid when there is room.
+## Over the token cap — on purpose
 
-Every un-built tile routes to a small **placeholder** ("The X form is coming to
-the dock. For now, use right-click Add on a section header."), so the grid is
-fully navigable and nothing dead-ends. The right-click menus remain the
-complete, working creation surface (guardrail: menus stay until parity).
+`checkTokens` is RED and expected to be: main source is ~200,365 / 200,000. Per
+ADR-0008 + memory, the plan is to build the full create UX over cap now, then
+DELETE the right-click menus (`GoalContextMenuBuilder`) + `GoalDialogFactory`
+(~21k tokens) once in-client parity is verified, which brings it back under.
+Until that deletion step, do NOT gate on `preSubmit`/`checkTokens`. `compileJava`
++ `test` + `checkGlyphs` are green at every commit on this branch.
 
 ## Needs the designer's in-client screenshot verification
 
-- The grid: 2x4 `GridLayout` at 242px sidebar width — tile text fit, the
-  colored top rules, wrapping/height at font scales 1.0 and 1.3.
-- The create surface height: does it feel right capped at 300px, and does the
-  goal list keep enough room when a form is expanded?
-- Skill form spacing (label-above-field rows, combo width, the Back/Add row).
-- The expand/collapse handoff: tap the green "Add a goal" peek → grid → tile →
-  form → Back → grid → collapse. Confirm no list jitter and the dock hands its
-  height back on collapse.
-- Placeholder tiles read as "coming soon", not broken.
+- **Skill icon grid**: 8-wide `GridLayout` at 242px — icon size (getSkillImage
+  small), the 23-skill wrap (last row of 7), the selected highlight (green bg +
+  border), fit at font scales 1.0 / 1.3.
+- **Repeatable disclosure growth**: tapping "More options" then Repeatable grows
+  the form; `remeasureDock()` calls `revalidate()` up through the panel — CONFIRM
+  the dock actually re-lays-out (grows/shrinks) and does not clip, and that the
+  goal list gives the height back on collapse. This is the highest-risk visual.
+- **Period pills** selected-state colors, and the per-period amount field glam.
+- **Item / Combat search rows**: row height (26-28px), icon alignment, selected
+  highlight, the "No matches (loading?)" empty state for CA before wiki load.
+- **Combo widths** (Account/Quest/Diary/Boss) at 242px — long names (quests,
+  "Collection Log Slots", "Kourend & Kebos") may clip; may want name-truncation
+  or a searchable combo later.
+- The create surface height cap (300px) + per-form scroll feel.
+- The expand/collapse handoff: peek → grid → tile → form → Back → grid →
+  collapse, no list jitter.
+
+## Deferred glam / polish (left for the screenshot loop)
+
+- Exact colors/spacing across all forms; the level/xp field glam; final knob
+  styling on the peek bar and Add button.
+- Type-tile color swatch icon (still a colored top rule, not an icon).
+- Item form: no repeatable disclosure (item repeat needs an activity picker via
+  `ItemActivityResolver` — a richer flow; boss/skill cover the repeat ask).
+- Diary "Lumbridge & Draynor" normalizes to `LUMBRIDGE_&_DRAYNOR`, which has no
+  tracking varbit, so that one lands as a manual goal — same as the in-game
+  journal menu path today (pre-existing, not introduced here). If tracking is
+  wanted, extend `normalizeAreaKey` (mirror its Kourend/Western special-cases).
+- Boss/Account create do not seed prerequisite varps or run the dialog's
+  compound seeding; they are the minimal add. Parity pass can enrich later.
+- Post-create the dock jumps to the new goal's action strip (via
+  `selectAfterCreate`) rather than staying on the grid — confirm this is the
+  desired feel or switch to "clear selection, stay on grid" for rapid multi-add.
 
 ## Guardrails honored
 
-- Right-click menus (`GoalContextMenuBuilder`) untouched — dock built alongside.
+- Right-click menus (`GoalContextMenuBuilder`) + `GoalDialogFactory` untouched —
+  dock built alongside; deletion is the separate later step.
 - All dock content assembly is in `GoalPanel.refreshDock` + private helpers.
-- `DockContext` unchanged (pure, still unit-tested).
-- UI strings ASCII (checkGlyphs green). `preSubmit` EXIT=0 at every commit.
+- `DockContext` unchanged (pure, still unit-tested); create-nav lives in
+  `dockCreateType` on `GoalPanel`.
+- UI strings ASCII (checkGlyphs green). `compileJava` + `test` green at every
+  commit. `checkTokens` intentionally red (see above).
