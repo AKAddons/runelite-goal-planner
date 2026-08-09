@@ -39,6 +39,17 @@ public class GoalPanel extends PluginPanel
 	 *  right-click menus remain alive alongside it until parity is verified. */
 	private final com.goalplanner.ui.dock.ActionDock actionDock =
 		new com.goalplanner.ui.dock.ActionDock();
+	/** Create-surface navigation (ADR-0008), read by {@link #refreshDock()}.
+	 *  Null = show the 8-tile type grid; a type = show that type's create form.
+	 *  Orthogonal to the selection-driven {@code DockContext}, so it lives here
+	 *  rather than in the pure state resolver. Reset whenever a selection
+	 *  exists (the dock leaves the create surface for the action strips). */
+	private com.goalplanner.model.GoalType dockCreateType = null;
+	/** Whether the create surface is currently mounted in the dock, and for
+	 *  which type - lets {@link #refreshDock()} skip rebuilding it on unrelated
+	 *  refreshes so in-progress form input is not wiped. */
+	private boolean dockCreateMounted = false;
+	private com.goalplanner.model.GoalType dockCreateMountedType = null;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1626,6 +1637,17 @@ public class GoalPanel extends PluginPanel
 	{
 		com.goalplanner.ui.dock.DockContext ctx =
 			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds());
+
+		// A selection means the dock leaves the create surface for the action
+		// strips; reset the create navigation so returning to EMPTY starts at
+		// the type grid, and forget the mounted create view.
+		if (ctx.getState() != com.goalplanner.ui.dock.DockContext.State.EMPTY)
+		{
+			dockCreateType = null;
+			dockCreateMounted = false;
+			dockCreateMountedType = null;
+		}
+
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new java.util.ArrayList<>();
 		String hint = null;
@@ -1692,11 +1714,20 @@ public class GoalPanel extends PluginPanel
 			case EMPTY:
 			default:
 			{
-				hint = "Select a goal for actions";
-				top.add(new com.goalplanner.ui.dock.ActionDock.Item("Add Section",
-					"Create a new section",
-					this::promptAddSectionFromDock));
-				break;
+				// The create surface (ADR-0008) is the EMPTY-state content: a
+				// type grid that navigates into per-type forms, all inside the
+				// dock. It is a custom component, not the button strips, so this
+				// case returns early. Rebuild only when the mounted view no
+				// longer matches the requested navigation, so a half-filled form
+				// survives unrelated dock refreshes.
+				actionDock.setPeek("Add a goal", true);
+				if (!dockCreateMounted || dockCreateMountedType != dockCreateType)
+				{
+					actionDock.setExpandedComponent(buildCreateSurface());
+					dockCreateMounted = true;
+					dockCreateMountedType = dockCreateType;
+				}
+				return;
 			}
 		}
 		switch (ctx.getState())
@@ -1707,9 +1738,7 @@ public class GoalPanel extends PluginPanel
 			case MULTI:
 				actionDock.setPeek(ctx.getCount() + " selected", false);
 				break;
-			case EMPTY:
 			default:
-				actionDock.setPeek("Add a goal", true);
 				break;
 		}
 		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
@@ -1731,5 +1760,318 @@ public class GoalPanel extends PluginPanel
 					"Add Section", javax.swing.JOptionPane.WARNING_MESSAGE);
 			}
 		}
+	}
+
+	// ============================================================
+	// Create surface (ADR-0008): the dock's EMPTY-state content.
+	//
+	// A type GRID navigates into per-type forms, all rendered inside the dock -
+	// no dialog, the goal list never leaves. Navigation state is
+	// {@link #dockCreateType}; every builder below is called only from
+	// {@link #refreshDock()} via {@link #buildCreateSurface()}, keeping all dock
+	// content assembly in one place. The right-click create dialogs remain alive
+	// alongside this until in-client parity is verified (ADR-0007).
+	// ============================================================
+
+	/** The eight type tiles, in mockup order (ADR-0008). COLLECTION_LOG has no
+	 *  tile - it is not a user-created goal type here. */
+	private static final com.goalplanner.model.GoalType[] CREATE_TILES = {
+		com.goalplanner.model.GoalType.SKILL,
+		com.goalplanner.model.GoalType.QUEST,
+		com.goalplanner.model.GoalType.DIARY,
+		com.goalplanner.model.GoalType.COMBAT_ACHIEVEMENT,
+		com.goalplanner.model.GoalType.BOSS,
+		com.goalplanner.model.GoalType.ITEM_GRIND,
+		com.goalplanner.model.GoalType.ACCOUNT,
+		com.goalplanner.model.GoalType.CUSTOM,
+	};
+
+	private static final Color CREATE_FG = new Color(0xCF, 0xCF, 0xCF);
+	private static final Color CREATE_FG_DIM = new Color(0x9A, 0x9A, 0x9A);
+	private static final Color CREATE_TILE_BG = new Color(0x33, 0x33, 0x36);
+	private static final Color CREATE_TILE_HOVER = new Color(0x45, 0x45, 0x4C);
+	private static final Color CREATE_PRIMARY_BG = new Color(0x2E, 0x4D, 0x32);
+	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
+	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
+	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
+
+	/** Build the surface for the current create navigation: the type grid when
+	 *  no type is chosen, otherwise that type's form. */
+	private JComponent buildCreateSurface()
+	{
+		return dockCreateType == null
+			? buildCreateGrid()
+			: buildCreateForm(dockCreateType);
+	}
+
+	/** Set the create navigation and re-render the dock. {@code null} returns to
+	 *  the type grid (used by Back and after a successful create). */
+	private void navigateCreate(com.goalplanner.model.GoalType type)
+	{
+		dockCreateType = type;
+		refreshDock();
+	}
+
+	private JComponent buildCreateGrid()
+	{
+		JPanel root = new JPanel(new BorderLayout(0, 6));
+		root.setOpaque(false);
+		root.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JLabel title = new JLabel("Add a goal");
+		title.setForeground(CREATE_FG);
+		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
+		root.add(title, BorderLayout.NORTH);
+
+		JPanel grid = new JPanel(new GridLayout(2, 4, 5, 5));
+		grid.setOpaque(false);
+		for (com.goalplanner.model.GoalType t : CREATE_TILES)
+		{
+			grid.add(buildTypeTile(t));
+		}
+		root.add(grid, BorderLayout.CENTER);
+
+		// Panel-level secondary action carried over from the skeleton.
+		JButton newSection = flatButton("New Section", false);
+		newSection.addActionListener(e -> promptAddSectionFromDock());
+		JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+		footer.setOpaque(false);
+		footer.add(newSection);
+		root.add(footer, BorderLayout.SOUTH);
+		return root;
+	}
+
+	private JButton buildTypeTile(com.goalplanner.model.GoalType type)
+	{
+		Color swatch = type.getColor();
+		if (swatch.getRed() + swatch.getGreen() + swatch.getBlue() < 120)
+		{
+			// Near-black types (e.g. Boss) would vanish on the dark tile.
+			swatch = new Color(0x55, 0x55, 0x58);
+		}
+		JButton b = new JButton(tileLabel(type));
+		b.setForeground(CREATE_FG);
+		b.setBackground(CREATE_TILE_BG);
+		b.setOpaque(true);
+		b.setFocusPainted(false);
+		b.setBorderPainted(false);
+		b.setContentAreaFilled(true);
+		b.setFont(b.getFont().deriveFont(11f));
+		// A colored top rule stands in for the type's identity (icon deferred on
+		// the token budget - see docs/action-dock-progress.md).
+		b.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+			javax.swing.BorderFactory.createMatteBorder(2, 0, 0, 0, swatch),
+			new EmptyBorder(6, 2, 6, 2)));
+		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		hover(b, CREATE_TILE_BG, CREATE_TILE_HOVER);
+		b.addActionListener(e -> navigateCreate(type));
+		return b;
+	}
+
+	/** Shared background-swap-on-hover, deduplicated across the create tiles and
+	 *  buttons to keep the token footprint down. */
+	private static void hover(JButton b, Color base, Color hovered)
+	{
+		b.addMouseListener(new MouseAdapter()
+		{
+			@Override public void mouseEntered(MouseEvent e) { b.setBackground(hovered); }
+			@Override public void mouseExited(MouseEvent e) { b.setBackground(base); }
+		});
+	}
+
+	private JComponent buildCreateForm(com.goalplanner.model.GoalType type)
+	{
+		switch (type)
+		{
+			case SKILL: return buildSkillForm();
+			// Only the Skill form is wired for now - the plugin sits at ~99% of
+			// the hub token cap, and the headroom to add the other type forms
+			// only arrives when the right-click menus are deleted (ADR-0007),
+			// which cannot happen while parity is unverified. Every other tile
+			// lands on a placeholder pointing at the existing add dialogs.
+			default: return buildPendingForm(type);
+		}
+	}
+
+	private JComponent buildPendingForm(com.goalplanner.model.GoalType type)
+	{
+		JPanel body = formBody();
+		JLabel note = new JLabel("<html>The " + tileLabel(type) + " form is coming to "
+			+ "the dock.<br>For now, use right-click Add on a section header.</html>");
+		note.setForeground(CREATE_FG_DIM);
+		note.setFont(note.getFont().deriveFont(11f));
+		note.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(note);
+		return createFormScaffold(type, body, null);
+	}
+
+	// ----- per-type create forms -----
+
+	private JComponent buildSkillForm()
+	{
+		JPanel body = formBody();
+
+		JComboBox<net.runelite.api.Skill> skillCombo =
+			new JComboBox<>(net.runelite.api.Skill.values());
+		skillCombo.setRenderer(textRenderer(v -> ((net.runelite.api.Skill) v).getName()));
+		styleField(skillCombo);
+		addFormRow(body, "Skill", skillCombo);
+
+		SkillTargetForm target = new SkillTargetForm(99);
+		addFormRow(body, "Target level or XP", target);
+
+		// NOTE: the Repeatable "more options" flow (period pills + per-period XP,
+		// deriving a repeat goal via api.createDerivedRepeatGoal) is designed and
+		// specified in ADR-0008 but NOT wired here yet - the plugin sits at ~99%
+		// of the hub token cap and there is no headroom until the right-click
+		// menus are deleted (ADR-0007). This is the first thing to restore once
+		// that frees space. See docs/action-dock-progress.md.
+		Runnable onAdd = () ->
+		{
+			net.runelite.api.Skill skill = (net.runelite.api.Skill) skillCombo.getSelectedItem();
+			if (skill == null) return;
+			int xp = target.getTargetXp();
+			if (xp <= 0)
+			{
+				warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
+				return;
+			}
+			api.addSkillGoal(skill, xp);
+			navigateCreate(null);
+		};
+		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd);
+	}
+
+	// ----- create-surface shared UI helpers -----
+
+	/** Wrap a form's body in the standard scaffold: a Back + title header, the
+	 *  body, and a primary Add button. */
+	private JComponent createFormScaffold(com.goalplanner.model.GoalType type,
+		JComponent body, Runnable onAdd)
+	{
+		JPanel root = new JPanel(new BorderLayout(0, 6));
+		root.setOpaque(false);
+		root.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel header = new JPanel(new BorderLayout(6, 0));
+		header.setOpaque(false);
+		JButton back = flatButton("Back", false);
+		back.addActionListener(e -> navigateCreate(null));
+		JLabel title = new JLabel(tileLabel(type) + " goal");
+		title.setForeground(CREATE_FG);
+		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
+		header.add(back, BorderLayout.WEST);
+		header.add(title, BorderLayout.CENTER);
+		root.add(header, BorderLayout.NORTH);
+
+		root.add(body, BorderLayout.CENTER);
+
+		if (onAdd != null)
+		{
+			JButton add = flatButton("Add goal", true);
+			add.addActionListener(e -> onAdd.run());
+			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+			footer.setOpaque(false);
+			footer.add(add);
+			root.add(footer, BorderLayout.SOUTH);
+		}
+		return root;
+	}
+
+	private JPanel formBody()
+	{
+		JPanel p = new JPanel();
+		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+		p.setOpaque(false);
+		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return p;
+	}
+
+	/** Add a left-aligned "label above field" row to a BoxLayout body, clamping
+	 *  the field's height so BoxLayout does not stretch it vertically. */
+	private void addFormRow(JPanel body, String label, JComponent field)
+	{
+		if (label != null)
+		{
+			JLabel l = new JLabel(label);
+			l.setForeground(CREATE_FG_DIM);
+			l.setFont(l.getFont().deriveFont(10f));
+			l.setAlignmentX(Component.LEFT_ALIGNMENT);
+			body.add(l);
+			body.add(Box.createVerticalStrut(2));
+		}
+		field.setAlignmentX(Component.LEFT_ALIGNMENT);
+		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
+		body.add(field);
+		body.add(Box.createVerticalStrut(6));
+	}
+
+	private JButton flatButton(String text, boolean primary)
+	{
+		JButton b = new JButton(text);
+		b.setForeground(primary ? CREATE_PRIMARY_FG : CREATE_FG);
+		b.setBackground(primary ? CREATE_PRIMARY_BG : CREATE_TILE_BG);
+		b.setOpaque(true);
+		b.setFocusPainted(false);
+		b.setBorderPainted(false);
+		b.setContentAreaFilled(true);
+		b.setFont(b.getFont().deriveFont(primary ? Font.BOLD : Font.PLAIN, 11f));
+		b.setBorder(new EmptyBorder(4, 10, 4, 10));
+		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		hover(b, primary ? CREATE_PRIMARY_BG : CREATE_TILE_BG,
+			primary ? CREATE_PRIMARY_HOVER : CREATE_TILE_HOVER);
+		return b;
+	}
+
+	private void styleField(JComponent f)
+	{
+		f.setForeground(CREATE_FG);
+		f.setBackground(CREATE_FIELD_BG);
+		f.setFont(f.getFont().deriveFont(11f));
+		if (f instanceof JTextField)
+		{
+			((JTextField) f).setBorder(new EmptyBorder(3, 5, 3, 5));
+		}
+	}
+
+	private static javax.swing.DefaultListCellRenderer textRenderer(
+		java.util.function.Function<Object, String> namer)
+	{
+		return new javax.swing.DefaultListCellRenderer()
+		{
+			@Override
+			public Component getListCellRendererComponent(JList<?> list, Object value,
+				int index, boolean isSelected, boolean cellHasFocus)
+			{
+				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+				if (value != null)
+				{
+					setText(namer.apply(value));
+				}
+				return this;
+			}
+		};
+	}
+
+	private static String tileLabel(com.goalplanner.model.GoalType t)
+	{
+		switch (t)
+		{
+			case SKILL: return "Skill";
+			case QUEST: return "Quest";
+			case DIARY: return "Diary";
+			case COMBAT_ACHIEVEMENT: return "Combat";
+			case BOSS: return "Boss";
+			case ITEM_GRIND: return "Item";
+			case ACCOUNT: return "Account";
+			case CUSTOM: return "Custom";
+			default: return t.getDisplayName();
+		}
+	}
+
+	private void warnCreate(String msg)
+	{
+		javax.swing.JOptionPane.showMessageDialog(this, msg, "Add goal",
+			javax.swing.JOptionPane.WARNING_MESSAGE);
 	}
 }
