@@ -1927,6 +1927,11 @@ public class GoalPanel extends PluginPanel
 		SkillTargetForm target = new SkillTargetForm(99);
 		addFormRow(body, "Target level or XP", target);
 
+		// Progressive disclosure (ADR-0008): a "More options" row reveals the
+		// Repeatable toggle. When on, Add creates the long-term goal AND derives a
+		// per-period slice off it, which lands in the Repeatable section.
+		RepeatControls repeat = addRepeatDisclosure(body, "XP each period");
+
 		Runnable onAdd = () ->
 		{
 			net.runelite.api.Skill skill = picked[0];
@@ -1941,7 +1946,29 @@ public class GoalPanel extends PluginPanel
 				warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
 				return;
 			}
-			api.addSkillGoal(skill, xp);
+			if (repeat.isOn())
+			{
+				int chunk = repeat.amount();
+				if (chunk <= 0)
+				{
+					warnCreate("Enter how much XP to gain each period.");
+					return;
+				}
+				api.beginCompound("Add repeatable skill goal");
+				try
+				{
+					String parentId = api.addSkillGoal(skill, xp);
+					api.createDerivedRepeatGoal(parentId, repeat.period(), chunk, null);
+				}
+				finally
+				{
+					api.endCompound();
+				}
+			}
+			else
+			{
+				api.addSkillGoal(skill, xp);
+			}
 			navigateCreate(null);
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd);
@@ -1987,6 +2014,162 @@ public class GoalPanel extends PluginPanel
 		}
 		refresh.run();
 		return grid;
+	}
+
+	// ----- repeatable progressive-disclosure (ADR-0008) -----
+
+	/** State handle for the "More options -> Repeatable" disclosure, shared by
+	 *  the forms that support a repeating slice. When {@link #isOn()}, the form
+	 *  should create the long-term goal and derive a per-period chunk off it via
+	 *  {@code api.createDerivedRepeatGoal}, landing it in the Repeatable section. */
+	private static final class RepeatControls
+	{
+		private final javax.swing.JCheckBox toggle;
+		private final com.goalplanner.model.RepeatPeriod[] period;
+		private final JTextField amount;
+
+		RepeatControls(javax.swing.JCheckBox toggle,
+			com.goalplanner.model.RepeatPeriod[] period, JTextField amount)
+		{
+			this.toggle = toggle;
+			this.period = period;
+			this.amount = amount;
+		}
+
+		boolean isOn() { return toggle.isSelected(); }
+
+		com.goalplanner.model.RepeatPeriod period() { return period[0]; }
+
+		/** The per-period amount, or -1 when blank / not a positive number. */
+		int amount()
+		{
+			try
+			{
+				return Integer.parseInt(amount.getText().trim().replace(",", ""));
+			}
+			catch (NumberFormatException e)
+			{
+				return -1;
+			}
+		}
+	}
+
+	/** Append a "More options" disclosure to {@code body} that reveals a
+	 *  Repeatable toggle; checking it shows Daily/Weekly/Monthly pills and a
+	 *  per-period amount field. {@code amountLabel} names that field (e.g.
+	 *  "XP each period", "Kills each period"). Returns the state handle. */
+	private RepeatControls addRepeatDisclosure(JPanel body, String amountLabel)
+	{
+		final javax.swing.JCheckBox toggle = new javax.swing.JCheckBox("Repeatable");
+		toggle.setOpaque(false);
+		toggle.setForeground(CREATE_FG);
+		toggle.setFont(toggle.getFont().deriveFont(11f));
+		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		final com.goalplanner.model.RepeatPeriod[] period =
+			{ com.goalplanner.model.RepeatPeriod.DAILY };
+		final JTextField amount = new JTextField(8);
+		styleField(amount);
+
+		// The detail (pills + amount + section note) shows only when Repeatable
+		// is checked.
+		JPanel detail = new JPanel();
+		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
+		detail.setOpaque(false);
+		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.setVisible(false);
+		detail.add(Box.createVerticalStrut(4));
+		JComponent pills = buildPeriodPills(period);
+		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.add(pills);
+		detail.add(Box.createVerticalStrut(4));
+		addFormRow(detail, amountLabel, amount);
+		JLabel lock = new JLabel("Lands in the Repeatable section.");
+		lock.setForeground(CREATE_FG_DIM);
+		lock.setFont(lock.getFont().deriveFont(10f));
+		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.add(lock);
+
+		toggle.addActionListener(e ->
+		{
+			detail.setVisible(toggle.isSelected());
+			remeasureDock();
+		});
+
+		// The revealed options block (toggle + its detail), hidden until the
+		// "More options" link is tapped.
+		JPanel opts = new JPanel();
+		opts.setLayout(new BoxLayout(opts, BoxLayout.Y_AXIS));
+		opts.setOpaque(false);
+		opts.setAlignmentX(Component.LEFT_ALIGNMENT);
+		opts.setVisible(false);
+		opts.add(toggle);
+		opts.add(detail);
+
+		JButton more = flatButton("More options", false);
+		more.setAlignmentX(Component.LEFT_ALIGNMENT);
+		more.addActionListener(e ->
+		{
+			opts.setVisible(!opts.isVisible());
+			more.setText(opts.isVisible() ? "Fewer options" : "More options");
+			remeasureDock();
+		});
+
+		body.add(Box.createVerticalStrut(2));
+		body.add(more);
+		body.add(Box.createVerticalStrut(4));
+		body.add(opts);
+		return new RepeatControls(toggle, period, amount);
+	}
+
+	/** Daily / Weekly / Monthly pills; the tapped one is written to
+	 *  {@code out[0]} and highlighted. */
+	private JComponent buildPeriodPills(com.goalplanner.model.RepeatPeriod[] out)
+	{
+		com.goalplanner.model.RepeatPeriod[] periods = {
+			com.goalplanner.model.RepeatPeriod.DAILY,
+			com.goalplanner.model.RepeatPeriod.WEEKLY,
+			com.goalplanner.model.RepeatPeriod.MONTHLY };
+		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		row.setOpaque(false);
+		java.util.List<JButton> pills = new ArrayList<>();
+		java.util.Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
+		Runnable refresh = () ->
+		{
+			for (JButton b : pills)
+			{
+				boolean sel = owner.get(b) == out[0];
+				b.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+				b.setForeground(sel ? CREATE_PRIMARY_FG : CREATE_FG);
+			}
+		};
+		for (com.goalplanner.model.RepeatPeriod p : periods)
+		{
+			JButton b = new JButton(p.getLabel());
+			b.setOpaque(true);
+			b.setFocusPainted(false);
+			b.setBorderPainted(false);
+			b.setContentAreaFilled(true);
+			b.setFont(b.getFont().deriveFont(11f));
+			b.setBorder(new EmptyBorder(3, 10, 3, 10));
+			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			pills.add(b);
+			owner.put(b, p);
+			b.addActionListener(e -> { out[0] = p; refresh.run(); });
+			row.add(b);
+		}
+		refresh.run();
+		return row;
+	}
+
+	/** Re-lay-out the dock after a disclosure toggle changes the form's height,
+	 *  so the dock grows/shrinks to fit (ADR-0008: the form grows to fit). */
+	private void remeasureDock()
+	{
+		actionDock.revalidate();
+		actionDock.repaint();
+		revalidate();
+		repaint();
 	}
 
 	// ----- create-surface shared UI helpers -----
