@@ -128,6 +128,26 @@ repeat off/on). Build is per-type, screenshot-loop, one sub-view at a time.
 The contextual dock + Skill sub-view first (most parameters), then Item (richest
 navigation), then the rest.
 
+## Unified create/edit form (user refinement 2026-08-08)
+
+Create and EDIT are the SAME form, parameterized by mode. Selecting a goal
+shows its values IN the form, pre-filled - the amount is an editable FIELD,
+not a "Change Amount" button that opens a dialog. This also removes the
+JOptionPane choosers for parametric edits. Every menu action sorts into:
+
+- FIELDS (inline, edit in place, apply-on-commit = blur/Enter, one undo each):
+  amount/level, name, description, repeat (toggle + period pills + chunk),
+  color. These are the goal's PARAMETERS - present in both create and edit.
+- ACTIONS (chips/buttons, edit mode only - no create equivalent): Complete/
+  Reopen (a checkbox at the form top), Remove, Tags, Move/Duplicate,
+  Requirements ("Needs"), Share, Loadout Lab. Lifecycle + relations.
+
+Create mode = blank fields + primary "Add goal". Edit mode = prefilled fields
+that commit on blur/Enter (no Add button) + the lifecycle chips. Same
+per-type form component underneath (buildSkillForm etc. gain a mode + optional
+goal). The full-width CREATE / SELECTED indicator bar heads the surface in
+both modes.
+
 ## More Information
 
 Depends on the dock (ADR-0007) reaching section-selection first, so the
