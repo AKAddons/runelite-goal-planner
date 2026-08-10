@@ -309,7 +309,6 @@ public class ActionDock extends JPanel
 	private void buildFooterRow()
 	{
 		footerRow.setOpaque(false);
-		footerRow.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, FOOTER_TOP_RULE));
 		styleCreateButton(createGoalBtn, PEEK_CREATE_BG, PEEK_CREATE_FG);
 		styleCreateButton(createSectionBtn, PEEK_SECTION_BG, PEEK_SECTION_FG);
 		createGoalBtn.setToolTipText("Create a goal");
@@ -354,6 +353,12 @@ public class ActionDock extends JPanel
 	{
 		// Only the surface hides on collapse; the footer stays visible always.
 		centerHost.setVisible(!collapsed);
+		// The footer's top hairline divides it from the surface above - shown only
+		// when expanded, so at rest it does not read as a double rule under the
+		// dock's own DockDivider. A 1px empty border keeps the footer height steady.
+		footerRow.setBorder(collapsed
+			? BorderFactory.createEmptyBorder(1, 0, 0, 0)
+			: BorderFactory.createMatteBorder(1, 0, 0, 0, FOOTER_TOP_RULE));
 		revalidate();
 		repaint();
 	}
