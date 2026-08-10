@@ -169,6 +169,25 @@ public class GoalPanel extends PluginPanel
 	 *  it can't be confused with the orange relation banner. */
 	private JPanel moveModeBanner;
 	private JLabel moveModeLabel;
+	/** Transient, non-modal info banner (green). Used to surface a just-created
+	 *  goal that was already complete on add - it lands in the built-in Completed
+	 *  section, which the user may have collapsed, so it reads as "didn't show up".
+	 *  Auto-dismisses via {@link #infoNoticeTimer}. */
+	private JPanel infoNoticeBanner;
+	private JLabel infoNoticeLabel;
+	private javax.swing.Timer infoNoticeTimer;
+	/** A goal just created via the dock create flow, to reveal once it settles
+	 *  into its section (armed by {@link #armCreateReveal()}). A complete-on-add
+	 *  goal (diary/quest/CA/boss/item/skill already at target) reconciles into the
+	 *  Completed section a moment later; when it does, {@link #maybeRevealPendingCreate()}
+	 *  expands that section, scrolls the card into view, and shows the info banner.
+	 *  Cleared once revealed or when the arming window lapses. */
+	private String pendingRevealGoalId;
+	private long pendingRevealArmedAt;
+	/** How long a pending create-reveal stays armed. Long enough to outlast the
+	 *  tracker drain + reconcile + rebuild that completes a complete-on-add goal,
+	 *  short enough that an ordinary incomplete goal never lingers to fire later. */
+	private static final long REVEAL_WINDOW_MS = 8_000L;
 	/** Toolbar undo/redo buttons. Refreshed on every rebuild. */
 	private JButton undoButton;
 	private JButton redoButton;
@@ -405,6 +424,26 @@ public class GoalPanel extends PluginPanel
 		moveModeBanner.add(moveCancelBtn, BorderLayout.EAST);
 		moveModeBanner.setVisible(false);
 
+		// Transient info banner (green): a non-modal, auto-dismissing notice.
+		// Currently surfaces a complete-on-add goal that landed in the Completed
+		// section. Hidden by default; a close X dismisses it early.
+		infoNoticeBanner = new JPanel(new BorderLayout());
+		infoNoticeBanner.setBackground(new Color(0x2E, 0x6B, 0x3A));
+		infoNoticeBanner.setBorder(new EmptyBorder(4, 8, 4, 8));
+		infoNoticeLabel = new JLabel();
+		infoNoticeLabel.setForeground(Color.WHITE);
+		infoNoticeLabel.setFont(PanelFonts.derive(11f));
+		infoNoticeBanner.add(infoNoticeLabel, BorderLayout.CENTER);
+		JButton infoNoticeCloseBtn = new JButton(ShapeIcons.closeX(10, Color.WHITE));
+		infoNoticeCloseBtn.setContentAreaFilled(false);
+		infoNoticeCloseBtn.setBorderPainted(false);
+		infoNoticeCloseBtn.setFocusPainted(false);
+		infoNoticeCloseBtn.setMargin(new Insets(0, 4, 0, 4));
+		infoNoticeCloseBtn.setToolTipText("Dismiss");
+		infoNoticeCloseBtn.addActionListener(e -> hideInfoNotice());
+		infoNoticeBanner.add(infoNoticeCloseBtn, BorderLayout.EAST);
+		infoNoticeBanner.setVisible(false);
+
 		// Both mode banners share a vertical stack below the toolbar/search
 		// row. They are mutually exclusive in practice (entering one mode
 		// exits the other), but the layout supports either being shown.
@@ -413,6 +452,7 @@ public class GoalPanel extends PluginPanel
 		modeBanners.setOpaque(false);
 		modeBanners.add(relationModeBanner);
 		modeBanners.add(moveModeBanner);
+		modeBanners.add(infoNoticeBanner);
 
 		JPanel headerStack = new JPanel(new BorderLayout());
 		headerStack.setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -704,6 +744,121 @@ public class GoalPanel extends PluginPanel
 		}
 		refreshUndoRedoButtons();
 		refreshDock();
+	}
+
+	/** Show the transient green info banner with {@code msg} and (re)start its
+	 *  auto-dismiss timer. Non-modal - never blocks the panel. */
+	private void showInfoNotice(String msg)
+	{
+		infoNoticeLabel.setText(msg);
+		infoNoticeBanner.setVisible(true);
+		infoNoticeBanner.revalidate();
+		infoNoticeBanner.repaint();
+		if (infoNoticeTimer != null)
+		{
+			infoNoticeTimer.stop();
+		}
+		infoNoticeTimer = new javax.swing.Timer(6_000, e -> hideInfoNotice());
+		infoNoticeTimer.setRepeats(false);
+		infoNoticeTimer.start();
+	}
+
+	private void hideInfoNotice()
+	{
+		if (infoNoticeTimer != null)
+		{
+			infoNoticeTimer.stop();
+		}
+		infoNoticeBanner.setVisible(false);
+		infoNoticeBanner.revalidate();
+		infoNoticeBanner.repaint();
+	}
+
+	/** Arm a reveal for the goal a dock create just made. {@code selectAfterCreate}
+	 *  has already left it as the sole selection, so that is the goal to watch. A
+	 *  complete-on-add goal reconciles into the Completed section a moment later
+	 *  (after the tracker drain); {@link #maybeRevealPendingCreate()} surfaces it
+	 *  when it lands. An ordinary incomplete create just lapses out of the window,
+	 *  silently. */
+	private void armCreateReveal()
+	{
+		java.util.Set<String> selected = api.getSelectedGoalIds();
+		if (selected.size() == 1)
+		{
+			pendingRevealGoalId = selected.iterator().next();
+			pendingRevealArmedAt = System.currentTimeMillis();
+		}
+	}
+
+	/** If a just-created goal has settled into the built-in Completed section,
+	 *  make it discoverable: expand that section if the user had it collapsed,
+	 *  scroll the card into view, and show a brief non-modal notice. Runs after a
+	 *  rebuild (cards laid out). No-op until the goal is complete AND reconciled
+	 *  into Completed; clears itself once revealed or once the arming window lapses
+	 *  so a plain incomplete goal never triggers it. */
+	private void maybeRevealPendingCreate()
+	{
+		final String id = pendingRevealGoalId;
+		if (id == null)
+		{
+			return;
+		}
+		if (System.currentTimeMillis() - pendingRevealArmedAt > REVEAL_WINDOW_MS)
+		{
+			pendingRevealGoalId = null;
+			return;
+		}
+		com.goalplanner.api.GoalView view = api.queryGoalView(id);
+		if (view == null)
+		{
+			pendingRevealGoalId = null;
+			return;
+		}
+		if (view.completedAt <= 0)
+		{
+			// Not complete (yet). Keep armed: if it is a complete-on-add goal the
+			// tracker will finish it and trigger another rebuild; if not, the
+			// window lapses and this clears silently.
+			return;
+		}
+		// Complete. Only surface the built-in Completed landing - a complete goal
+		// kept inline in its own section is already visible where the user put it.
+		String completedSectionId = null;
+		boolean completedCollapsed = false;
+		for (com.goalplanner.api.SectionView s : api.queryAllSections())
+		{
+			if ("COMPLETED".equals(s.kind))
+			{
+				completedSectionId = s.id;
+				completedCollapsed = s.collapsed;
+				break;
+			}
+		}
+		if (completedSectionId == null || !completedSectionId.equals(view.sectionId))
+		{
+			// Not (yet) in the Completed section - either reconcile has not run or
+			// it archives inline. Keep armed within the window.
+			return;
+		}
+		if (completedCollapsed)
+		{
+			// Expand so the card renders, then rebuild; the reveal re-runs from the
+			// rebuild's tail and finds the card this time.
+			api.setSectionCollapsed(completedSectionId, false);
+			rebuild();
+			return;
+		}
+		GoalCard card = cardMap.get(id);
+		if (card == null)
+		{
+			// Section expanded but no card (e.g. hidden under a collapsed nest).
+			// Nothing safe to scroll to; drop the notice rather than guess.
+			pendingRevealGoalId = null;
+			return;
+		}
+		card.scrollRectToVisible(new Rectangle(0, 0, card.getWidth(), card.getHeight()));
+		showInfoNotice("Already complete - added to the Completed section.");
+		pendingRevealGoalId = null;
 	}
 
 	/** True when the section has goals and every one of them is selected. */
@@ -1249,6 +1404,13 @@ public class GoalPanel extends PluginPanel
 
 		goalListPanel.revalidate();
 		goalListPanel.repaint();
+		// A just-created goal may have completed-on-add and reconciled into the
+		// Completed section. Check after layout settles (bounds valid) so the
+		// reveal can scroll its card into view.
+		if (pendingRevealGoalId != null)
+		{
+			javax.swing.SwingUtilities.invokeLater(this::maybeRevealPendingCreate);
+		}
 		long elapsed = System.currentTimeMillis() - start;
 		if (elapsed > 50)
 		{
@@ -3159,6 +3321,10 @@ public class GoalPanel extends PluginPanel
 		if (pending != null)
 		{
 			pending.accept(sectionId);
+			// The create may have been complete-on-add (e.g. a diary tier already
+			// 100% on this account): it silently reconciles into Completed. Arm a
+			// reveal so it does not read as "didn't show up".
+			armCreateReveal();
 		}
 		navigateCreate(null);
 	}

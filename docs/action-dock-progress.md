@@ -720,6 +720,34 @@ is gone (was the only use), and `goToSectionPick` is skipped on this path.
   created, no endless parent" assertion, and edge cases (null skill/boss,
   chunk <= 0, null/NONE period, no client).
 
+### Task 2 — surface a newly-created goal that is ALREADY complete
+Adding e.g. a diary tier already 100% on the account is not a failure - it
+correctly reconciles into the built-in **Completed** section, but the user does
+not see it (that section is often collapsed) and reads it as "didn't show up".
+Made generic so it applies to any complete-on-add type (DIARY/QUEST/
+COMBAT_ACHIEVEMENT/BOSS/ITEM/SKILL/ACCOUNT).
+
+- **New transient info banner** (`infoNoticeBanner`, green) added to the existing
+  `modeBanners` stack under the toolbar - a non-modal, auto-dismissing (6s) notice
+  with a close X. `showInfoNotice(msg)` / `hideInfoNotice()`. NOT a dialog.
+- **Arm-and-reveal**, keyed off the create path's existing `selectAfterCreate`:
+  `chooseSection` calls `armCreateReveal()` after the create runs, capturing the
+  sole selected goal id + a timestamp (`pendingRevealGoalId`, 8s window).
+- **`maybeRevealPendingCreate()`** runs from `rebuild()`'s tail via `invokeLater`
+  (after layout, so bounds are valid). It no-ops until the goal is complete
+  (`completedAt > 0`) AND reconciled into the built-in Completed section
+  (`SectionView.kind == "COMPLETED"`). When it lands: expand that section if the
+  user had it collapsed (`api.setSectionCollapsed(id, false)` + rebuild), scroll
+  the card into view (`GoalCard.scrollRectToVisible`), and show the info banner
+  "Already complete - added to the Completed section." Then clears the pending id.
+  An ordinary incomplete create simply lapses out of the window silently - no
+  notice, no scroll.
+- **Timing**: skill/account complete-on-add resolve immediately (the
+  `onGoalsChanged` -> `refreshSkillGoalsNow` client-thread sync); diary/CA/quest/
+  boss/item resolve on the next per-tick `drainTrackerUpdates` (varbit/stat churn
+  keeps `trackersDirty` set most ticks while logged in), well inside the 8s
+  window. Logged out, nothing marks them complete anyway (existing behavior).
+
 ### NEEDS-SCREENSHOT (this pass)
 - Skill create -> Repeatable toggle -> pick period + XP each period -> Create:
   the new goal appears in the built-in **Repeatable** section, there is **NO
@@ -727,3 +755,9 @@ is gone (was the only use), and `goToSectionPick` is skipped on this path.
   normal section.
 - Boss create -> open the repeat disclosure -> Create: same — lands in Repeatable
   directly, no section prompt, no endless parent.
+- Add a diary tier that is **already 100%** on the account with the **Completed
+  section collapsed**: the section expands, the panel scrolls the new (completed)
+  goal into view, and the green "Already complete - added to the Completed
+  section." banner appears and auto-dismisses. Confirm no modal dialog.
+- Add an ordinary INCOMPLETE goal: no info banner, normal selection behavior
+  (regression check that the reveal stays scoped to complete-on-add).
