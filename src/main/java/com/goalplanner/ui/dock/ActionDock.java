@@ -87,22 +87,19 @@ public class ActionDock extends JPanel
 	private final JPanel centerHost = new JPanel(new BorderLayout());
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
-	private final JButton peekBar = new JButton();
-	// The NORTH header swaps between the single peek bar (selection states) and
-	// the two-button create row (nothing selected): Create Goal / Create Section.
-	private final JPanel peekHost = new JPanel(new BorderLayout());
+	// The PERMANENT footer: Create Goal | Create Section, always visible in every
+	// state (ADR-0008 refinement). The contextual surface (create grid/form, a
+	// selected goal's edit view, or the multi-select action strips) renders ABOVE
+	// it in centerHost; the footer never swaps out and stays put when collapsed.
 	private final JButton createGoalBtn = new JButton("Create Goal");
 	private final JButton createSectionBtn = new JButton("Create Section");
-	private final JPanel peekCreateRow = new JPanel(new GridLayout(1, 2, 1, 0));
-	private boolean createPeekMode = false;
+	private final JPanel footerRow = new JPanel(new GridLayout(1, 2, 1, 0));
 	private Runnable onCreateGoal = null;
 	private Runnable onCreateSection = null;
-	private boolean collapsed = true; // rest state is the one-line peek
-	private String peekText = "Add a goal";
-	private boolean peekAccent = true; // green when it is the create invitation
+	private boolean collapsed = true; // rest = just the permanent footer, surface hidden
 	private Rows current = new Rows(null, List.of(), List.of());
-	/** The create-surface component currently mounted (grid or a type form),
-	 *  or null when the dock is in button-strip (selection) mode. */
+	/** The surface component currently mounted above the footer (create grid/form
+	 *  or an edit view), or null when the dock is in button-strip (multi) mode. */
 	private JComponent customView = null;
 
 	public ActionDock()
@@ -121,53 +118,48 @@ public class ActionDock extends JPanel
 		centerHost.setOpaque(false);
 		centerHost.add(content, BorderLayout.CENTER);
 
-		stylePeekBar();
-		buildCreatePeekRow();
-		peekHost.setOpaque(false);
-		peekHost.add(peekBar, BorderLayout.CENTER);
-		add(peekHost, BorderLayout.NORTH);
+		buildFooterRow();
+		// Surface above, permanent create footer below.
 		add(centerHost, BorderLayout.CENTER);
+		add(footerRow, BorderLayout.SOUTH);
 		applyCollapsed();
 	}
 
 	/**
-	 * The resting bar's label and tone. {@code accent} true = the green
-	 * "+ Add a goal" create invitation (nothing selected); false = a neutral
-	 * "<N> selected" peek.
+	 * Wire the two permanent footer buttons. The footer is always visible, so
+	 * this only (re)binds the callbacks the panel wants to run when Create Goal /
+	 * Create Section are tapped. The caller owns the toggle/switch semantics
+	 * (open the create surface, switch modes, or collapse) - the dock just
+	 * forwards the click.
 	 */
-	public void setPeek(String text, boolean accent)
-	{
-		this.peekText = text != null ? text : "";
-		this.peekAccent = accent;
-		if (createPeekMode)
-		{
-			// Leaving the create invitation: restore the single peek bar.
-			createPeekMode = false;
-			peekHost.removeAll();
-			peekHost.add(peekBar, BorderLayout.CENTER);
-		}
-		applyCollapsed();
-	}
-
-	/**
-	 * Put the create invitation in the header as two side-by-side buttons,
-	 * Create Goal and Create Section (ADR-0008), replacing the single "+ Add a
-	 * goal" bar. Create Goal toggles the create surface open (and runs
-	 * {@code onCreateGoal} when expanding, so the caller can reset the surface
-	 * to its type grid); Create Section runs {@code onCreateSection} directly -
-	 * it is a prompt, not a dock expansion.
-	 */
-	public void setCreatePeek(Runnable onCreateGoal, Runnable onCreateSection)
+	public void setFooterActions(Runnable onCreateGoal, Runnable onCreateSection)
 	{
 		this.onCreateGoal = onCreateGoal;
 		this.onCreateSection = onCreateSection;
-		if (!createPeekMode)
+	}
+
+	/**
+	 * Show or hide the contextual surface above the footer. The footer stays put
+	 * either way. Collapsed = rest (just the two-button footer, list keeps its
+	 * height); expanded = the mounted surface renders above the footer. The panel
+	 * drives this: a selection auto-expands, a deselect collapses, the footer
+	 * buttons toggle it.
+	 */
+	public void setExpanded(boolean expanded)
+	{
+		boolean wantCollapsed = !expanded;
+		if (collapsed == wantCollapsed)
 		{
-			createPeekMode = true;
-			peekHost.removeAll();
-			peekHost.add(peekCreateRow, BorderLayout.CENTER);
+			return; // already in the requested state
 		}
+		collapsed = wantCollapsed;
 		applyCollapsed();
+	}
+
+	/** Whether the contextual surface is currently showing above the footer. */
+	public boolean isExpanded()
+	{
+		return !collapsed;
 	}
 
 	/** Replace the expanded content with the two button strips (selection
@@ -305,59 +297,37 @@ public class ActionDock extends JPanel
 
 	private static final java.awt.Color PEEK_CREATE_BG = new java.awt.Color(0x1D, 0x2A, 0x1F);
 	private static final java.awt.Color PEEK_CREATE_FG = new java.awt.Color(0xBF, 0xE0, 0xBF);
-	private static final java.awt.Color PEEK_NEUTRAL_BG = new java.awt.Color(0x22, 0x22, 0x24);
-	private static final java.awt.Color PEEK_NEUTRAL_FG = new java.awt.Color(0xBC, 0xBC, 0xBC);
-
-	private void stylePeekBar()
-	{
-		peekBar.setFocusPainted(false);
-		peekBar.setBorderPainted(false);
-		peekBar.setContentAreaFilled(true);
-		peekBar.setOpaque(true);
-		peekBar.setHorizontalAlignment(javax.swing.SwingConstants.LEFT);
-		peekBar.setFont(peekBar.getFont().deriveFont(java.awt.Font.BOLD, 12f));
-		peekBar.setBorder(BorderFactory.createEmptyBorder(6, 11, 6, 11));
-		peekBar.setPreferredSize(new Dimension(0, PEEK_H));
-		peekBar.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		peekBar.addActionListener(e -> {
-			collapsed = !collapsed;
-			applyCollapsed();
-		});
-	}
+	/** A hairline splitting the surface above from the permanent footer below. */
+	private static final java.awt.Color FOOTER_TOP_RULE = new java.awt.Color(0x2A, 0x2A, 0x2C);
 
 	private static final java.awt.Color PEEK_SECTION_BG = new java.awt.Color(0x1E, 0x26, 0x30);
 	private static final java.awt.Color PEEK_SECTION_FG = new java.awt.Color(0xAF, 0xC8, 0xE6);
 
-	private void buildCreatePeekRow()
+	/** The permanent footer: Create Goal | Create Section. Both forward their tap
+	 *  to the panel-supplied callback; the panel decides whether that opens the
+	 *  create surface, switches modes, or collapses (it owns the nav state). */
+	private void buildFooterRow()
 	{
-		peekCreateRow.setOpaque(false);
+		footerRow.setOpaque(false);
+		footerRow.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, FOOTER_TOP_RULE));
 		styleCreateButton(createGoalBtn, PEEK_CREATE_BG, PEEK_CREATE_FG);
 		styleCreateButton(createSectionBtn, PEEK_SECTION_BG, PEEK_SECTION_FG);
-		// Create Goal opens the create surface below (toggle), like the peek bar;
-		// on expand it runs onCreateGoal so the caller can reset to the grid.
+		createGoalBtn.setToolTipText("Create a goal");
+		createSectionBtn.setToolTipText("Create a section");
 		createGoalBtn.addActionListener(e -> {
-			boolean expanding = collapsed;
-			collapsed = !collapsed;
-			if (expanding && onCreateGoal != null)
+			if (onCreateGoal != null)
 			{
 				onCreateGoal.run();
 			}
-			applyCollapsed();
 		});
-		// Create Section opens the create surface below (toggle), like Create Goal;
-		// on expand it runs onCreateSection so the caller can mount the in-dock
-		// new-section form (note 2).
 		createSectionBtn.addActionListener(e -> {
-			boolean expanding = collapsed;
-			collapsed = !collapsed;
-			if (expanding && onCreateSection != null)
+			if (onCreateSection != null)
 			{
 				onCreateSection.run();
 			}
-			applyCollapsed();
 		});
-		peekCreateRow.add(createGoalBtn);
-		peekCreateRow.add(createSectionBtn);
+		footerRow.add(createGoalBtn);
+		footerRow.add(createSectionBtn);
 	}
 
 	private void styleCreateButton(JButton b, java.awt.Color bg, java.awt.Color fg)
@@ -382,21 +352,8 @@ public class ActionDock extends JPanel
 
 	private void applyCollapsed()
 	{
+		// Only the surface hides on collapse; the footer stays visible always.
 		centerHost.setVisible(!collapsed);
-		peekBar.setText((peekAccent ? "+  " : "") + peekText);
-		peekBar.setBackground(peekAccent ? PEEK_CREATE_BG : PEEK_NEUTRAL_BG);
-		peekBar.setForeground(peekAccent ? PEEK_CREATE_FG : PEEK_NEUTRAL_FG);
-		// Chevron trails on the right: up = tap to expand, down = tap to close.
-		peekBar.setHorizontalTextPosition(javax.swing.SwingConstants.LEFT);
-		peekBar.setIcon(collapsed
-			? com.goalplanner.ui.ShapeIcons.upTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A))
-			: com.goalplanner.ui.ShapeIcons.downTriangle(7, new java.awt.Color(0x6A, 0x8A, 0x6A)));
-		peekBar.setIconTextGap(8);
-		peekBar.setToolTipText(collapsed ? "Open" : "Close");
-		// Create Goal / Create Section are plain buttons (no chevron): they read as
-		// actions, not a peek toggle.
-		createGoalBtn.setToolTipText(collapsed ? "Open goal creation" : "Close");
-		createSectionBtn.setToolTipText("Create a new section");
 		revalidate();
 		repaint();
 	}
@@ -404,17 +361,21 @@ public class ActionDock extends JPanel
 	@Override
 	public Dimension getPreferredSize()
 	{
-		int expanded;
+		int surface;
 		if (customView != null)
 		{
-			// Create surface: grow to the form's preferred height, capped.
-			expanded = Math.min(CREATE_MAX_H, customView.getPreferredSize().height + 4);
+			// A mounted surface (create grid/form or edit view): grow to its
+			// preferred height, capped so the goal list keeps a usable minimum.
+			surface = Math.min(CREATE_MAX_H, customView.getPreferredSize().height + 4);
 		}
 		else
 		{
-			expanded = 2 * (ROW_H + 4) + 2;
+			surface = 2 * (ROW_H + 4) + 2;
 		}
-		int h = PEEK_H + (collapsed ? 0 : expanded);
+		// The permanent footer is always counted; the surface only adds height
+		// while expanded.
+		int footerH = footerRow.getPreferredSize().height;
+		int h = footerH + (collapsed ? 0 : surface);
 		return new Dimension(super.getPreferredSize().width, h);
 	}
 

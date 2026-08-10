@@ -57,6 +57,13 @@ public class GoalPanel extends PluginPanel
 	 *  the pure state resolver. Reset whenever a selection exists (the dock leaves
 	 *  the create surface for the action strips). */
 	private CreateNav dockCreateNav = CreateNav.GRID;
+	/** Whether the user has opened the create surface above the permanent footer
+	 *  (ADR-0008 refinement). The footer's Create Goal / Create Section buttons are
+	 *  always visible; this tracks whether the surface ABOVE them is expanded while
+	 *  nothing is selected. A selection auto-expands regardless; returning to EMPTY
+	 *  (deselect) rests back to false, so {@link #refreshDock()} shows just the
+	 *  footer. Preserved across create navigation so a tile tap does not collapse. */
+	private boolean dockCreateOpen = false;
 	/** Which type's form to show when {@link #dockCreateNav} is FORM. */
 	private com.goalplanner.model.GoalType dockCreateType = null;
 	/** A validated goal-create awaiting its landing section (note 3): the consumer
@@ -1851,9 +1858,16 @@ public class GoalPanel extends PluginPanel
 		com.goalplanner.ui.dock.DockContext ctx =
 			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds());
 
-		// A selection means the dock leaves the create surface for the action
-		// strips; reset the create navigation so returning to EMPTY starts at
-		// the type grid, and forget the mounted create view.
+		// The two create buttons are a PERMANENT footer (ADR-0008 refinement),
+		// present in every state. The contextual surface renders ABOVE them. Wire
+		// the footer callbacks every refresh (cheap); the handlers own the
+		// open/switch/collapse semantics because they read the create nav state.
+		actionDock.setFooterActions(this::onFooterCreateGoal, this::onFooterCreateSection);
+
+		// A selection means the dock leaves the create surface for the edit/multi
+		// surface; reset the create navigation so returning to EMPTY starts at the
+		// type grid, forget the mounted create view, and rest the create surface
+		// (so a later deselect shows just the footer, not a stale expanded grid).
 		if (ctx.getState() != com.goalplanner.ui.dock.DockContext.State.EMPTY)
 		{
 			dockCreateNav = CreateNav.GRID;
@@ -1864,6 +1878,7 @@ public class GoalPanel extends PluginPanel
 			dockCreateMountedType = null;
 			dockCreateStep = CreateStep.PICKER;
 			dockCreateMountedStep = null;
+			dockCreateOpen = false;
 			resetCreatePicks();
 			// A pending seed survives only the transition INTO the create surface
 			// (selection just cleared -> EMPTY), so it must not be cleared here.
@@ -1892,13 +1907,14 @@ public class GoalPanel extends PluginPanel
 				if (g == null) break;
 				// Unified create/edit form (ADR-0008): a selected goal shows the
 				// SAME per-type form as create, pre-filled, with its parameters as
-				// inline commit-on-blur fields plus the lifecycle action chips.
-				// It is a custom component (like the create surface), so mount it
-				// via setExpandedComponent and return early. Guard the remount so a
-				// same-goal refresh does not wipe an in-progress field edit.
+				// inline commit-on-blur fields plus the lifecycle action chips. The
+				// surface auto-expands above the permanent footer. It is a custom
+				// component, so mount it via setExpandedComponent and return early.
+				// Guard the remount so a same-goal refresh does not wipe an
+				// in-progress field edit.
 				if (usesUnifiedEditForm(g.getType()))
 				{
-					actionDock.setPeek("1 selected", false);
+					actionDock.setExpanded(true);
 					if (!dockEditMounted || !gid.equals(dockEditMountedGoalId))
 					{
 						// A genuinely different goal resets the chip drill-in to the
@@ -1913,6 +1929,9 @@ public class GoalPanel extends PluginPanel
 					}
 					return;
 				}
+				// Legacy button-strip fallback (e.g. COLLECTION_LOG): the strips
+				// carry a "1 selected" hint since there is no SELECTED bar here.
+				hint = "1 selected";
 				buildGoalDock(g, top, bottom);
 				break;
 			}
@@ -1927,30 +1946,16 @@ public class GoalPanel extends PluginPanel
 			case EMPTY:
 			default:
 			{
-				// The create surface (ADR-0008) is the EMPTY-state content: a
-				// type grid that navigates into per-type forms, all inside the
-				// dock. It is a custom component, not the button strips, so this
-				// case returns early. Rebuild only when the mounted view no
-				// longer matches the requested navigation, so a half-filled form
-				// survives unrelated dock refreshes.
-				// Create invitation = two header buttons (ADR-0008): Create Goal
-				// opens the type grid below; Create Section prompts for a name.
-				// Create Goal resets the surface to the grid when it expands.
-				actionDock.setCreatePeek(
-					() -> {
-						dockCreateNav = CreateNav.GRID;
-						dockCreateType = null;
-						dockPendingCreate = null;
-						mountCreateSurface();
-					},
-					// Create Section expands the dock into the in-dock new-section
-					// form (note 2), mirroring Create Goal rather than prompting.
-					() -> {
-						dockCreateNav = CreateNav.SECTION_NEW;
-						dockCreateType = null;
-						dockPendingCreate = null;
-						mountCreateSurface();
-					});
+				// Nothing selected: the surface above the footer is the create
+				// surface (type grid -> per-type forms, all in the dock). At rest
+				// it stays collapsed (just the footer shows, list keeps its
+				// height); the footer's Create buttons open it (dockCreateOpen).
+				// Rebuild the mounted view only when it no longer matches the
+				// requested navigation, so a half-filled form survives unrelated
+				// refreshes. Expansion tracks dockCreateOpen, which is preserved
+				// across create navigation but reset to false on any selection, so
+				// a deselect rests back to the footer.
+				actionDock.setExpanded(dockCreateOpen);
 				if (!dockCreateMounted
 					|| dockCreateMountedNav != dockCreateNav
 					|| dockCreateMountedType != dockCreateType
@@ -1961,18 +1966,71 @@ public class GoalPanel extends PluginPanel
 				return;
 			}
 		}
-		switch (ctx.getState())
-		{
-			case GOAL:
-				actionDock.setPeek("1 selected", false);
-				break;
-			case MULTI:
-				actionDock.setPeek(ctx.getCount() + " selected", false);
-				break;
-			default:
-				break;
-		}
+		// GOAL (legacy strip) / MULTI: the action strips auto-expand above the
+		// permanent footer.
+		actionDock.setExpanded(true);
 		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
+	}
+
+	/**
+	 * The permanent footer's Create Goal button. Always switches the surface to
+	 * the create type grid and expands it - unless that grid is already showing at
+	 * rest (nothing selected), in which case tapping again collapses (toggle). A
+	 * selection is cleared first so the dock reads unambiguously as create mode;
+	 * dockCreateOpen keeps the surface expanded across the async reselect refresh.
+	 */
+	private void onFooterCreateGoal()
+	{
+		boolean hasSelection = !api.getSelectedGoalIds().isEmpty();
+		// Toggle closed only when the create-goal surface is what is already open.
+		if (!hasSelection && dockCreateOpen && actionDock.isExpanded()
+			&& (dockCreateNav == CreateNav.GRID || dockCreateNav == CreateNav.FORM
+				|| dockCreateNav == CreateNav.SECTION_PICK))
+		{
+			dockCreateOpen = false;
+			actionDock.setExpanded(false);
+			return;
+		}
+		if (hasSelection)
+		{
+			// Leave the edit/multi surface for create; the list stops highlighting.
+			api.clearGoalSelection();
+		}
+		dockCreateOpen = true;
+		dockCreateNav = CreateNav.GRID;
+		dockCreateType = null;
+		dockPendingCreate = null;
+		dockCreateStep = CreateStep.PICKER;
+		resetCreatePicks();
+		mountCreateSurface();
+		actionDock.setExpanded(true);
+	}
+
+	/**
+	 * The permanent footer's Create Section button. Switches the surface to the
+	 * in-dock new-section form and expands it; tapping again while that form is the
+	 * one showing at rest collapses (toggle). Mirrors {@link #onFooterCreateGoal}.
+	 */
+	private void onFooterCreateSection()
+	{
+		boolean hasSelection = !api.getSelectedGoalIds().isEmpty();
+		if (!hasSelection && dockCreateOpen && actionDock.isExpanded()
+			&& dockCreateNav == CreateNav.SECTION_NEW)
+		{
+			dockCreateOpen = false;
+			actionDock.setExpanded(false);
+			return;
+		}
+		if (hasSelection)
+		{
+			api.clearGoalSelection();
+		}
+		dockCreateOpen = true;
+		dockCreateNav = CreateNav.SECTION_NEW;
+		dockCreateType = null;
+		dockPendingCreate = null;
+		mountCreateSurface();
+		actionDock.setExpanded(true);
 	}
 
 	// ============================================================
@@ -3174,6 +3232,10 @@ public class GoalPanel extends PluginPanel
 	 *  builder). */
 	private void navigateCreate(com.goalplanner.model.GoalType type)
 	{
+		// Navigating the create surface keeps it expanded above the footer (a
+		// deselect/selection is the only thing that rests it); mark it open so
+		// refreshDock's EMPTY branch does not collapse mid-navigation.
+		dockCreateOpen = true;
 		dockCreateType = type;
 		dockCreateNav = type == null ? CreateNav.GRID : CreateNav.FORM;
 		if (type == null)
@@ -3210,6 +3272,7 @@ public class GoalPanel extends PluginPanel
 	 *  re-render the dock (the mount guard sees the step change and remounts). */
 	private void navigateCreateStep(CreateStep step)
 	{
+		dockCreateOpen = true;
 		dockCreateStep = step;
 		refreshDock();
 	}
@@ -3218,6 +3281,7 @@ public class GoalPanel extends PluginPanel
 	 *  section pick) and re-render the dock. */
 	private void navigateCreateNav(CreateNav nav)
 	{
+		dockCreateOpen = true;
 		dockCreateNav = nav;
 		refreshDock();
 	}
