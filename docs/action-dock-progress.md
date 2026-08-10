@@ -5,6 +5,92 @@ Everything here is **render-path** work that has NOT been verified in-client
 (no client available while the designer was AFK). Treat every layout/spacing
 choice as provisional until screenshot-verified.
 
+## Permanent create footer — the surface renders ABOVE the buttons (latest)
+
+The Create Goal / Create Section buttons are now a **permanent footer** at the
+bottom of the dock, visible in every state. The contextual surface (create
+grid/form, the selected goal's EDIT view, or the multi-select action strips)
+renders **above** the footer, not in place of it. This replaces the old
+peek-header model where the NORTH bar SWAPPED between the two create buttons
+and a single "N selected" peek, so selecting a goal used to replace the create
+buttons. Now the footer is the resting bar and never swaps out.
+
+Top -> bottom inside the dock:
+1. Contextual surface (collapsible): create grid/form when creating, the
+   selected goal's edit view when one is selected, the multi-select actions when
+   several are. Height-capped at `CREATE_MAX_H` (300px), scrolls beyond that.
+2. `[Create Goal | Create Section]` — permanent footer, always visible.
+
+Behavior:
+- **Rest** (nothing selected, collapsed): just the footer shows; the list keeps
+  its full height. The footer IS the resting bar (peek-and-expand footprint
+  preserved).
+- **Create Goal** taps switch the surface to the type grid and expand it above
+  the footer; tapping it again while that grid is the one showing at rest
+  collapses (toggle). **Create Section** does the same for the in-dock
+  new-section form.
+- **Select one goal** auto-expands the surface to that goal's edit view (headed
+  by the existing "SELECTED" bar); the footer stays put beneath it.
+- **Select multiple** shows the multi-select action strips above the footer.
+- **Deselect** rests the surface back to just the footer.
+- If a goal is selected and the user taps a footer button, the selection is
+  cleared (list stops highlighting) and the surface switches to create/section
+  mode — chosen as the least surprising of the ADR's "use your judgment" options.
+
+### ActionDock API changes
+- **Removed** the NORTH peek header entirely: `peekBar`, `peekHost`,
+  `peekCreateRow`, `createPeekMode`, `peekText`/`peekAccent`, `stylePeekBar`,
+  `buildCreatePeekRow`, and `setPeek`/`setCreatePeek`. The chevron + "N selected"
+  peek text are gone (redundant now that the footer is permanent and the edit
+  view carries its own SELECTED bar).
+- **Added** a permanent `footerRow` (SOUTH, `GridLayout(1,2)`) holding
+  `createGoalBtn` / `createSectionBtn`, built by `buildFooterRow`. The surface
+  host `centerHost` is CENTER and hides on collapse; the footer never hides.
+- **New API**: `setFooterActions(Runnable onCreateGoal, Runnable onCreateSection)`
+  (re-binds the footer callbacks; the dock just forwards the click),
+  `setExpanded(boolean)` / `isExpanded()` (show/hide the surface above the
+  footer). `setRows(Rows)` and `setExpandedComponent(JComponent)` are unchanged
+  and still target `centerHost`. `getPreferredSize` always counts the footer
+  height and adds the surface height only while expanded.
+- The footer's top hairline (`FOOTER_TOP_RULE`) is painted only while expanded,
+  so at rest it does not double up under the dock's own `DockDivider`. The
+  `DockDivider` top border is intact.
+
+### GoalPanel.refreshDock rewiring
+- New field `dockCreateOpen`: whether the create surface is expanded while
+  nothing is selected. Preserved across create navigation (set by
+  `onFooterCreate*`, `navigateCreate`, `navigateCreateStep`, `navigateCreateNav`)
+  and reset to false whenever a selection exists, so a deselect rests the surface.
+- `refreshDock` wires the footer every call via `setFooterActions`. GOAL (unified
+  edit) and MULTI call `setExpanded(true)`; the legacy GOAL button-strip fallback
+  (e.g. COLLECTION_LOG) now carries a "1 selected" Rows hint since it has no
+  SELECTED bar. EMPTY calls `setExpanded(dockCreateOpen)` and mounts the create
+  surface under the existing nav/type/step mount guard.
+- New handlers `onFooterCreateGoal` / `onFooterCreateSection` own the
+  open/switch/collapse semantics (toggle closed only when that mode is the one
+  already showing at rest; clear any selection first otherwise).
+
+### NEEDS-SCREENSHOT (permanent-footer pass) — in-client loop
+- **Rest state**: nothing selected + collapsed = just the two-button footer; the
+  goal list keeps its full height (the slim peek-and-expand footprint).
+- **Create expands above footer**: tap Create Goal -> the type grid grows above
+  the footer (buttons stay put); tap Create Section -> the new-section form does
+  the same. Tapping the active one again collapses back to just the footer.
+- **Select one goal -> edit view above footer**: the goal's edit view (SELECTED
+  bar + fields + chips) auto-expands above the footer, and the Create Goal /
+  Create Section buttons are still visible beneath it.
+- **Select multiple -> multi actions above footer**: the multi-select action
+  strips render above the still-visible footer.
+- **Deselect reclaims list space**: deselecting (or the edit view's Deselect)
+  collapses the surface back to just the footer and the list grows back.
+- **Footer button while a goal is selected**: tapping Create Goal/Section clears
+  the selection and switches the surface to create mode without flicker.
+- **Divider intact**: the artistic `DockDivider` still heads the dock; confirm
+  the footer's own hairline (only while expanded) reads cleanly and there is no
+  doubled rule at rest.
+- **Height cap + scroll**: a tall edit/create surface still caps at 300px and
+  scrolls internally, and the list keeps a usable minimum, with the footer added.
+
 ## Refinement pass (notes 2-6) — create/edit dock
 
 Five user refinements to the just-built create/edit dock. All assembly still
