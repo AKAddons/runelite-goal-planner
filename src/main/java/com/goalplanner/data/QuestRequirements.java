@@ -23,7 +23,7 @@ import net.runelite.api.Skill;
  * feeds each entry through {@code findOrCreateRequirement} inside a
  * compound command.
  *
- * <p><b>Coverage.</b> This table covers all 210 quests in the
+ * <p><b>Coverage.</b> This table covers all 211 quests in the
  * RuneLite {@link Quest} enum. Requirements are wiki-sourced.
  *
  * <p><b>Account-wide requirements.</b> Quest points, combat level,

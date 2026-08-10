@@ -11,11 +11,11 @@ import java.awt.Color;
 public enum AccountMetric
 {
 	/**
-	 * maxTarget is a static fallback (339 as of The Blood Moon Rises, 2026-06) -
+	 * maxTarget is a static fallback (341 as of Fallen From Grace, 2026-07) -
 	 * goal creation prefers the live sum of the client's quest DB table via
 	 * {@link #effectiveMaxTarget}, which grows as new quests release.
 	 */
-	QUEST_POINTS("Quest Points", new Color(65, 155, 222), 899, null, 1, 339),
+	QUEST_POINTS("Quest Points", new Color(65, 155, 222), 899, null, 1, 341),
 	COMBAT_LEVEL("Combat Level", new Color(200, 60, 60), 168, null, 3, 126),
 	TOTAL_LEVEL("Total Level", new Color(76, 175, 80), 898, null, 1, 2376),
 	// MUSIC_TRACKS deferred - no reliable bulk API for counting unlocked tracks
@@ -32,7 +32,7 @@ public enum AccountMetric
 	 * ceiling IS the quest-point maximum - the static fallback matches
 	 * QUEST_POINTS and {@link #effectiveMaxTarget} shares its live read.
 	 */
-	TOG_MAX_TEARS("Tears of Guthix PB", new Color(100, 180, 220), 0, null, 1, 339),
+	TOG_MAX_TEARS("Tears of Guthix PB", new Color(100, 180, 220), 0, null, 1, 341),
 	/** Chompy bird kill count. */
 	CHOMPY_KILLS("Chompy Kills", new Color(139, 69, 19), 0, "item:" + net.runelite.api.ItemID.RAW_CHOMPY, 1, 4000),
 	/** Fortis Colosseum personal best glory (highest single-run glory). */
