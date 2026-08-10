@@ -18,16 +18,22 @@ import java.awt.event.MouseEvent;
 
 /**
  * A row rendered as a section header in the goal panel.
- * Click anywhere on the row to toggle collapse/expand. The chevron on the left
- * indicates current state (▼ expanded, ▶ collapsed). When the section has
- * goals, a checkbox glyph on the right edge selects/unselects all of them in
- * one click (mirrors the context menu's "Select All in Section").
+ * The chevron on the left edge is the collapse target (click it to
+ * collapse/expand); its shape indicates the current state (down = expanded,
+ * right = collapsed). Clicking anywhere else on the row SELECTS the section, so
+ * the action dock shows that section's actions (mirrors clicking a goal card).
+ * A selected header paints a highlight border. When the section has goals, a
+ * checkbox glyph on the right edge selects/unselects all of them in one click
+ * (mirrors the context menu's "Select All in Section"); it neither selects nor
+ * collapses the section.
  */
 public class SectionHeaderRow extends JPanel
 {
 	private static final Color BORDER_COLOR = new Color(60, 60, 60);
 	private static final Color TEXT_COLOR = new Color(200, 200, 200);
 	private static final Color CHEVRON_COLOR = new Color(160, 160, 160);
+	/** Selection highlight stroke - matches GoalCard's white selection outline. */
+	private static final Color SELECT_COLOR = Color.WHITE;
 	private static final int ROW_HEIGHT = 22;
 	private static final int CHEVRON_WIDTH = 14;
 	private static final int CHECKBOX_SIZE = 10;
@@ -48,12 +54,21 @@ public class SectionHeaderRow extends JPanel
 	private final java.util.function.BooleanSupplier allSelectedState;
 	private final JLabel selectToggle;
 
+	/** This header's section id, so the panel can match it against the current
+	 *  section selection when refreshing the highlight without a full rebuild. */
+	private final String sectionId;
+	/** Whether this section is the currently selected one (paints a highlight). */
+	private boolean selected;
+
 	public SectionHeaderRow(SectionView section, int goalCount, Runnable onToggle)
 	{
-		this(section, goalCount, onToggle, null, null, false);
+		this(section, goalCount, onToggle, null, null, null, false);
 	}
 
 	/**
+	 * @param onSelect runs when the row body (anywhere but the chevron and the
+	 *                 select-all toggle) is left-clicked - selects the section so
+	 *                 the dock shows its actions. Null leaves the row unselectable.
 	 * @param allSelectedState true when every goal in the section is currently
 	 *                         selected (drives the glyph + tooltip); null hides
 	 *                         the select-all toggle entirely.
@@ -61,9 +76,11 @@ public class SectionHeaderRow extends JPanel
 	 *                          selected, unselect all otherwise.
 	 */
 	public SectionHeaderRow(SectionView section, int goalCount, Runnable onToggle,
+		Runnable onSelect,
 		java.util.function.BooleanSupplier allSelectedState, Runnable onToggleSelectAll,
 		boolean allCompleted)
 	{
+		this.sectionId = section.id;
 		setLayout(new BorderLayout());
 
 		// User-set color fills the header face with a darkened version of the
@@ -102,6 +119,21 @@ public class SectionHeaderRow extends JPanel
 			? ShapeIcons.rightTriangle(8, CHEVRON_COLOR)
 			: ShapeIcons.downTriangle(8, CHEVRON_COLOR));
 		chevron.setPreferredSize(new Dimension(CHEVRON_WIDTH, ROW_HEIGHT));
+		chevron.setToolTipText(section.collapsed ? "Expand section" : "Collapse section");
+		// The chevron is the collapse target. It has its own listener, so Swing
+		// routes clicks on it here and NOT to the row's select listener below - the
+		// two are cleanly separated (chevron = collapse, row body = select).
+		chevron.addMouseListener(new MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(MouseEvent e)
+			{
+				if (e.getButton() == MouseEvent.BUTTON1 && onToggle != null)
+				{
+					onToggle.run();
+				}
+			}
+		});
 
 		JLabel nameLabel = new JLabel(section.name.toUpperCase(), SwingConstants.CENTER);
 		nameLabel.setForeground(TEXT_COLOR);
@@ -175,14 +207,33 @@ public class SectionHeaderRow extends JPanel
 			@Override
 			public void mouseClicked(MouseEvent e)
 			{
-				// Only left-click toggles. Right-click is reserved for the
-				// context menu attached by GoalPanel for user-defined sections.
-				if (e.getButton() == MouseEvent.BUTTON1 && onToggle != null)
+				// Left-clicking the row body SELECTS the section (the chevron and
+				// the select-all glyph have their own listeners, so their clicks
+				// never reach here). Right-click is reserved for the context menu
+				// attached by GoalPanel.
+				if (e.getButton() == MouseEvent.BUTTON1 && onSelect != null)
 				{
-					onToggle.run();
+					onSelect.run();
 				}
 			}
 		});
+	}
+
+	/** This header's section id. */
+	public String getSectionId()
+	{
+		return sectionId;
+	}
+
+	/** Paint (or clear) the selected-section highlight. Called by the panel when
+	 *  the section selection changes without a full list rebuild. */
+	public void setSelected(boolean sel)
+	{
+		if (this.selected != sel)
+		{
+			this.selected = sel;
+			repaint();
+		}
 	}
 
 	/**
@@ -217,5 +268,16 @@ public class SectionHeaderRow extends JPanel
 			g.fillRect(0, 0, getWidth(), getHeight());
 		}
 		super.paintComponent(g);
+
+		// Selection outline, painted last so it sits above the fill and the
+		// bottom hairline. Mirrors GoalCard's 2px inset white outline.
+		if (selected)
+		{
+			java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+			g2.setColor(SELECT_COLOR);
+			g2.setStroke(new java.awt.BasicStroke(2f));
+			g2.drawRect(1, 1, getWidth() - 3, getHeight() - 3);
+			g2.dispose();
+		}
 	}
 }

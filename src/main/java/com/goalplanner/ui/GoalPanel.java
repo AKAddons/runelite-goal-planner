@@ -108,6 +108,19 @@ public class GoalPanel extends PluginPanel
 	 *  Data/Relations/Actions group chips. Reset to null whenever a different goal
 	 *  mounts, so a new selection always starts at the top level. */
 	private EditGroup dockEditGroup = null;
+	/** The currently selected SECTION's id (dock SECTION state), or null. Mutually
+	 *  exclusive with the goal selection: selecting a section clears the goal
+	 *  selection and vice-versa (enforced in {@link #refreshDock()}). */
+	private String selectedSectionId = null;
+	/** Which section drill-in group is open in the SECTION dock (null = top level).
+	 *  Reset when a different section mounts, so a new selection starts at top. */
+	private SectionGroup dockSectionGroup = null;
+	/** Whether the SECTION surface is mounted in the dock and for which section -
+	 *  lets {@link #refreshDock()} skip rebuilding it while the same section stays
+	 *  selected. */
+	private boolean dockSectionMounted = false;
+	private String dockSectionMountedId = null;
+	private SectionGroup dockSectionMountedGroup = null;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1084,10 +1097,8 @@ public class GoalPanel extends PluginPanel
 			if (sectionCount == 0 && (filterActive || "REPEATABLE".equals(section.kind))) continue;
 			final String sectionIdRef = section.id;
 			SectionHeaderRow headerRow = new SectionHeaderRow(section, sectionCount, () -> {
-				// In move-pick mode, the section title row acts as a drop
-				// target for the source goal - particularly useful for
-				// empty sections, where there's no card to click. Falls
-				// through to the normal collapse toggle when not in mode.
+				// The chevron toggles collapse. In move-pick mode it doubles as a
+				// drop target for empty sections, matching the pre-select behavior.
 				if (pendingMoveSourceId != null)
 				{
 					handleMovePickToSection(sectionIdRef);
@@ -1096,6 +1107,17 @@ public class GoalPanel extends PluginPanel
 				api.toggleSectionCollapsed(sectionIdRef);
 				// API callback rebuilds the panel.
 			},
+				// Clicking the row body SELECTS the section (dock SECTION state).
+				// In move-pick mode it stays a drop target - the row body is the
+				// large hit area, particularly useful for empty sections.
+				() -> {
+					if (pendingMoveSourceId != null)
+					{
+						handleMovePickToSection(sectionIdRef);
+						return;
+					}
+					selectSection(sectionIdRef);
+				},
 				// Select-all/unselect-all toggle on the right edge of the header.
 				() -> isAllSelectedInSection(sectionIdRef),
 				() -> {
@@ -1109,6 +1131,7 @@ public class GoalPanel extends PluginPanel
 					}
 				},
 				isAllCompleteInSection(sectionIdRef));
+			headerRow.setSelected(sectionIdRef.equals(selectedSectionId));
 			headerRows.add(headerRow);
 			// All sections get a right-click menu. User sections get the full
 			// rename/move/delete/color menu; built-ins get only Change Color.
@@ -1855,8 +1878,39 @@ public class GoalPanel extends PluginPanel
 	 */
 	void refreshDock()
 	{
+		// A section that was deleted/renamed away while selected must not linger as
+		// a stale SECTION state - drop the id before it can drive the dock.
+		if (selectedSectionId != null && findSectionView(selectedSectionId) == null)
+		{
+			selectedSectionId = null;
+		}
 		com.goalplanner.ui.dock.DockContext ctx =
-			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds());
+			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds(), selectedSectionId);
+
+		// Goals and a section are mutually exclusive; a goal selection always wins.
+		// Clearing the id here keeps a stale section highlight from surviving a goal
+		// selection made through any path (card click, select-all, share import).
+		if (ctx.getState() == com.goalplanner.ui.dock.DockContext.State.GOAL
+			|| ctx.getState() == com.goalplanner.ui.dock.DockContext.State.MULTI)
+		{
+			selectedSectionId = null;
+		}
+		// Repaint every header's selection highlight against the resolved id. The
+		// header rows persist across a dock-only refresh, so this updates them
+		// without a full list rebuild (mirrors refreshSelectToggle).
+		for (SectionHeaderRow row : headerRows)
+		{
+			row.setSelected(row.getSectionId() != null
+				&& row.getSectionId().equals(selectedSectionId));
+		}
+		// Anything but a single section selected drops the mounted SECTION surface.
+		if (ctx.getState() != com.goalplanner.ui.dock.DockContext.State.SECTION)
+		{
+			dockSectionMounted = false;
+			dockSectionMountedId = null;
+			dockSectionMountedGroup = null;
+			dockSectionGroup = null;
+		}
 
 		// The two create buttons are a PERMANENT footer (ADR-0008 refinement),
 		// present in every state. The contextual surface renders ABOVE them. Wire
@@ -1942,6 +1996,44 @@ public class GoalPanel extends PluginPanel
 					new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
 				buildMultiDock(ids, top, bottom);
 				break;
+			}
+			case SECTION:
+			{
+				// A selected section renders its actions as a custom surface above
+				// the permanent footer, exactly like the goal EDIT view. Mount it
+				// via setExpandedComponent and return early. Guard the remount so a
+				// same-section refresh (e.g. an in-group action) does not thrash it.
+				com.goalplanner.api.SectionView sv = findSectionView(ctx.getSectionId());
+				if (sv == null)
+				{
+					// Raced away between the stale-guard and here; treat as EMPTY.
+					selectedSectionId = null;
+					actionDock.setExpanded(dockCreateOpen);
+					if (!dockCreateMounted
+						|| dockCreateMountedNav != dockCreateNav
+						|| dockCreateMountedType != dockCreateType
+						|| dockCreateMountedStep != dockCreateStep)
+					{
+						mountCreateSurface();
+					}
+					return;
+				}
+				actionDock.setExpanded(true);
+				if (!dockSectionMounted
+					|| !sv.id.equals(dockSectionMountedId)
+					|| dockSectionMountedGroup != dockSectionGroup)
+				{
+					// A genuinely different section resets the drill-in to the top.
+					if (!sv.id.equals(dockSectionMountedId))
+					{
+						dockSectionGroup = null;
+					}
+					actionDock.setExpandedComponent(buildSectionDock(sv));
+					dockSectionMounted = true;
+					dockSectionMountedId = sv.id;
+					dockSectionMountedGroup = dockSectionGroup;
+				}
+				return;
 			}
 			case EMPTY:
 			default:
@@ -5059,6 +5151,88 @@ public class GoalPanel extends PluginPanel
 		refreshDock();
 	}
 
+	/** Select a section: the dock shows its actions. Mutually exclusive with the
+	 *  goal selection, so any selected goals are cleared. Mirrors clicking a goal
+	 *  card, but for a section header (the row body, not the chevron). */
+	private void selectSection(String sectionId)
+	{
+		if (sectionId == null)
+		{
+			return;
+		}
+		selectedSectionId = sectionId;
+		dockSectionGroup = null;
+		// Enforce mutual exclusivity. A no-op when nothing is selected; when it
+		// does clear a selection its callback funnels back through refreshDock,
+		// which now resolves to the SECTION state (goals empty + section set).
+		api.clearGoalSelection();
+		refreshDock();
+	}
+
+	/** Clear the current section selection, resting the dock back to EMPTY. */
+	private void clearSectionSelection()
+	{
+		selectedSectionId = null;
+		dockSectionGroup = null;
+		refreshDock();
+	}
+
+	/** Drop the SECTION mount guard and refresh so an in-place section action
+	 *  (drill-in group nav, a nesting/archive cycle) re-renders the surface off
+	 *  fresh section data. Mirrors {@link #refreshEditForm}. */
+	private void refreshSectionDock()
+	{
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** The current {@link com.goalplanner.api.SectionView} for {@code id}, or null
+	 *  if no such section exists (e.g. it was deleted while selected). */
+	private com.goalplanner.api.SectionView findSectionView(String id)
+	{
+		if (id == null)
+		{
+			return null;
+		}
+		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
+		{
+			if (sv.id.equals(id))
+			{
+				return sv;
+			}
+		}
+		return null;
+	}
+
+	/** Number of goals currently in the section (mirrors the menu's count). */
+	private int countGoalsInSection(String sectionId)
+	{
+		int n = 0;
+		for (Goal g : goalStore.getGoals())
+		{
+			if (sectionId.equals(g.getSectionId()))
+			{
+				n++;
+			}
+		}
+		return n;
+	}
+
+	/** Advance a tri-state section override: Default (null) -> On (TRUE) ->
+	 *  Off (FALSE) -> Default. Used by the nesting and archive cycle chips. */
+	private static Boolean cycleOverride(Boolean current)
+	{
+		if (current == null)
+		{
+			return Boolean.TRUE;
+		}
+		if (Boolean.TRUE.equals(current))
+		{
+			return Boolean.FALSE;
+		}
+		return null;
+	}
+
 	/** Run {@code commit} when the user finishes a text field: Enter, or blur. */
 	private void commitOnBlurOrEnter(JTextField f, Runnable commit)
 	{
@@ -5372,6 +5546,10 @@ public class GoalPanel extends PluginPanel
 	/** The drill-in groups the edit chips tree into (note 6). */
 	private enum EditGroup { DATA, RELATIONS, ACTIONS }
 
+	/** The drill-in groups the SECTION dock chips tree into. EDIT = rename/color/
+	 *  delete; LAYOUT = nesting + archive override; SHARE = copy/save codes. */
+	private enum SectionGroup { EDIT, LAYOUT, SHARE }
+
 	/** The lifecycle + relations chips for the edit form, grouped into a drill-in
 	 *  tree (note 6): the top level shows an optional Make-repeatable chip, three
 	 *  group chips (Data / Relations / Actions), and Deselect. Tapping a group
@@ -5541,6 +5719,223 @@ public class GoalPanel extends PluginPanel
 		}
 
 		wrap.add(chip("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
+	}
+
+	// ============================================================
+	// Section-surface (ADR-0007): the SECTION action dock.
+	//
+	// A selected section renders its actions as a surface above the permanent
+	// create footer, exactly like the goal EDIT view. Assembly lives ONLY here,
+	// reached from refreshDock()'s SECTION case (the single-place rule). Every
+	// chip REUSES an existing dialog / API / GoalPanel handler - the still-intact
+	// GoalContextMenuBuilder section menu is the parity reference; nothing is
+	// rebuilt. Built-in sections (Incomplete/Completed/Repeatable) mirror the
+	// menu's gating: no rename/delete/archive-override, and Add Goal is hidden on
+	// the auto-managed Completed section.
+	// ============================================================
+
+	/** Build the section action surface for {@code sv}: a name header, a short
+	 *  meta line, and the action chips (drill-in grouped when it gets crowded),
+	 *  under a full-width indicator bar naming the section. */
+	private JComponent buildSectionDock(com.goalplanner.api.SectionView sv)
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		int goalCount = countGoalsInSection(sv.id);
+		String kind = sv.builtIn
+			? (sv.kind != null ? sv.kind.substring(0, 1)
+				+ sv.kind.substring(1).toLowerCase(java.util.Locale.ROOT) + " (built-in)"
+				: "Built-in")
+			: "Section";
+		JLabel meta = new JLabel(kind + " - " + goalCount
+			+ (goalCount == 1 ? " goal" : " goals"));
+		meta.setForeground(CREATE_FG_DIM);
+		meta.setFont(meta.getFont().deriveFont(10f));
+		inner.add(meta, BorderLayout.NORTH);
+
+		inner.add(buildSectionChips(sv), BorderLayout.CENTER);
+		// The indicator bar names the section (uppercased small-caps), heading the
+		// surface so it is unmistakably about this section.
+		return surfaceShell(sv.name, false, inner);
+	}
+
+	private JComponent buildSectionChips(com.goalplanner.api.SectionView sv)
+	{
+		JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		wrap.setOpaque(false);
+
+		if (dockSectionGroup == null)
+		{
+			buildSectionChipsTop(sv, wrap);
+			return wrap;
+		}
+
+		wrap.add(chip("< Back", "Back to section actions",
+			() -> { dockSectionGroup = null; refreshSectionDock(); }));
+		switch (dockSectionGroup)
+		{
+			case EDIT:   buildSectionEditChips(sv, wrap); break;
+			case LAYOUT: buildSectionLayoutChips(sv, wrap); break;
+			case SHARE:  buildSectionShareChips(sv, wrap); break;
+			default:     break;
+		}
+		return wrap;
+	}
+
+	/** Top level: select-all, add-goal, the Edit/Layout/Share groups, deselect. */
+	private void buildSectionChipsTop(com.goalplanner.api.SectionView sv, JPanel wrap)
+	{
+		final String sid = sv.id;
+		final boolean builtIn = sv.builtIn;
+		final boolean completed = "COMPLETED".equals(sv.kind);
+		final int goalCount = countGoalsInSection(sid);
+
+		// Select all / Deselect all - label flips like the menu; hidden when empty.
+		if (goalCount > 0)
+		{
+			final boolean allSel = isAllSelectedInSection(sid);
+			wrap.add(chip(allSel ? "Deselect all" : "Select all",
+				allSel ? "Deselect every goal in this section"
+					: "Select every goal in this section",
+				() -> {
+					if (allSel) api.deselectAllInSection(sid);
+					else api.selectAllInSection(sid);
+					// (De)selecting goals moves the dock to the goal/multi state.
+				}));
+		}
+
+		// Add a goal into this section. Hidden on Completed (auto-managed), mirroring
+		// the menu. Reuses the existing add-goal dialog targeting this section.
+		if (!completed)
+		{
+			wrap.add(chip("Add goal", "Add a goal into this section",
+				() -> {
+					dialogFactory.pendingAddPositionInSection = Integer.MAX_VALUE;
+					dialogFactory.showAddGoalDialog(sid);
+				}));
+		}
+
+		// Rename/color/delete only make sense on user sections; a built-in gets a
+		// direct Change color chip (the one edit the menu allows on built-ins).
+		if (!builtIn)
+		{
+			wrap.add(chip("Edit", "Rename, change color, or delete",
+				() -> { dockSectionGroup = SectionGroup.EDIT; refreshSectionDock(); }));
+		}
+		else
+		{
+			wrap.add(chip("Change color", "Change this section's color",
+				() -> dialogFactory.showSectionColorDialog(sv)));
+		}
+
+		// Layout: dependency nesting (all sections) + completed handling (user only).
+		wrap.add(chip("Layout", "Dependency nesting and completed-goal handling",
+			() -> { dockSectionGroup = SectionGroup.LAYOUT; refreshSectionDock(); }));
+
+		// Share: only when sharing is available and there are goals to encode.
+		if (isShareAvailable() && goalCount > 0)
+		{
+			wrap.add(chip("Share", "Copy or save a share code",
+				() -> { dockSectionGroup = SectionGroup.SHARE; refreshSectionDock(); }));
+		}
+
+		wrap.add(chip("Deselect", "Clear the section selection",
+			this::clearSectionSelection));
+	}
+
+	/** Edit group (user sections only): rename, color, delete. */
+	private void buildSectionEditChips(com.goalplanner.api.SectionView sv, JPanel wrap)
+	{
+		wrap.add(chip("Rename", "Rename this section",
+			() -> dialogFactory.showRenameSectionDialog(sv)));
+		wrap.add(chip("Change color", "Change this section's color",
+			() -> dialogFactory.showSectionColorDialog(sv)));
+		wrap.add(chip("Delete", "Delete this section (undoable)",
+			() -> confirmDeleteSection(sv)));
+	}
+
+	/** Layout group: the dependency-nesting cycle, plus the completed-goal archive
+	 *  cycle on user sections. Each chip's label shows the current state and a tap
+	 *  advances it (Default -> On -> Off -> Default), mirroring the menu's radios. */
+	private void buildSectionLayoutChips(com.goalplanner.api.SectionView sv, JPanel wrap)
+	{
+		final String sid = sv.id;
+
+		final boolean indentDefault = config.showDependenciesIndented();
+		final Boolean nested = sv.nestedOverride;
+		String nestState = nested == null
+			? "Default (" + (indentDefault ? "nested" : "flat") + ")"
+			: (Boolean.TRUE.equals(nested) ? "Nested" : "Flat");
+		wrap.add(chip("Nesting: " + nestState,
+			"Cycle dependency nesting: use default, always nested, or always flat",
+			() -> {
+				api.setSectionNestedOverride(sid, cycleOverride(nested));
+				refreshSectionDock();
+			}));
+
+		if (!sv.builtIn)
+		{
+			final boolean archiveDefault = api.isAutoArchiveDefault();
+			final Boolean archive = sv.autoArchiveOverride;
+			String archState = archive == null
+				? "Default (" + (archiveDefault ? "archive" : "inline") + ")"
+				: (Boolean.TRUE.equals(archive) ? "Archive" : "Keep inline");
+			wrap.add(chip("Completed: " + archState,
+				"Cycle completed-goal handling: use default, auto-archive, or keep inline",
+				() -> {
+					api.setSectionAutoArchiveOverride(sid, cycleOverride(archive));
+					refreshSectionDock();
+				}));
+		}
+	}
+
+	/** Share group: copy/save a code for this section or for all sections. */
+	private void buildSectionShareChips(com.goalplanner.api.SectionView sv, JPanel wrap)
+	{
+		final String sid = sv.id;
+		wrap.add(chip("Copy code", "Copy a share code for this section",
+			() -> copySectionShareCode(sid)));
+		wrap.add(chip("Copy all", "Copy a share code for all sections",
+			this::copyAllSectionsShareCode));
+		if (isSavedPlansAvailable())
+		{
+			wrap.add(chip("Save code", "Save a share code for this section",
+				() -> saveSectionPlan(sid)));
+			wrap.add(chip("Save all", "Save a share code for all sections",
+				this::saveAllSectionsPlan));
+		}
+	}
+
+	/** The section delete confirm, reusing the menu's move-instead prompt verbatim.
+	 *  Clears the selection first since the section is about to vanish. */
+	private void confirmDeleteSection(com.goalplanner.api.SectionView sv)
+	{
+		int goalCount = countGoalsInSection(sv.id);
+		String plural = goalCount == 1 ? "goal" : "goals";
+		javax.swing.JCheckBox moveInstead = new javax.swing.JCheckBox(
+			"Move " + (goalCount == 1 ? "it" : "them")
+				+ " to Default (Incomplete/Completed) instead");
+		Object[] message = goalCount > 0
+			? new Object[]{
+				"Delete section \"" + sv.name + "\"?\n"
+					+ "This also deletes its " + goalCount + " " + plural
+					+ ". (Undo restores everything.)",
+				moveInstead}
+			: new Object[]{"Delete section \"" + sv.name + "\"?"};
+		int confirm = JOptionPane.showConfirmDialog(
+			this,
+			message,
+			"Delete Section",
+			JOptionPane.YES_NO_OPTION,
+			JOptionPane.WARNING_MESSAGE);
+		if (confirm == JOptionPane.YES_OPTION)
+		{
+			selectedSectionId = null;
+			dockSectionGroup = null;
+			api.deleteSection(sv.id, moveInstead.isSelected());
+		}
 	}
 
 	private JButton chip(String label, String tooltip, Runnable action)
