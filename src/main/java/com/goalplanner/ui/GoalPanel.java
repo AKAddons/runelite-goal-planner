@@ -2952,6 +2952,12 @@ public class GoalPanel extends PluginPanel
 	private static final Color IND_EDIT_BG = new Color(0x24, 0x24, 0x28);
 	private static final Color IND_EDIT_FG = new Color(0xBC, 0xBC, 0xBC);
 
+	/** Non-interactive completion indicator on the absolute-goal edit surface: a
+	 *  clear green tick when complete, a muted empty box when not. Painted via
+	 *  ShapeIcons so they render regardless of the checkbox's disabled state. */
+	private static final Color ABSOLUTE_CHECK_DONE = new Color(0x5C, 0xB8, 0x5C);
+	private static final Color ABSOLUTE_CHECK_EMPTY = new Color(0x7A, 0x7A, 0x7A);
+
 	/** Every trainable skill (Skill.values() minus OVERALL) for the skill picker
 	 *  grid - OVERALL is the account "Total Level" metric, not a skill goal. */
 	private static final net.runelite.api.Skill[] GOAL_SKILLS =
@@ -4635,12 +4641,19 @@ public class GoalPanel extends PluginPanel
 		{
 			// An absolute goal ALWAYS shows the checkbox but greyed + disabled: it
 			// reflects game-tracked state and can never be toggled by hand (note 4).
+			// A disabled JCheckBox in RuneLite's dark LAF does not paint its tick, so a
+			// completed goal would read as unchecked. Supply explicit painted icons that
+			// render regardless of enabled state and reuse the same ShapeIcons check the
+			// card selection UI uses, so the edit view agrees with g.isComplete(): a
+			// visible green tick when complete, a visible empty box when not.
 			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
 			done.setOpaque(false);
 			done.setForeground(CREATE_FG_DIM);
 			done.setFont(done.getFont().deriveFont(11f));
 			done.setSelected(complete);
 			done.setEnabled(false);
+			done.setDisabledIcon(ShapeIcons.checkboxEmpty(14, ABSOLUTE_CHECK_EMPTY));
+			done.setDisabledSelectedIcon(ShapeIcons.checkboxChecked(14, ABSOLUTE_CHECK_DONE));
 			done.setToolTipText("Tracked by game progress - can't be set manually.");
 			inner.add(done, BorderLayout.NORTH);
 		}
