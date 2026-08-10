@@ -3064,11 +3064,9 @@ public class GoalPanel extends PluginPanel
 		inner.setOpaque(false);
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
-		JLabel title = new JLabel("Add a goal");
-		title.setForeground(CREATE_FG);
-		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
-		inner.add(title, BorderLayout.NORTH);
-
+		// No "Add a goal" title and no "CREATE" indicator bar here: the Create Goal
+		// header button already names the mode, and a third label read as redundant
+		// (user feedback). The type tiles speak for themselves.
 		JPanel grid = new JPanel(new GridLayout(2, 4, 5, 5));
 		grid.setOpaque(false);
 		for (com.goalplanner.model.GoalType t : CREATE_TILES)
@@ -3080,7 +3078,7 @@ public class GoalPanel extends PluginPanel
 		// Create Section button in the dock header, beside Create Goal, which
 		// mounts the in-dock new-section form (buildSectionNewForm). Adding a goal
 		// is about goals; the grid stays clean.
-		return surfaceShell("Create", true, inner);
+		return plainSurface(inner);
 	}
 
 	/** The in-dock new-section form (note 2): a name field (autofocus) + a primary
@@ -3132,7 +3130,7 @@ public class GoalPanel extends PluginPanel
 		footer.add(create);
 		inner.add(footer, BorderLayout.SOUTH);
 
-		return surfaceShell("Create", true, inner);
+		return plainSurface(inner);
 	}
 
 	/** Request focus for a field once its window is realized (a field mounted into
@@ -3268,7 +3266,7 @@ public class GoalPanel extends PluginPanel
 		inner.add(header, BorderLayout.NORTH);
 		inner.add(body, BorderLayout.CENTER);
 
-		return surfaceShell("Create", true, inner);
+		return plainSurface(inner);
 	}
 
 	/** A tappable section row for the landing-section chooser; the default row is
@@ -3306,6 +3304,18 @@ public class GoalPanel extends PluginPanel
 		ScrollablePanel root = new ScrollablePanel(new BorderLayout());
 		root.setOpaque(false);
 		root.add(indicatorBar(indicator, createTone), BorderLayout.NORTH);
+		root.add(inner, BorderLayout.CENTER);
+		return root;
+	}
+
+	/** Like {@link #surfaceShell} but WITHOUT the context indicator bar. The create
+	 *  surfaces use this: the Create Goal / Create Section header buttons already
+	 *  signal the mode, so a "CREATE" bar was redundant (user feedback). Keeps the
+	 *  width-tracking ScrollablePanel so rows still lay out full-width. */
+	private JComponent plainSurface(JComponent inner)
+	{
+		ScrollablePanel root = new ScrollablePanel(new BorderLayout());
+		root.setOpaque(false);
 		root.add(inner, BorderLayout.CENTER);
 		return root;
 	}
@@ -4435,7 +4445,7 @@ public class GoalPanel extends PluginPanel
 			footer.add(add);
 			inner.add(footer, BorderLayout.SOUTH);
 		}
-		return surfaceShell("Create", true, inner);
+		return plainSurface(inner);
 	}
 
 	private JPanel formBody()
