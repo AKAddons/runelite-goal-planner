@@ -1,12 +1,19 @@
 package com.goalplanner.ui.dock;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.GridLayout;
+import java.awt.Insets;
+import java.awt.RenderingHints;
 import java.util.List;
 import javax.swing.BorderFactory;
+import javax.swing.border.Border;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -102,8 +109,9 @@ public class ActionDock extends JPanel
 	{
 		setLayout(new BorderLayout());
 		setBackground(ColorScheme.DARKER_GRAY_COLOR);
-		setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0,
-			ColorScheme.DARK_GRAY_HOVER_COLOR));
+		// An engraved, center-glowing rule marks the seam between the goal list and
+		// the dock - a deliberate separator rather than a flat hairline (Task C).
+		setBorder(new DockDivider());
 
 		content.setLayout(new javax.swing.BoxLayout(content, javax.swing.BoxLayout.Y_AXIS));
 		content.setOpaque(false);
@@ -408,5 +416,87 @@ public class ActionDock extends JPanel
 		}
 		int h = PEEK_H + (collapsed ? 0 : expanded);
 		return new Dimension(super.getPreferredSize().width, h);
+	}
+
+	/**
+	 * The seam between the goal list and the dock: an engraved two-tone rule -
+	 * a dark groove line with a lighter highlight beneath it - both tapering to
+	 * transparent at the panel edges, plus a soft central glow so the divider
+	 * reads as a deliberate flourish rather than a flat border. Painted entirely
+	 * in code from {@link ColorScheme} tones, so it stays in step with the theme
+	 * and ships no assets. A few pixels tall.
+	 */
+	private static final class DockDivider implements Border
+	{
+		private static final int HEIGHT = 6;
+
+		@Override
+		public Insets getBorderInsets(Component c)
+		{
+			return new Insets(HEIGHT, 0, 0, 0);
+		}
+
+		@Override
+		public boolean isBorderOpaque()
+		{
+			return false;
+		}
+
+		@Override
+		public void paintBorder(Component c, Graphics g, int x, int y, int width, int height)
+		{
+			if (width <= 0)
+			{
+				return;
+			}
+			Graphics2D g2 = (Graphics2D) g.create();
+			try
+			{
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+				int cx = x + width / 2;
+				int grooveY = y + 2;
+				Color groove = shade(ColorScheme.DARKER_GRAY_COLOR, -14);
+				Color highlight = shade(ColorScheme.DARK_GRAY_HOVER_COLOR, 18);
+
+				// Two stacked hairlines, each fading to nothing at the edges.
+				paintFadedLine(g2, x, width, grooveY, groove, 255);
+				paintFadedLine(g2, x, width, grooveY + 1, highlight, 255);
+
+				// Central glow: a short, brighter, edge-faded segment centered on cx.
+				int glowW = Math.max(28, width / 3);
+				paintFadedLine(g2, cx - glowW / 2, glowW, grooveY + 1,
+					shade(ColorScheme.LIGHT_GRAY_COLOR, 0), 110);
+			}
+			finally
+			{
+				g2.dispose();
+			}
+		}
+
+		/** A 1px horizontal line centered in {@code [lx, lx+w)} that ramps from
+		 *  transparent at both ends to {@code peakAlpha} of {@code base} in the middle. */
+		private static void paintFadedLine(Graphics2D g2, int lx, int w, int lineY,
+			Color base, int peakAlpha)
+		{
+			Color solid = new Color(base.getRed(), base.getGreen(), base.getBlue(), peakAlpha);
+			Color edge = new Color(base.getRed(), base.getGreen(), base.getBlue(), 0);
+			int mid = lx + w / 2;
+			g2.setPaint(new GradientPaint(lx, 0, edge, mid, 0, solid));
+			g2.fillRect(lx, lineY, w / 2, 1);
+			g2.setPaint(new GradientPaint(mid, 0, solid, lx + w, 0, edge));
+			g2.fillRect(mid, lineY, w - w / 2, 1);
+		}
+
+		private static Color shade(Color base, int d)
+		{
+			return new Color(clamp(base.getRed() + d), clamp(base.getGreen() + d),
+				clamp(base.getBlue() + d));
+		}
+
+		private static int clamp(int v)
+		{
+			return Math.max(0, Math.min(255, v));
+		}
 	}
 }

@@ -613,3 +613,68 @@ Until that deletion step, do NOT gate on `preSubmit`/`checkTokens`. `compileJava
   `dockCreateType` on `GoalPanel`.
 - UI strings ASCII (checkGlyphs green). `compileJava` + `test` green at every
   commit. `checkTokens` intentionally red (see above).
+
+## Glam + fix pass — absolute-check, quest filters, dock divider
+
+Three independent tasks on `feat/action-dock`, committed separately, each
+green on `compileJava` + `test` + `checkGlyphs`. Assembly rules unchanged:
+`GoalContextMenuBuilder` + `GoalDialogFactory` intact, `DockContext` untouched,
+UI strings ASCII.
+
+### Task A — absolute-goal edit checkbox shows the accurate state
+`editFormScaffold` (GoalPanel) rendered a QUEST/DIARY/COMBAT_ACHIEVEMENT
+completion `JCheckBox` with `setEnabled(false)`. In RuneLite's dark LAF a
+disabled checkbox does not paint its tick, so a COMPLETED absolute goal read as
+unchecked even though its card showed the green completion marker. Fix: supply
+explicit painted disabled icons that render regardless of enabled state -
+`setDisabledSelectedIcon(ShapeIcons.checkboxChecked(14, green))` +
+`setDisabledIcon(ShapeIcons.checkboxEmpty(14, muted))`. State still reads off
+the same `g.isComplete()` source as the card; label stays Completed/Complete;
+tooltip and greyed foreground keep it reading as non-interactive. New color
+constants `ABSOLUTE_CHECK_DONE` / `ABSOLUTE_CHECK_EMPTY` in GoalPanel.
+
+### Task B — Quest create: two filter toggles
+`buildQuestForm()` gained two live filter toggles above the quest combo. Data
+sources found and used:
+- **World / membership**: `client.getWorldType()` (the `net.runelite.api.Client`
+  the panel already holds via `setClient`) tested for `WorldType.MEMBERS`. The
+  "F2P only" toggle defaults CHECKED when the world is definitively free-to-play
+  (`worldType != null && !contains(MEMBERS)`), UNCHECKED on a members or unknown
+  (logged-out) world. The toggle stays usable either way.
+- **Quest completion**: `Quest.getState(client) == QuestState.FINISHED`, the same
+  live read `GoalCreationService.isQuestFinished` and `QuestTracker` use. This
+  reads varps, so it is done on the client thread via the panel's
+  `runOnClientThread(...)` executor, then the finished set + f2p-world flag are
+  pushed back to the EDT with `SwingUtilities.invokeLater` to set the F2P default
+  and refilter. "Incomplete only" is CHECKED by default and hides FINISHED quests.
+- **F2P data**: `com.goalplanner.data.QuestRequirements.isF2P(Quest)`, backed by
+  the `F` flag in column 11 of `quest-requirements.tsv`. 23 quests are flagged
+  f2p, matching the current OSRS free-to-play quest count. NO f2p data gap - the
+  toggle filters against real data. (Caveat: a quest with no row in
+  quest-requirements.tsv is treated as non-f2p and thus hidden while "F2P only"
+  is on, which is correct - all 23 f2p quests have rows.)
+
+Toggling either box rebuilds the combo model in place (`DefaultComboBoxModel`)
+and preserves the current selection when it survives the filter. The existing
+Next-choose-section flow (`goToSectionPick`) is unchanged. Helper
+`createFilterToggle(text, selected)` styles the two checkboxes to the create tone.
+
+### Task C — artistic divider between the dock and the goal list
+`ActionDock`'s plain `createMatteBorder(1,0,0,0, DARK_GRAY_HOVER_COLOR)` top
+border is replaced by a custom `DockDivider implements Border` (nested in
+ActionDock). It paints an engraved two-tone rule: a dark groove hairline with a
+lighter highlight beneath it, both tapering to transparent at the panel edges
+via `GradientPaint`, plus a short brighter center glow so the seam reads as a
+deliberate flourish. 6px tall, all tones derived from `ColorScheme`
+(DARKER_GRAY / DARK_GRAY_HOVER / LIGHT_GRAY), no assets, ASCII only.
+
+### NEEDS-SCREENSHOT (this pass)
+- **Task A**: a COMPLETED quest/diary/CA goal in the edit surface now shows a
+  visible green tick; an INCOMPLETE one shows a visible empty box. Verify both,
+  and that it still reads as locked/greyed (not clickable).
+- **Task B**: quest create form on a MEMBERS world (F2P unchecked by default) and
+  on a F2P world (F2P checked by default); toggling "Incomplete only" and
+  "F2P only" re-filters the combo live; long quest names still fit the 242px
+  combo; brief flip of the F2P default as the async client read lands.
+- **Task C**: the new dock divider at rest and with the create surface expanded;
+  confirm the center glow + edge taper read as intended and the height is tasteful.
