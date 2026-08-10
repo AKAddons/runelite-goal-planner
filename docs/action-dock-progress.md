@@ -97,7 +97,119 @@ preserved verbatim):
 The completion checkbox stays at the form top (not in a group). A same-goal
 `refreshEditForm` keeps the open group; a different goal resets it to top level.
 
-## NEEDS-SCREENSHOT (this refinement pass) — heavy render path
+## Refinement pass 2 — stepped tall forms + skill One-time/Repeatable toggle
+
+Three user refinements to the just-built create flow. Still one assembly point
+(`GoalPanel.refreshDock` -> `build*`); `DockContext`, `GoalContextMenuBuilder`,
+`GoalDialogFactory` untouched. Commit `4f58b12`.
+
+### New step-nav / pick state (all on `GoalPanel`)
+- **`enum CreateStep { PICKER, DETAILS }`** + **`CreateStep dockCreateStep`**
+  (default PICKER) — the sub-step inside a *tall* type's FORM. Tall types =
+  SKILL / BOSS / ITEM_GRIND (`isTallType`); every other type renders DETAILS
+  directly (no picker). `buildCreateForm` routes a tall type on `dockCreateStep`.
+- **Pick holders** `dockPickedSkill` / `dockPickedBoss` / `dockPickedItemId` +
+  `dockPickedItemName` — what the PICKER stashed, read by the DETAILS builder.
+  `resetCreatePicks()` clears them whenever the flow leaves FORM or changes type
+  (called from `navigateCreate` and the selection-exists reset in `refreshDock`).
+- **Mount guard** gains `dockCreateMountedStep`: a half-filled DETAILS screen now
+  survives an unrelated dock refresh (was `(nav, type)`, now `(nav, type, step)`).
+- **`navigateCreateStep(CreateStep)`** — advance/return between PICKER and DETAILS
+  (the guard sees the step change and remounts). Picking auto-advances (PICKER ->
+  DETAILS); a tall DETAILS "Back" returns to PICKER; a picker/single-step "Back"
+  returns to the type GRID. `createFormScaffold` gained an `onBack` overload for
+  this (default = grid).
+
+### Stepper shape (Task 1)
+- **SKILL PICKER** (`buildSkillPicker`): only the skill icon grid, filling the
+  dock. `buildSkillPickerGrid` gained an `onPick` callback; tapping a skill sets
+  `dockPickedSkill` and auto-advances.
+- **BOSS PICKER** (`buildBossPicker`): converted from a combo to a **search +
+  results** list (matches the tap-to-advance model; a combo can't cleanly
+  auto-advance). Filters `BossKillData.getBossNames()` by substring, caps at 12,
+  tap auto-advances. Empty query shows the first 12 as an initial scannable view.
+- **ITEM PICKER** (`buildItemPicker`): the existing `itemManager.search` results,
+  now via the new `tappableRow` (icon + name, hover cue, no persistent highlight
+  since it auto-advances). `buildItemResultRow` removed (dead after this).
+- **DETAILS** screens (`buildSkillDetails` / `buildBossDetails` /
+  `buildItemDetails`): a read-only `pickedHeader` (icon + name of the pick) + the
+  target/options inputs + the unchanged "Next: choose section". `tappableRow` and
+  `pickedHeader` are the two new shared helpers.
+- **Make-repeatable seed** (note 5) still lands: `navigateCreate` detects a
+  SKILL/BOSS seed, preselects the pick, and sets step = DETAILS so it jumps
+  straight past the picker; the DETAILS builder consumes the seed's target/repeat.
+
+### Skill segmented toggle (Task 2)
+SKILL DETAILS **replaces** `addRepeatDisclosure` (the "More options ->
+Repeatable checkbox -> stacked inputs" model) with a horizontal 2-segment
+**[ One-time | Repeatable ]** toggle at the top (`buildModeToggle`, reusing the
+period-pill visual style; One-time active by default). It is the **single source
+of truth** for which create path runs and swaps which input set shows — never
+both stacked:
+- **One-time**: the `SkillTargetForm` (target level/XP) only ->
+  `api.addSkillGoal(skill, xp)`.
+- **Repeatable**: Daily/Weekly/Monthly pills + an "XP each period" amount, **no
+  target** -> the repeatable path (Task 3).
+This also removes the "More options" link for skill (the earlier
+More-options-and-Next-on-one-line ask is now moot — they don't coexist). **BOSS
+keeps `addRepeatDisclosure` this pass** — flagged: boss can get the same toggle
+once its repeatable-no-target semantics are confirmed.
+
+### Repeatable-only create path (Task 3) — DECISION
+`createDerivedRepeatGoal` needs a parent, and a grep of `GoalPlannerApi` /
+`GoalPlannerApiImpl` found **no parent-less repeatable-goal create method** (only
+`createDerivedRepeatGoal(parentGoalId, ...)`; `setGoalRepeat` is CUSTOM-only). So
+the repeatable-only skill path creates the parent with an **endless target — the
+XP hardcap `XP_HARDCAP = 200_000_000`** so it never completes — then derives the
+per-period slice off it, as one `beginCompound/endCompound` on the client thread
+(the derive reads live XP). **No new API surface added this pass.** A true
+parent-less standalone repeatable goal is a desirable follow-up (cleaner model,
+no vestigial 200M parent).
+
+### Peek bar full-width (Task 4) — VERIFIED, no change
+The neutral "N selected" `peekBar` is already structurally full-width: an opaque
+`contentAreaFilled` `JButton` in `peekHost` `BorderLayout.CENTER`, and `peekHost`
+sits in the dock's `BorderLayout.NORTH` (always full container width). Its
+`Dimension(0, PEEK_H)` width is ignored by `BorderLayout.CENTER`, which stretches
+it edge-to-edge — identical to the two create buttons (same host). No border /
+alignment / preferred-size quirk narrows it, so no code change was invented.
+**Observation for the screenshot loop:** the neutral bg `0x222224` (34,34,36)
+barely contrasts with the dock's `DARKER_GRAY_COLOR` `0x1E1E1E` (30,30,30), so
+the full-width bar can *read* as not-full-width because it blends into the dock —
+unlike the green/blue create buttons. If the human wants it to read as clearly as
+the create buttons, a contrast bump on `PEEK_NEUTRAL_BG` is the lever (color is
+their screenshot-loop domain), not a width fix.
+
+## NEEDS-SCREENSHOT (refinement pass 2) — in-client loop
+
+- **Tap-to-advance feel** on all three tall pickers (skill icon grid / boss
+  search+results / item search+results): tapping an entry should jump straight to
+  DETAILS with no flicker, and the auto-advance should feel immediate not laggy.
+- **Back navigation** across the new depth: picker <-> details <-> type grid.
+  Confirm a tall DETAILS "Back" returns to the PICKER (not the grid), a picker
+  "Back" returns to the grid, and the dock grows/shrinks per screen without clip.
+  Known limitation carried over: Back does not preserve a half-filled DETAILS
+  field (forward flow is the norm).
+- **Skill segmented One-time/Repeatable swap**: the toggle reads as a segmented
+  either/or (period-pill style), and switching shows **only one** input set —
+  One-time = target field; Repeatable = pills + "XP each period" + the
+  "Lands in the Repeatable section" note, with the target field gone.
+- **Repeatable-only create landing**: creating a Repeatable skill goal lands the
+  per-period slice in Repeatable, and the endless 200M parent behaves sanely (it
+  should never show as complete). Confirm the parent's presence/appearance is
+  acceptable pending the parent-less follow-up.
+- **Make-repeatable seed** now jumps to SKILL/BOSS DETAILS with the pick
+  preselected and (skill) the Repeatable segment active + target prefilled — no
+  flash of the picker step.
+- **Boss picker as search+results** (was a combo): the boss list is scannable,
+  the initial first-12 view is useful, and typing narrows correctly.
+- **Item picker icons** via `new ImageIcon(itemManager.getImage(id))` (static
+  snapshot vs the old async `addTo`): confirm icons actually appear once the
+  image loads (a results revalidate should trigger the repaint).
+- **Full-width neutral peek** contrast (Task 4 above): eyeball whether the
+  "N selected" bar reads edge-to-edge or wants a bg contrast bump.
+
+## NEEDS-SCREENSHOT (refinement pass 1) — heavy render path
 
 - **Section-pick step feel + default selection** (note 3): does the highlighted
   "Incomplete (default)" row read as preselected? Row height/spacing, the list
