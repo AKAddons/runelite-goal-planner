@@ -3822,10 +3822,91 @@ public class GoalPanel extends PluginPanel
 	{
 		JPanel body = formBody();
 
-		net.runelite.api.Quest[] quests = net.runelite.api.Quest.values();
-		JComboBox<net.runelite.api.Quest> questCombo = new JComboBox<>(quests);
+		final net.runelite.api.Quest[] quests = net.runelite.api.Quest.values();
+
+		// Two filter toggles sit above the chooser and re-filter the list live:
+		//  - "Incomplete only" (on by default) hides quests already FINISHED on this
+		//    account.
+		//  - "F2P only" restricts to free-to-play quests; its default follows the
+		//    world (checked on a f2p world, unchecked on members/unknown).
+		final JCheckBox incompleteOnly = createFilterToggle("Incomplete only", true);
+		final JCheckBox f2pOnly = createFilterToggle("F2P only", false);
+		incompleteOnly.setToolTipText("Hide quests you have already completed on this account");
+		f2pOnly.setToolTipText("Show only free-to-play quests");
+
+		final JComboBox<net.runelite.api.Quest> questCombo = new JComboBox<>();
 		questCombo.setRenderer(textRenderer(v -> ((net.runelite.api.Quest) v).getName()));
 		styleField(questCombo);
+
+		// Completed set is empty until the live client read (below) fills it. Until
+		// then the Incomplete filter simply hides nothing.
+		final java.util.EnumSet<net.runelite.api.Quest> completed =
+			java.util.EnumSet.noneOf(net.runelite.api.Quest.class);
+
+		final Runnable applyFilter = () ->
+		{
+			Object prev = questCombo.getSelectedItem();
+			javax.swing.DefaultComboBoxModel<net.runelite.api.Quest> model =
+				new javax.swing.DefaultComboBoxModel<>();
+			for (net.runelite.api.Quest q : quests)
+			{
+				if (incompleteOnly.isSelected() && completed.contains(q)) continue;
+				if (f2pOnly.isSelected() && !com.goalplanner.data.QuestRequirements.isF2P(q)) continue;
+				model.addElement(q);
+			}
+			questCombo.setModel(model);
+			if (prev != null && model.getIndexOf(prev) >= 0)
+			{
+				questCombo.setSelectedItem(prev);
+			}
+		};
+		incompleteOnly.addActionListener(e -> applyFilter.run());
+		f2pOnly.addActionListener(e -> applyFilter.run());
+		applyFilter.run();
+
+		// Snapshot live client state (world membership + finished quests) on the
+		// client thread - quest.getState reads varps and must not run on the EDT -
+		// then push the result back to the EDT to re-derive the F2P default and refilter.
+		runOnClientThread(() ->
+		{
+			final Client c = this.client;
+			java.util.Set<net.runelite.api.WorldType> wt = c != null ? c.getWorldType() : null;
+			final boolean f2pWorld = wt != null && !wt.contains(net.runelite.api.WorldType.MEMBERS);
+			final java.util.EnumSet<net.runelite.api.Quest> done =
+				java.util.EnumSet.noneOf(net.runelite.api.Quest.class);
+			if (c != null)
+			{
+				for (net.runelite.api.Quest q : quests)
+				{
+					try
+					{
+						if (q.getState(c) == net.runelite.api.QuestState.FINISHED) done.add(q);
+					}
+					catch (RuntimeException ignored)
+					{
+						// A quest missing its varps on this client version just stays "not done".
+					}
+				}
+			}
+			SwingUtilities.invokeLater(() ->
+			{
+				completed.clear();
+				completed.addAll(done);
+				f2pOnly.setSelected(f2pWorld);
+				applyFilter.run();
+			});
+		});
+
+		// Toggles above, then the chooser.
+		JPanel toggles = new JPanel();
+		toggles.setLayout(new BoxLayout(toggles, BoxLayout.Y_AXIS));
+		toggles.setOpaque(false);
+		toggles.setAlignmentX(Component.LEFT_ALIGNMENT);
+		toggles.add(incompleteOnly);
+		toggles.add(f2pOnly);
+		toggles.setMaximumSize(new Dimension(Integer.MAX_VALUE, toggles.getPreferredSize().height));
+		body.add(toggles);
+		body.add(Box.createVerticalStrut(6));
 		addFormRow(body, "Quest", questCombo);
 
 		Runnable onAdd = () ->
@@ -3839,6 +3920,20 @@ public class GoalPanel extends PluginPanel
 			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
+	}
+
+	/** A compact create-surface filter checkbox: transparent, CREATE-toned, 11pt,
+	 *  left-aligned for a BoxLayout column. */
+	private JCheckBox createFilterToggle(String text, boolean selected)
+	{
+		JCheckBox cb = new JCheckBox(text, selected);
+		cb.setOpaque(false);
+		cb.setForeground(CREATE_FG);
+		cb.setFont(cb.getFont().deriveFont(11f));
+		cb.setAlignmentX(Component.LEFT_ALIGNMENT);
+		cb.setFocusPainted(false);
+		cb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		return cb;
 	}
 
 	/** Diary area display names, in AREA_KEYS order. Kept as the in-game journal
