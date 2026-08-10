@@ -250,6 +250,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean markGoalIncomplete(String goalId) { autoDeselectIfNotMember(goalId); return mutationService.markGoalIncomplete(goalId); }
 	@Override public boolean setGoalRepeat(String goalId, com.goalplanner.model.RepeatPeriod period) { return mutationService.setGoalRepeat(goalId, period); }
 	@Override public String createDerivedRepeatGoal(String parentGoalId, com.goalplanner.model.RepeatPeriod period, int chunk, String activityName) { return creationService.createDerivedRepeatGoal(parentGoalId, period, chunk, activityName); }
+	@Override public String createStandaloneRepeatSkillGoal(Skill skill, com.goalplanner.model.RepeatPeriod period, int chunk) { String id = creationService.createStandaloneRepeatSkillGoal(skill, period, chunk); selectAfterCreate(id); return id; }
+	@Override public String createStandaloneRepeatActivityGoal(String bossName, com.goalplanner.model.RepeatPeriod period, int chunk) { String id = creationService.createStandaloneRepeatActivityGoal(bossName, period, chunk); selectAfterCreate(id); return id; }
 	@Override public boolean setGoalRepeatChunk(String goalId, int newChunk) { return mutationService.setGoalRepeatChunk(goalId, newChunk); }
 	/** Plugin-internal: re-import protection (per-character import history). */
 	public boolean wasCodeImported(String canonicalCode) { return goalStore.wasCodeImported(canonicalCode); }

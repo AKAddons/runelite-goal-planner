@@ -678,3 +678,52 @@ deliberate flourish. 6px tall, all tones derived from `ColorScheme`
   combo; brief flip of the F2P default as the async client read lands.
 - **Task C**: the new dock divider at rest and with the create surface expanded;
   confirm the center glow + edge taper read as intended and the height is tasteful.
+
+## Standalone repeatable create + complete-on-add surfacing
+
+Two decisions, one pass. Assembly still lives in `GoalPanel.refreshDock` + its
+`build*` helpers; new API surface is in `GoalCreationService` (exposed via
+`GoalPlannerApi`/`Impl`).
+
+### Task 1 — a fresh Repeatable goal is STANDALONE (no endless parent, no choose-section)
+The old fresh-create Repeatable path built an "endless" long-term PARENT skill
+goal at 200M XP (`XP_HARDCAP`), moved it to a chosen section, then derived a
+per-period slice off it (`createDerivedRepeatGoal`). That stranded a visible
+endless parent in a normal section — the split the user rejected. `XP_HARDCAP`
+is gone (was the only use), and `goToSectionPick` is skipped on this path.
+
+- **`GoalCreationService.buildSkillChunk` / `buildActivityChunk`** refactored to
+  take RAW identity (`String skillName` / `String activityName`) plus a
+  `derivedFromId` instead of a `Goal parent`, so the same period-target math
+  (`live + chunk`, via `RelativeTargetResolver`) serves both a derived slice
+  (`derivedFromId = parent.getId()`) and a standalone (`derivedFromId = null`).
+- **New shared tail `commitRepeatChunk(Goal, RepeatPeriod)`** — undoable add +
+  `reconcileDerivedSections()` (which lands any repeating goal in Repeatable) +
+  log. `createDerivedRepeatGoal` now routes through it too (single assembly).
+- **New API `createStandaloneRepeatSkillGoal(Skill, RepeatPeriod, int chunk)`**
+  and **`createStandaloneRepeatActivityGoal(String bossName, RepeatPeriod, int
+  chunk)`** — parentless, self-contained repeating goals. `RepeatResetService`
+  re-bases each period without reading a parent (verified), so a standalone
+  slice is a complete goal. Exposed on `GoalPlannerApi`; `Impl` wraps each with
+  `selectAfterCreate(id)`.
+- **UI**: the SKILL create form's Repeatable branch and the BOSS form's
+  repeat-disclosure branch now call the standalone creator inside a client-thread
+  compound (live XP/KC read) and `navigateCreate(null)` straight back to the
+  grid — NO `goToSectionPick`. The one-time branches are unchanged (still pick a
+  section). The **"Make repeatable" CHIP on an EXISTING goal is untouched** — it
+  legitimately derives off a real long-term parent (`createDerivedRepeatGoal`).
+- **BOSS handled** (not deferred): the boss repeat path had the identical endless
+  200M-KC-parent hack and got the same standalone treatment.
+- **Tests** (`CreateDerivedRepeatGoalTest`): new `StandaloneSkill` +
+  `StandaloneBoss` nested classes — happy path (repeating, `live+chunk` target,
+  `derivedFromGoalId == null`, lands in Repeatable), the "exactly one goal
+  created, no endless parent" assertion, and edge cases (null skill/boss,
+  chunk <= 0, null/NONE period, no client).
+
+### NEEDS-SCREENSHOT (this pass)
+- Skill create -> Repeatable toggle -> pick period + XP each period -> Create:
+  the new goal appears in the built-in **Repeatable** section, there is **NO
+  choose-section step**, and there is **NO endless 200M parent** stranded in a
+  normal section.
+- Boss create -> open the repeat disclosure -> Create: same — lands in Repeatable
+  directly, no section prompt, no endless parent.

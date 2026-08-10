@@ -127,6 +127,127 @@ class CreateDerivedRepeatGoalTest
 	}
 
 	@Nested
+	@DisplayName("standalone repeatable skill goal (fresh create, no parent)")
+	class StandaloneSkill
+	{
+		@Test
+		@DisplayName("is created repeating, targets live XP + chunk, and has no parent")
+		void createdRepeatingWithNoParent()
+		{
+			Client client = MockClientFactory.createClient(
+				new MockGameState().skillXp(Skill.WOODCUTTING, 5_000_000));
+			GoalPlannerApiImpl api = apiWith(client);
+
+			String id = api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, RepeatPeriod.DAILY, 300_000);
+
+			assertNotNull(id);
+			Goal g = store.findGoalById(id);
+			assertEquals(GoalType.SKILL, g.getType());
+			assertEquals("WOODCUTTING", g.getSkillName());
+			assertEquals(5_300_000, g.getTargetValue(), "live XP + chunk");
+			assertEquals(5_000_000, g.getCurrentValue());
+			assertEquals(300_000, g.getRepeatChunk());
+			assertEquals(RepeatPeriod.DAILY, g.getRepeatEvery());
+			assertTrue(g.isRepeating());
+			assertNull(g.getDerivedFromGoalId(), "standalone: there is no persisted parent");
+		}
+
+		@Test
+		@DisplayName("lands in the Repeatable section after reconcile, with no endless parent left behind")
+		void landsInRepeatableNoParent()
+		{
+			Client client = MockClientFactory.createClient(
+				new MockGameState().skillXp(Skill.WOODCUTTING, 1_000));
+			GoalPlannerApiImpl api = apiWith(client);
+
+			int before = store.getGoals().size();
+			String id = api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, RepeatPeriod.WEEKLY, 50_000);
+
+			assertEquals(store.getRepeatableSection().getId(),
+				store.findGoalById(id).getSectionId());
+			assertEquals(before + 1, store.getGoals().size(),
+				"exactly one goal is created - no endless XP-hardcap parent");
+		}
+
+		@Test
+		@DisplayName("a null skill is refused")
+		void nullSkill()
+		{
+			GoalPlannerApiImpl api = apiWith(
+				MockClientFactory.createClient(new MockGameState().skillXp(Skill.WOODCUTTING, 1000)));
+			assertNull(api.createStandaloneRepeatSkillGoal(null, RepeatPeriod.DAILY, 1000));
+		}
+
+		@Test
+		@DisplayName("a non-positive chunk, null period and NONE are all refused")
+		void badChunkOrPeriod()
+		{
+			GoalPlannerApiImpl api = apiWith(
+				MockClientFactory.createClient(new MockGameState().skillXp(Skill.WOODCUTTING, 1000)));
+			assertNull(api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, RepeatPeriod.DAILY, 0));
+			assertNull(api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, RepeatPeriod.DAILY, -5));
+			assertNull(api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, null, 1000));
+			assertNull(api.createStandaloneRepeatSkillGoal(Skill.WOODCUTTING, RepeatPeriod.NONE, 1000));
+		}
+
+		@Test
+		@DisplayName("with no client there is no live XP, so nothing is created")
+		void noClient()
+		{
+			assertNull(apiWith(null).createStandaloneRepeatSkillGoal(
+				Skill.WOODCUTTING, RepeatPeriod.DAILY, 1000));
+		}
+	}
+
+	@Nested
+	@DisplayName("standalone repeatable boss goal (fresh create, no parent)")
+	class StandaloneBoss
+	{
+		@Test
+		@DisplayName("is created repeating, targets live KC + chunk, and has no parent")
+		void createdRepeatingWithNoParent()
+		{
+			Client client = MockClientFactory.createClient(
+				new MockGameState().bossKills("General Graardor", 1847));
+			GoalPlannerApiImpl api = apiWith(client);
+
+			String id = api.createStandaloneRepeatActivityGoal("General Graardor", RepeatPeriod.DAILY, 20);
+
+			assertNotNull(id);
+			Goal g = store.findGoalById(id);
+			assertEquals(GoalType.BOSS, g.getType());
+			assertEquals("General Graardor", g.getBossName());
+			assertEquals(1867, g.getTargetValue(), "live KC + chunk");
+			assertEquals(1847, g.getCurrentValue());
+			assertEquals(20, g.getRepeatChunk());
+			assertTrue(g.isRepeating());
+			assertNull(g.getDerivedFromGoalId());
+			assertEquals(store.getRepeatableSection().getId(), g.getSectionId());
+		}
+
+		@Test
+		@DisplayName("an unknown boss is refused rather than guessed at")
+		void unknownBoss()
+		{
+			GoalPlannerApiImpl api = apiWith(MockClientFactory.createClient(new MockGameState()));
+			assertNull(api.createStandaloneRepeatActivityGoal("Not A Real Boss", RepeatPeriod.DAILY, 20));
+		}
+
+		@Test
+		@DisplayName("null boss, non-positive chunk, null period and NONE are all refused")
+		void badArgs()
+		{
+			GoalPlannerApiImpl api = apiWith(
+				MockClientFactory.createClient(new MockGameState().bossKills("General Graardor", 0)));
+			assertNull(api.createStandaloneRepeatActivityGoal(null, RepeatPeriod.DAILY, 20));
+			assertNull(api.createStandaloneRepeatActivityGoal("General Graardor", RepeatPeriod.DAILY, 0));
+			assertNull(api.createStandaloneRepeatActivityGoal("General Graardor", RepeatPeriod.DAILY, -1));
+			assertNull(api.createStandaloneRepeatActivityGoal("General Graardor", null, 20));
+			assertNull(api.createStandaloneRepeatActivityGoal("General Graardor", RepeatPeriod.NONE, 20));
+		}
+	}
+
+	@Nested
 	@DisplayName("from an item goal")
 	class FromItem
 	{

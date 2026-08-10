@@ -2938,10 +2938,6 @@ public class GoalPanel extends PluginPanel
 	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
 	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
 	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
-	/** The OSRS XP hardcap (200M). Used as an "endless" parent target for a
-	 *  repeatable-only skill goal so the parent never completes (Task 3 - there is
-	 *  no parent-less repeatable-goal API to create a standalone slice). */
-	private static final int XP_HARDCAP = 200_000_000;
 	/** Highlight for the selected icon-button in a picker grid (skill/boss/etc). */
 	private static final Color CREATE_SEL_BG = new Color(0x2E, 0x4D, 0x32);
 	private static final Color CREATE_SEL_BORDER = new Color(0x5A, 0x9A, 0x5A);
@@ -3516,25 +3512,24 @@ public class GoalPanel extends PluginPanel
 					return;
 				}
 				final com.goalplanner.model.RepeatPeriod p = period[0];
-				// Repeatable-only: no target field. createDerivedRepeatGoal needs a
-				// parent, and there is no parent-less repeatable API (Task 3), so the
-				// parent is created with the XP hardcap so it never "completes"; the
-				// per-period slice is derived off it. One compound, on the client
-				// thread (the derive reads live XP).
-				goToSectionPick(sectionId -> runOnClientThread(() ->
+				// Repeatable-only: no target field, and no choose-section step. A fresh
+				// repeatable is STANDALONE - it lives entirely in the built-in Repeatable
+				// section with no endless parent stranded in a normal section. The
+				// standalone creator reads live XP to seed the first period, so it runs
+				// on the client thread; one compound for a clean single undo.
+				runOnClientThread(() ->
 				{
 					api.beginCompound("Add repeatable skill goal");
 					try
 					{
-						String parentId = api.addSkillGoal(skill, XP_HARDCAP);
-						api.moveGoalToSection(parentId, sectionId);
-						api.createDerivedRepeatGoal(parentId, p, chunk, null);
+						api.createStandaloneRepeatSkillGoal(skill, p, chunk);
 					}
 					finally
 					{
 						api.endCompound();
 					}
-				}));
+				});
+				navigateCreate(null);
 			}
 			else
 			{
@@ -3787,32 +3782,34 @@ public class GoalPanel extends PluginPanel
 				return;
 			}
 			final com.goalplanner.model.RepeatPeriod period = repeat.period();
-			goToSectionPick(sectionId ->
+			if (repeatOn)
 			{
-				if (repeatOn)
+				// Standalone repeatable boss goal - lives entirely in the Repeatable
+				// section, no endless parent, no choose-section step (mirrors the skill
+				// repeatable path). Reads the live kill-count varp, so client thread;
+				// one compound for a clean single undo.
+				runOnClientThread(() ->
 				{
-					// buildActivityChunk reads the live kill-count varp - client thread.
-					runOnClientThread(() ->
+					api.beginCompound("Add repeatable boss goal");
+					try
 					{
-						api.beginCompound("Add repeatable boss goal");
-						try
-						{
-							String parentId = api.addBossGoal(boss, kc);
-							api.moveGoalToSection(parentId, sectionId);
-							api.createDerivedRepeatGoal(parentId, period, chunk, boss);
-						}
-						finally
-						{
-							api.endCompound();
-						}
-					});
-				}
-				else
+						api.createStandaloneRepeatActivityGoal(boss, period, chunk);
+					}
+					finally
+					{
+						api.endCompound();
+					}
+				});
+				navigateCreate(null);
+			}
+			else
+			{
+				goToSectionPick(sectionId ->
 				{
 					String id = api.addBossGoal(boss, kc);
 					api.moveGoalToSection(id, sectionId);
-				}
-			});
+				});
+			}
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd,
 			() -> navigateCreateStep(CreateStep.PICKER));

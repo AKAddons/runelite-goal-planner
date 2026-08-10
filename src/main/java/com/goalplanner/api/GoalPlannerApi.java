@@ -214,6 +214,29 @@ public interface GoalPlannerApi
 		int chunk, String activityName);
 
 	/**
+	 * Create a STANDALONE repeatable skill goal - a per-period XP chunk that is the
+	 * whole goal, with no persisted long-term parent. Reads live XP to seed the
+	 * first period ({@code live + chunk}) and lands in the Repeatable section. Used
+	 * by the fresh create form's Repeatable branch (no endless parent, no
+	 * choose-section step). Runs on the client thread (live XP read).
+	 *
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createStandaloneRepeatSkillGoal(Skill skill,
+		com.goalplanner.model.RepeatPeriod period, int chunk);
+
+	/**
+	 * Create a STANDALONE repeatable boss/activity goal - a per-period kill-count
+	 * chunk that is the whole goal, with no persisted long-term parent. The
+	 * boss/activity counterpart to {@link #createStandaloneRepeatSkillGoal}. Reads
+	 * the live kill count to seed the first period; lands in the Repeatable section.
+	 *
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createStandaloneRepeatActivityGoal(String bossName,
+		com.goalplanner.model.RepeatPeriod period, int chunk);
+
+	/**
 	 * Change how much a derived repeatable goal asks for each period. Keeps the
 	 * current period's start fixed and moves only its end, so progress already
 	 * made this period still counts.

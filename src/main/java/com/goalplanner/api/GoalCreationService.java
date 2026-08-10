@@ -2308,30 +2308,96 @@ class GoalCreationService
 		}
 
 		Goal derived = parent.getType() == GoalType.SKILL && parent.getSkillName() != null
-			? buildSkillChunk(parent, period, chunk)
-			: buildActivityChunk(parent, period, chunk, activityName);
+			? buildSkillChunk(parent.getSkillName(), period, chunk, parent.getId())
+			: buildActivityChunk(activityName, period, chunk, parent.getId());
+		return commitRepeatChunk(derived, period);
+	}
+
+	/**
+	 * Create a STANDALONE repeatable skill goal - a per-period XP chunk with no
+	 * persisted long-term parent. Unlike {@link #createDerivedRepeatGoal}, this is
+	 * the whole goal: it carries its own {@code repeatEvery}/{@code repeatChunk} and
+	 * re-bases each period on its own (see {@code RepeatResetService}, which never
+	 * reads the parent). Used by the fresh create form's Repeatable branch so a new
+	 * repeatable lives entirely in the Repeatable section with no endless parent
+	 * stranded in a normal section.
+	 *
+	 * <p>Reads live client XP to seed the first period's target ({@code live + chunk});
+	 * returns null if that read fails, mirroring the derived path.
+	 *
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createStandaloneRepeatSkillGoal(net.runelite.api.Skill skill,
+		com.goalplanner.model.RepeatPeriod period, int chunk)
+	{
+		log.debug("API.public createStandaloneRepeatSkillGoal(skill={}, period={}, chunk={})",
+			skill, period, chunk);
+		if (skill == null || period == null || !period.isRepeating() || chunk <= 0)
+		{
+			return null;
+		}
+		return commitRepeatChunk(buildSkillChunk(skill.name(), period, chunk, null), period);
+	}
+
+	/**
+	 * Create a STANDALONE repeatable boss/activity goal - a per-period kill-count
+	 * chunk with no persisted long-term parent. The boss/activity counterpart to
+	 * {@link #createStandaloneRepeatSkillGoal}.
+	 *
+	 * <p>Reads the live kill-count varp to seed the first period's target
+	 * ({@code live + chunk}); returns null on an unknown boss or a failed read.
+	 *
+	 * @return the new goal's id, or null if it could not be built
+	 */
+	String createStandaloneRepeatActivityGoal(String bossName,
+		com.goalplanner.model.RepeatPeriod period, int chunk)
+	{
+		log.debug("API.public createStandaloneRepeatActivityGoal(boss={}, period={}, chunk={})",
+			bossName, period, chunk);
+		if (bossName == null || period == null || !period.isRepeating() || chunk <= 0)
+		{
+			return null;
+		}
+		return commitRepeatChunk(buildActivityChunk(bossName, period, chunk, null), period);
+	}
+
+	/**
+	 * Shared tail for every repeatable-chunk create (derived and standalone): add
+	 * the goal undoably, then pull it straight into the Repeatable section rather
+	 * than leaving it in the default bucket until something else triggers a
+	 * reconcile. A repeating goal ({@code repeatChunk}/{@code repeatEvery} set)
+	 * lands in Repeatable regardless of where it started.
+	 *
+	 * @return the goal's id, or null if {@code derived} was null (a failed build)
+	 */
+	private String commitRepeatChunk(Goal derived, com.goalplanner.model.RepeatPeriod period)
+	{
 		if (derived == null)
 		{
 			return null;
 		}
-
 		final String goalId = derived.getId();
 		executeAddGoal(derived, goalId, "Add " + period.getLabel().toLowerCase(java.util.Locale.ROOT)
 			+ " goal: " + derived.getName());
-		// Pull it straight into the Repeatable section rather than leaving it in
-		// the default bucket until something else triggers a reconcile.
 		api.goalStore.reconcileDerivedSections();
-		log.info("createDerivedRepeatGoal created: {} ({})", goalId, derived.getName());
+		log.info("repeat chunk goal created: {} ({})", goalId, derived.getName());
 		return goalId;
 	}
 
-	/** "Woodcutting +300,000 XP", tracked as an ordinary SKILL goal. */
-	private Goal buildSkillChunk(Goal parent, com.goalplanner.model.RepeatPeriod period, int chunk)
+	/** "Woodcutting +300,000 XP", tracked as an ordinary SKILL goal. Keyed off a raw
+	 *  skill name so it serves both a derived slice (parent's skillName + parent id)
+	 *  and a standalone repeatable (skill name, {@code derivedFromId == null}). */
+	private Goal buildSkillChunk(String skillName, com.goalplanner.model.RepeatPeriod period,
+		int chunk, String derivedFromId)
 	{
+		if (skillName == null)
+		{
+			return null;
+		}
 		final net.runelite.api.Skill skill;
 		try
 		{
-			skill = net.runelite.api.Skill.valueOf(parent.getSkillName());
+			skill = net.runelite.api.Skill.valueOf(skillName);
 		}
 		catch (IllegalArgumentException e)
 		{
@@ -2355,20 +2421,22 @@ class GoalCreationService
 		}
 		return Goal.builder()
 			.type(GoalType.SKILL)
-			.skillName(parent.getSkillName())
+			.skillName(skillName)
 			.name(skill.getName() + " +" + com.goalplanner.util.FormatUtil.formatNumber(chunk) + " XP")
 			.description(period.getLabel())
 			.targetValue(target)
 			.currentValue(currentXp)
 			.repeatEvery(period)
 			.repeatChunk(chunk)
-			.derivedFromGoalId(parent.getId())
+			.derivedFromGoalId(derivedFromId)
 			.build();
 	}
 
-	/** "General Graardor x20", tracked as an ordinary BOSS goal. */
-	private Goal buildActivityChunk(Goal parent, com.goalplanner.model.RepeatPeriod period,
-		int chunk, String activityName)
+	/** "General Graardor x20", tracked as an ordinary BOSS goal. Keyed off a raw boss
+	 *  name so it serves both a derived slice (activity name + parent id) and a
+	 *  standalone repeatable (boss name, {@code derivedFromId == null}). */
+	private Goal buildActivityChunk(String activityName, com.goalplanner.model.RepeatPeriod period,
+		int chunk, String derivedFromId)
 	{
 		if (activityName == null
 			|| !com.goalplanner.data.BossKillData.isKnownBoss(activityName))
@@ -2405,7 +2473,7 @@ class GoalCreationService
 			.currentValue(currentKc)
 			.repeatEvery(period)
 			.repeatChunk(chunk)
-			.derivedFromGoalId(parent.getId())
+			.derivedFromGoalId(derivedFromId)
 			.build();
 	}
 
