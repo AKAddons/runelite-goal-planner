@@ -45,6 +45,10 @@ public class GoalPanel extends PluginPanel
 		new com.goalplanner.ui.dock.ActionDock();
 	/** The create sub-views the dock navigates between (ADR-0008, notes 2 + 3). */
 	private enum CreateNav { GRID, FORM, SECTION_NEW, SECTION_PICK }
+	/** Sub-step inside a tall type's FORM (SKILL / BOSS / ITEM_GRIND): PICKER =
+	 *  choose the skill / boss / item, DETAILS = fill in the target + options for
+	 *  the chosen entry. Non-tall types render DETAILS directly (no picker). */
+	private enum CreateStep { PICKER, DETAILS }
 	/** Create-surface navigation (ADR-0008), read by {@link #refreshDock()}.
 	 *  GRID = the 8-tile type grid; FORM = {@link #dockCreateType}'s create form;
 	 *  SECTION_NEW = the in-dock new-section form (note 2); SECTION_PICK = the
@@ -77,6 +81,15 @@ public class GoalPanel extends PluginPanel
 	private boolean dockCreateMounted = false;
 	private CreateNav dockCreateMountedNav = null;
 	private com.goalplanner.model.GoalType dockCreateMountedType = null;
+	/** The current sub-step of a tall type's FORM (default PICKER) and the pick
+	 *  stashed by the picker screen, read by the DETAILS screen. Reset whenever the
+	 *  create flow leaves FORM or the type changes (see {@link #navigateCreate}). */
+	private CreateStep dockCreateStep = CreateStep.PICKER;
+	private CreateStep dockCreateMountedStep = null;
+	private net.runelite.api.Skill dockPickedSkill = null;
+	private String dockPickedBoss = null;
+	private int dockPickedItemId = -1;
+	private String dockPickedItemName = null;
 	/** Whether the unified EDIT form (ADR-0008) is currently mounted in the dock,
 	 *  and for which goal - lets {@link #refreshDock()} skip rebuilding it while
 	 *  the same goal stays selected, so an in-progress field edit is not wiped
@@ -1687,6 +1700,9 @@ public class GoalPanel extends PluginPanel
 			dockCreateMounted = false;
 			dockCreateMountedNav = null;
 			dockCreateMountedType = null;
+			dockCreateStep = CreateStep.PICKER;
+			dockCreateMountedStep = null;
+			resetCreatePicks();
 			// A pending seed survives only the transition INTO the create surface
 			// (selection just cleared -> EMPTY), so it must not be cleared here.
 			// makeRepeatableFrom* sets it, then clears the selection; by the time
@@ -1775,7 +1791,8 @@ public class GoalPanel extends PluginPanel
 					});
 				if (!dockCreateMounted
 					|| dockCreateMountedNav != dockCreateNav
-					|| dockCreateMountedType != dockCreateType)
+					|| dockCreateMountedType != dockCreateType
+					|| dockCreateMountedStep != dockCreateStep)
 				{
 					mountCreateSurface();
 				}
@@ -2921,6 +2938,10 @@ public class GoalPanel extends PluginPanel
 	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
 	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
 	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
+	/** The OSRS XP hardcap (200M). Used as an "endless" parent target for a
+	 *  repeatable-only skill goal so the parent never completes (Task 3 - there is
+	 *  no parent-less repeatable-goal API to create a standalone slice). */
+	private static final int XP_HARDCAP = 200_000_000;
 	/** Highlight for the selected icon-button in a picker grid (skill/boss/etc). */
 	private static final Color CREATE_SEL_BG = new Color(0x2E, 0x4D, 0x32);
 	private static final Color CREATE_SEL_BORDER = new Color(0x5A, 0x9A, 0x5A);
@@ -2959,10 +2980,34 @@ public class GoalPanel extends PluginPanel
 		dockCreateMounted = true;
 		dockCreateMountedNav = dockCreateNav;
 		dockCreateMountedType = dockCreateType;
+		dockCreateMountedStep = dockCreateStep;
+	}
+
+	/** The types whose FORM splits into a PICKER step then a DETAILS step. All
+	 *  other types render DETAILS directly. */
+	private static boolean isTallType(com.goalplanner.model.GoalType t)
+	{
+		return t == com.goalplanner.model.GoalType.SKILL
+			|| t == com.goalplanner.model.GoalType.BOSS
+			|| t == com.goalplanner.model.GoalType.ITEM_GRIND;
+	}
+
+	/** Forget any stashed picker selection - called when the create flow leaves a
+	 *  form or changes type, so a stale pick never bleeds into the next form. */
+	private void resetCreatePicks()
+	{
+		dockPickedSkill = null;
+		dockPickedBoss = null;
+		dockPickedItemId = -1;
+		dockPickedItemName = null;
 	}
 
 	/** Set the create navigation to a type form ({@code null} returns to the type
-	 *  grid - used by Back and after a successful create) and re-render the dock. */
+	 *  grid - used by Back and after a successful create) and re-render the dock.
+	 *  Entering a form resets the sub-step to PICKER and clears any stale pick; a
+	 *  "Make repeatable" seed (note 5) jumps a tall type straight to DETAILS with
+	 *  its pick preselected (the seed's target/repeat is consumed by the DETAILS
+	 *  builder). */
 	private void navigateCreate(com.goalplanner.model.GoalType type)
 	{
 		dockCreateType = type;
@@ -2971,7 +3016,37 @@ public class GoalPanel extends PluginPanel
 		{
 			dockPendingCreate = null;
 			dockCreateSeed = null;
+			dockCreateStep = CreateStep.PICKER;
+			resetCreatePicks();
 		}
+		else
+		{
+			dockCreateStep = CreateStep.PICKER;
+			resetCreatePicks();
+			// A make-repeatable seed carries the pick: preselect it and skip the
+			// picker step. The DETAILS builder consumes the rest of the seed.
+			if (dockCreateSeed != null)
+			{
+				if (type == com.goalplanner.model.GoalType.SKILL && dockCreateSeed.skill != null)
+				{
+					dockPickedSkill = dockCreateSeed.skill;
+					dockCreateStep = CreateStep.DETAILS;
+				}
+				else if (type == com.goalplanner.model.GoalType.BOSS && dockCreateSeed.bossName != null)
+				{
+					dockPickedBoss = dockCreateSeed.bossName;
+					dockCreateStep = CreateStep.DETAILS;
+				}
+			}
+		}
+		refreshDock();
+	}
+
+	/** Advance/return between a tall form's PICKER and DETAILS sub-steps and
+	 *  re-render the dock (the mount guard sees the step change and remounts). */
+	private void navigateCreateStep(CreateStep step)
+	{
+		dockCreateStep = step;
 		refreshDock();
 	}
 
@@ -3289,15 +3364,20 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildCreateForm(com.goalplanner.model.GoalType type)
 	{
+		// Tall types split into a PICKER step then a DETAILS step; the rest render
+		// their DETAILS directly (no picker).
 		switch (type)
 		{
-			case SKILL: return buildSkillForm();
+			case SKILL: return dockCreateStep == CreateStep.PICKER
+				? buildSkillPicker() : buildSkillDetails();
 			case ACCOUNT: return buildAccountForm();
 			case CUSTOM: return buildCustomForm();
-			case BOSS: return buildBossForm();
+			case BOSS: return dockCreateStep == CreateStep.PICKER
+				? buildBossPicker() : buildBossDetails();
 			case QUEST: return buildQuestForm();
 			case DIARY: return buildDiaryForm();
-			case ITEM_GRIND: return buildItemForm();
+			case ITEM_GRIND: return dockCreateStep == CreateStep.PICKER
+				? buildItemPicker() : buildItemDetails();
 			case COMBAT_ACHIEVEMENT: return buildCombatForm();
 			// Any type not yet wired lands on a placeholder pointing at the
 			// existing right-click add dialogs (which stay until parity).
@@ -3319,96 +3399,150 @@ public class GoalPanel extends PluginPanel
 
 	// ----- per-type create forms -----
 
-	private JComponent buildSkillForm()
+	/** SKILL step A (PICKER): only the skill icon grid, filling the dock. Tapping a
+	 *  skill stashes it and auto-advances to the DETAILS step. Back returns to the
+	 *  type grid. */
+	private JComponent buildSkillPicker()
 	{
-		// A "Make repeatable" hand-off (note 5) pre-seeds the skill, target, and an
-		// open repeat disclosure. Consumed once here, then cleared.
+		JPanel body = formBody();
+		final net.runelite.api.Skill[] holder = { dockPickedSkill };
+		JComponent grid = buildSkillPickerGrid(holder, () ->
+		{
+			dockPickedSkill = holder[0];
+			navigateCreateStep(CreateStep.DETAILS);
+		});
+		addFormRow(body, "Pick a skill", grid);
+		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, null);
+	}
+
+	/** SKILL step B (DETAILS): the target + One-time/Repeatable segmented toggle for
+	 *  the picked skill. Back returns to the picker. A "Make repeatable" seed
+	 *  (note 5) prefills the target and opens on the Repeatable segment. */
+	private JComponent buildSkillDetails()
+	{
 		final CreateSeed seed = dockCreateSeed;
 		dockCreateSeed = null;
 		final boolean seedRepeat = seed != null && seed.repeatable;
+		final net.runelite.api.Skill skill = dockPickedSkill;
 
 		JPanel body = formBody();
+		addFormRow(body, "Skill", pickedHeader(
+			skill != null ? new ImageIcon(skillIconManager.getSkillImage(skill, true)) : null,
+			skill != null ? skill.getName() : "(none)"));
 
-		// Skill picker is a grid of icon buttons (user feedback: the dropdown was
-		// unscannable). picked[0] holds the current selection; tapping an icon
-		// swaps it and re-highlights. A seed preselects the skill.
-		final net.runelite.api.Skill[] picked = { seed != null ? seed.skill : null };
-		addFormRow(body, "Skill", buildSkillPickerGrid(picked));
-
+		// One-time vs Repeatable is an either/or segmented toggle: exactly one input
+		// set shows, and the toggle is the single source of truth for which create
+		// path runs (Task 2). One-time = a target field; Repeatable = period pills +
+		// an "XP each period" amount, no target.
 		SkillTargetForm target = new SkillTargetForm(99);
 		if (seed != null && seed.targetXp != null)
 		{
 			target.setTargetXp(seed.targetXp);
 		}
-		addFormRow(body, "Target level or XP", target);
+		JPanel oneTimePane = new JPanel();
+		oneTimePane.setLayout(new BoxLayout(oneTimePane, BoxLayout.Y_AXIS));
+		oneTimePane.setOpaque(false);
+		oneTimePane.setAlignmentX(Component.LEFT_ALIGNMENT);
+		addFormRow(oneTimePane, "Target level or XP", target);
 
-		// Progressive disclosure (ADR-0008): a "More options" row reveals the
-		// Repeatable toggle. When on, Add creates the long-term goal AND derives a
-		// per-period slice off it, which lands in the Repeatable section. A seed
-		// opens it pre-checked.
-		RepeatControls repeat = addRepeatDisclosure(body, "XP each period", seedRepeat);
+		final com.goalplanner.model.RepeatPeriod[] period =
+			{ com.goalplanner.model.RepeatPeriod.DAILY };
+		final JTextField amount = new JTextField(8);
+		styleField(amount);
+		JPanel repeatPane = new JPanel();
+		repeatPane.setLayout(new BoxLayout(repeatPane, BoxLayout.Y_AXIS));
+		repeatPane.setOpaque(false);
+		repeatPane.setAlignmentX(Component.LEFT_ALIGNMENT);
+		JComponent pills = buildPeriodPills(period);
+		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
+		JLabel periodLbl = new JLabel("Repeat every");
+		periodLbl.setForeground(CREATE_FG_DIM);
+		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
+		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		repeatPane.add(periodLbl);
+		repeatPane.add(Box.createVerticalStrut(2));
+		repeatPane.add(pills);
+		repeatPane.add(Box.createVerticalStrut(6));
+		addFormRow(repeatPane, "XP each period", amount);
+		JLabel lock = new JLabel("Lands in the Repeatable section.");
+		lock.setForeground(CREATE_FG_DIM);
+		lock.setFont(lock.getFont().deriveFont(10f));
+		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
+		repeatPane.add(lock);
+
+		final boolean[] repeatMode = { seedRepeat };
+		JComponent segmented = buildModeToggle(repeatMode, () ->
+		{
+			oneTimePane.setVisible(!repeatMode[0]);
+			repeatPane.setVisible(repeatMode[0]);
+			remeasureDock();
+		});
+		body.add(segmented);
+		body.add(Box.createVerticalStrut(8));
+		oneTimePane.setVisible(!repeatMode[0]);
+		repeatPane.setVisible(repeatMode[0]);
+		body.add(oneTimePane);
+		body.add(repeatPane);
 
 		Runnable onAdd = () ->
 		{
-			final net.runelite.api.Skill skill = picked[0];
 			if (skill == null)
 			{
 				warnCreate("Pick a skill first.");
 				return;
 			}
-			final int xp = target.getTargetXp();
-			if (xp <= 0)
+			if (repeatMode[0])
 			{
-				warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
-				return;
-			}
-			final boolean repeatOn = repeat.isOn();
-			final int chunk = repeatOn ? repeat.amount() : 0;
-			if (repeatOn && chunk <= 0)
-			{
-				warnCreate("Enter how much XP to gain each period.");
-				return;
-			}
-			final com.goalplanner.model.RepeatPeriod period = repeat.period();
-			// Validated: stash the create as a pending consumer and go choose the
-			// landing section (note 3). The parent lands in the chosen section; the
-			// derived slice still auto-lands in Repeatable.
-			goToSectionPick(sectionId ->
-			{
-				if (repeatOn)
+				final int chunk = parsePositiveInt(amount.getText());
+				if (chunk <= 0)
 				{
-					// createDerivedRepeatGoal reads live XP, a client-thread op (an
-					// EDT read asserts under -ea and silently returns null); run the
-					// whole compound there so parent + slice land as one undo.
-					runOnClientThread(() ->
-					{
-						api.beginCompound("Add repeatable skill goal");
-						try
-						{
-							String parentId = api.addSkillGoal(skill, xp);
-							api.moveGoalToSection(parentId, sectionId);
-							api.createDerivedRepeatGoal(parentId, period, chunk, null);
-						}
-						finally
-						{
-							api.endCompound();
-						}
-					});
+					warnCreate("Enter how much XP to gain each period.");
+					return;
 				}
-				else
+				final com.goalplanner.model.RepeatPeriod p = period[0];
+				// Repeatable-only: no target field. createDerivedRepeatGoal needs a
+				// parent, and there is no parent-less repeatable API (Task 3), so the
+				// parent is created with the XP hardcap so it never "completes"; the
+				// per-period slice is derived off it. One compound, on the client
+				// thread (the derive reads live XP).
+				goToSectionPick(sectionId -> runOnClientThread(() ->
+				{
+					api.beginCompound("Add repeatable skill goal");
+					try
+					{
+						String parentId = api.addSkillGoal(skill, XP_HARDCAP);
+						api.moveGoalToSection(parentId, sectionId);
+						api.createDerivedRepeatGoal(parentId, p, chunk, null);
+					}
+					finally
+					{
+						api.endCompound();
+					}
+				}));
+			}
+			else
+			{
+				final int xp = target.getTargetXp();
+				if (xp <= 0)
+				{
+					warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
+					return;
+				}
+				goToSectionPick(sectionId ->
 				{
 					String id = api.addSkillGoal(skill, xp);
 					api.moveGoalToSection(id, sectionId);
-				}
-			});
+				});
+			}
 		};
-		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd);
+		return createFormScaffold(com.goalplanner.model.GoalType.SKILL, body, onAdd,
+			() -> navigateCreateStep(CreateStep.PICKER));
 	}
 
 	/** A grid of skill icon buttons (all trainable skills, ~3 rows of 8). Tapping
 	 *  one writes it to {@code out[0]} and highlights it. Icons come from
 	 *  {@link SkillIconManager}, the same source the goal cards use. */
-	private JComponent buildSkillPickerGrid(net.runelite.api.Skill[] out)
+	private JComponent buildSkillPickerGrid(net.runelite.api.Skill[] out, Runnable onPick)
 	{
 		JPanel grid = new JPanel(new GridLayout(0, 8, 3, 3));
 		grid.setOpaque(false);
@@ -3440,7 +3574,11 @@ public class GoalPanel extends PluginPanel
 			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			buttons.add(b);
 			owner.put(b, skill);
-			b.addActionListener(e -> { out[0] = skill; refresh.run(); });
+			b.addActionListener(e -> {
+				out[0] = skill;
+				refresh.run();
+				if (onPick != null) onPick.run();
+			});
 			grid.add(b);
 		}
 		refresh.run();
@@ -3519,24 +3657,85 @@ public class GoalPanel extends PluginPanel
 		return createFormScaffold(com.goalplanner.model.GoalType.CUSTOM, body, onAdd);
 	}
 
-	private JComponent buildBossForm()
+	/** BOSS step A (PICKER): a search field + tappable boss result rows filling the
+	 *  dock. Tapping a boss stashes it and auto-advances to DETAILS. Back returns to
+	 *  the type grid. */
+	private JComponent buildBossPicker()
 	{
-		// A "Make repeatable" hand-off (note 5) pre-seeds the boss, target, and an
-		// open repeat disclosure. Consumed once here, then cleared.
+		JPanel body = formBody();
+
+		JPanel results = new JPanel();
+		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
+		results.setOpaque(false);
+		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+		JTextField searchField = new JTextField(14);
+		styleField(searchField);
+		final String[] bosses = com.goalplanner.data.BossKillData.getBossNames();
+
+		Runnable doSearch = () ->
+		{
+			results.removeAll();
+			String q = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
+			int shown = 0;
+			for (final String b : bosses)
+			{
+				if (!q.isEmpty() && !b.toLowerCase(java.util.Locale.ROOT).contains(q))
+				{
+					continue;
+				}
+				results.add(tappableRow(null, b, null, () ->
+				{
+					dockPickedBoss = b;
+					navigateCreateStep(CreateStep.DETAILS);
+				}));
+				if (++shown >= 12)
+				{
+					break;
+				}
+			}
+			results.revalidate();
+			remeasureDock();
+		};
+		searchField.addActionListener(e -> doSearch.run());
+		JButton searchBtn = flatButton("Search", false);
+		searchBtn.addActionListener(e -> doSearch.run());
+
+		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
+		searchRow.setOpaque(false);
+		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			searchField.getPreferredSize().height));
+		searchRow.add(searchField, BorderLayout.CENTER);
+		searchRow.add(searchBtn, BorderLayout.EAST);
+
+		JLabel bossLabel = new JLabel("Pick a boss");
+		bossLabel.setForeground(CREATE_FG_DIM);
+		bossLabel.setFont(bossLabel.getFont().deriveFont(10f));
+		bossLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(bossLabel);
+		body.add(Box.createVerticalStrut(2));
+		body.add(searchRow);
+		body.add(Box.createVerticalStrut(4));
+		body.add(results);
+		autofocus(searchField);
+		doSearch.run();
+		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, null);
+	}
+
+	/** BOSS step B (DETAILS): the target kill count + repeatable disclosure for the
+	 *  picked boss. Back returns to the picker. Boss keeps the existing
+	 *  "More options" repeat disclosure this pass (its repeatable-no-target
+	 *  semantics are not yet confirmed - see the skill segmented toggle, Task 2). */
+	private JComponent buildBossDetails()
+	{
 		final CreateSeed seed = dockCreateSeed;
 		dockCreateSeed = null;
 		final boolean seedRepeat = seed != null && seed.repeatable;
+		final String boss = dockPickedBoss;
 
 		JPanel body = formBody();
-
-		String[] bosses = com.goalplanner.data.BossKillData.getBossNames();
-		JComboBox<String> bossCombo = new JComboBox<>(bosses);
-		styleField(bossCombo);
-		if (seed != null && seed.bossName != null)
-		{
-			bossCombo.setSelectedItem(seed.bossName);
-		}
-		addFormRow(body, "Boss", bossCombo);
+		addFormRow(body, "Boss", pickedHeader(null, boss != null ? boss : "(none)"));
 
 		JTextField kcField = new JTextField(8);
 		styleField(kcField);
@@ -3553,8 +3752,11 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			final String boss = (String) bossCombo.getSelectedItem();
-			if (boss == null) return;
+			if (boss == null)
+			{
+				warnCreate("Pick a boss first.");
+				return;
+			}
 			final int kc = parsePositiveInt(kcField.getText());
 			if (kc <= 0)
 			{
@@ -3596,7 +3798,8 @@ public class GoalPanel extends PluginPanel
 				}
 			});
 		};
-		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd);
+		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd,
+			() -> navigateCreateStep(CreateStep.PICKER));
 	}
 
 	private JComponent buildQuestForm()
@@ -3660,15 +3863,12 @@ public class GoalPanel extends PluginPanel
 		return createFormScaffold(com.goalplanner.model.GoalType.DIARY, body, onAdd);
 	}
 
-	private JComponent buildItemForm()
+	/** ITEM step A (PICKER): a search field + tappable item result rows (icon +
+	 *  name) filling the dock. Tapping an item stashes it and auto-advances to
+	 *  DETAILS. Back returns to the type grid. */
+	private JComponent buildItemPicker()
 	{
 		JPanel body = formBody();
-
-		final int[] selectedId = { -1 };
-		JLabel selectedLabel = new JLabel("No item selected");
-		selectedLabel.setForeground(CREATE_FG_DIM);
-		selectedLabel.setFont(selectedLabel.getFont().deriveFont(10f));
-		selectedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JPanel results = new JPanel();
 		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
@@ -3682,8 +3882,6 @@ public class GoalPanel extends PluginPanel
 		{
 			String query = searchField.getText().trim();
 			results.removeAll();
-			selectedId[0] = -1;
-			selectedLabel.setText("No item selected");
 			if (!query.isEmpty() && itemManager != null)
 			{
 				try
@@ -3696,8 +3894,17 @@ public class GoalPanel extends PluginPanel
 					for (int i = 0; i < max; i++)
 					{
 						net.runelite.http.api.item.ItemPrice it = found.get(i);
-						results.add(buildItemResultRow(it.getId(), it.getName(),
-							selectedId, selectedLabel, results));
+						final int itemId = it.getId();
+						final String name = it.getName();
+						javax.swing.Icon icon = null;
+						try { icon = new javax.swing.ImageIcon(itemManager.getImage(itemId)); }
+						catch (Exception ignored) { }
+						results.add(tappableRow(icon, name, null, () ->
+						{
+							dockPickedItemId = itemId;
+							dockPickedItemName = name;
+							navigateCreateStep(CreateStep.DETAILS);
+						}));
 					}
 				}
 				catch (Exception ignored) { }
@@ -3717,7 +3924,7 @@ public class GoalPanel extends PluginPanel
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(searchBtn, BorderLayout.EAST);
 
-		JLabel itemLabel = new JLabel("Item");
+		JLabel itemLabel = new JLabel("Pick an item");
 		itemLabel.setForeground(CREATE_FG_DIM);
 		itemLabel.setFont(itemLabel.getFont().deriveFont(10f));
 		itemLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -3726,9 +3933,25 @@ public class GoalPanel extends PluginPanel
 		body.add(searchRow);
 		body.add(Box.createVerticalStrut(4));
 		body.add(results);
-		body.add(Box.createVerticalStrut(4));
-		body.add(selectedLabel);
-		body.add(Box.createVerticalStrut(6));
+		autofocus(searchField);
+		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, null);
+	}
+
+	/** ITEM step B (DETAILS): the quantity for the picked item. Back returns to the
+	 *  picker. */
+	private JComponent buildItemDetails()
+	{
+		final int itemId = dockPickedItemId;
+		final String name = dockPickedItemName;
+
+		JPanel body = formBody();
+		javax.swing.Icon icon = null;
+		if (itemId > 0)
+		{
+			try { icon = new javax.swing.ImageIcon(itemManager.getImage(itemId)); }
+			catch (Exception ignored) { }
+		}
+		addFormRow(body, "Item", pickedHeader(icon, name != null ? name : "(none)"));
 
 		JTextField qtyField = new JTextField(8);
 		styleField(qtyField);
@@ -3736,12 +3959,11 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			if (selectedId[0] <= 0)
+			if (itemId <= 0)
 			{
-				warnCreate("Search for an item and pick one from the results.");
+				warnCreate("Pick an item first.");
 				return;
 			}
-			final int itemId = selectedId[0];
 			final int qty = parsePositiveInt(qtyField.getText());
 			if (qty <= 0)
 			{
@@ -3754,7 +3976,8 @@ public class GoalPanel extends PluginPanel
 				api.moveGoalToSection(id, sectionId);
 			});
 		};
-		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd);
+		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd,
+			() -> navigateCreateStep(CreateStep.PICKER));
 	}
 
 	private JComponent buildCombatForm()
@@ -3841,6 +4064,43 @@ public class GoalPanel extends PluginPanel
 		return createFormScaffold(com.goalplanner.model.GoalType.COMBAT_ACHIEVEMENT, body, onAdd);
 	}
 
+	/** A tappable result row (optional icon + label) that runs {@code onPick} when
+	 *  clicked. Used by the stepped tall pickers (boss/item), which auto-advance to
+	 *  the DETAILS step on selection, so no persistent highlight is needed - just a
+	 *  hover cue. */
+	private JComponent tappableRow(javax.swing.Icon icon, String label, String tooltip,
+		Runnable onPick)
+	{
+		final JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setOpaque(true);
+		row.setBackground(CREATE_TILE_BG);
+		row.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
+			new EmptyBorder(3, 5, 3, 5)));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		if (tooltip != null)
+		{
+			row.setToolTipText(tooltip);
+		}
+		if (icon != null)
+		{
+			row.add(new JLabel(icon), BorderLayout.WEST);
+		}
+		JLabel nm = new JLabel(label);
+		nm.setForeground(CREATE_FG);
+		nm.setFont(nm.getFont().deriveFont(11f));
+		row.add(nm, BorderLayout.CENTER);
+		row.addMouseListener(new MouseAdapter()
+		{
+			@Override public void mouseEntered(MouseEvent e) { row.setBackground(CREATE_TILE_HOVER); }
+			@Override public void mouseExited(MouseEvent e) { row.setBackground(CREATE_TILE_BG); }
+			@Override public void mouseClicked(MouseEvent e) { if (onPick != null) onPick.run(); }
+		});
+		return row;
+	}
+
 	/** A tappable text search-result row (label + tooltip) carrying an int id.
 	 *  Shared by the Combat picker; selecting writes {@code id} to
 	 *  {@code selectedId[0]} and re-highlights within {@code results}. */
@@ -3879,55 +4139,6 @@ public class GoalPanel extends PluginPanel
 							BorderFactory.createLineBorder(
 								sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
 							new EmptyBorder(3, 5, 3, 5)));
-					}
-				}
-				results.repaint();
-			}
-		});
-		return row;
-	}
-
-	/** One tappable item search result: icon + name. Tapping selects it and
-	 *  re-highlights the row (the other rows in {@code results} reset). */
-	private JComponent buildItemResultRow(int itemId, String name, int[] selectedId,
-		JLabel selectedLabel, JPanel results)
-	{
-		JPanel row = new JPanel(new BorderLayout(6, 0));
-		row.setOpaque(true);
-		row.setBackground(CREATE_TILE_BG);
-		row.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
-			new EmptyBorder(2, 4, 2, 4)));
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
-		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-
-		JLabel icon = new JLabel();
-		try { itemManager.getImage(itemId).addTo(icon); }
-		catch (Exception ignored) { }
-		row.add(icon, BorderLayout.WEST);
-
-		JLabel nm = new JLabel(name);
-		nm.setForeground(CREATE_FG);
-		nm.setFont(nm.getFont().deriveFont(11f));
-		row.add(nm, BorderLayout.CENTER);
-
-		row.addMouseListener(new MouseAdapter()
-		{
-			@Override public void mouseClicked(MouseEvent e)
-			{
-				selectedId[0] = itemId;
-				selectedLabel.setText("Selected: " + name);
-				for (Component c : results.getComponents())
-				{
-					boolean sel = c == row;
-					c.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
-					if (c instanceof JComponent)
-					{
-						((JComponent) c).setBorder(BorderFactory.createCompoundBorder(
-							BorderFactory.createLineBorder(
-								sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
-							new EmptyBorder(2, 4, 2, 4)));
 					}
 				}
 				results.repaint();
@@ -4068,6 +4279,67 @@ public class GoalPanel extends PluginPanel
 		return new RepeatControls(toggle, period, amount);
 	}
 
+	/** A 2-segment either/or toggle [One-time | Repeatable] in the period-pill
+	 *  visual style (Task 2). Writes the choice to {@code mode[0]} (false =
+	 *  One-time, true = Repeatable) and runs {@code onChange} after each switch so
+	 *  the form can swap which input set shows - never both. */
+	private JComponent buildModeToggle(boolean[] mode, Runnable onChange)
+	{
+		JPanel row = new JPanel(new GridLayout(1, 2, 4, 0));
+		row.setOpaque(false);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		final JButton[] segs = { new JButton("One-time"), new JButton("Repeatable") };
+		Runnable refresh = () ->
+		{
+			for (int i = 0; i < segs.length; i++)
+			{
+				boolean sel = (i == 1) == mode[0];
+				JButton b = segs[i];
+				b.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
+				b.setForeground(sel ? CREATE_PRIMARY_FG : CREATE_FG);
+				b.setBorder(BorderFactory.createCompoundBorder(
+					BorderFactory.createLineBorder(sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
+					new EmptyBorder(4, 10, 4, 10)));
+			}
+		};
+		for (int i = 0; i < segs.length; i++)
+		{
+			final boolean repeatSeg = i == 1;
+			JButton b = segs[i];
+			b.setOpaque(true);
+			b.setFocusPainted(false);
+			b.setContentAreaFilled(true);
+			b.setFont(b.getFont().deriveFont(Font.BOLD, 11f));
+			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+			b.addActionListener(e ->
+			{
+				mode[0] = repeatSeg;
+				refresh.run();
+				if (onChange != null) onChange.run();
+			});
+			row.add(b);
+		}
+		refresh.run();
+		return row;
+	}
+
+	/** A read-only "chosen pick" header row: optional icon + name, shown on a tall
+	 *  type's DETAILS screen so the picker's selection stays visible. */
+	private JComponent pickedHeader(javax.swing.Icon icon, String name)
+	{
+		JLabel l = new JLabel(name);
+		if (icon != null)
+		{
+			l.setIcon(icon);
+			l.setIconTextGap(6);
+		}
+		l.setForeground(CREATE_FG);
+		l.setFont(l.getFont().deriveFont(Font.BOLD, 12f));
+		l.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return l;
+	}
+
 	/** Daily / Weekly / Monthly pills; the tapped one is written to
 	 *  {@code out[0]} and highlighted. */
 	private JComponent buildPeriodPills(com.goalplanner.model.RepeatPeriod[] out)
@@ -4126,6 +4398,15 @@ public class GoalPanel extends PluginPanel
 	private JComponent createFormScaffold(com.goalplanner.model.GoalType type,
 		JComponent body, Runnable onAdd)
 	{
+		return createFormScaffold(type, body, onAdd, () -> navigateCreate(null));
+	}
+
+	/** As above, but {@code onBack} names where the header "Back" returns - the
+	 *  type grid for a single-step form or picker, the PICKER step for a tall
+	 *  type's DETAILS screen. */
+	private JComponent createFormScaffold(com.goalplanner.model.GoalType type,
+		JComponent body, Runnable onAdd, Runnable onBack)
+	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
 		inner.setOpaque(false);
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
@@ -4133,7 +4414,7 @@ public class GoalPanel extends PluginPanel
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
 		JButton back = flatButton("Back", false);
-		back.addActionListener(e -> navigateCreate(null));
+		back.addActionListener(e -> onBack.run());
 		JLabel title = new JLabel(tileLabel(type) + " goal");
 		title.setForeground(CREATE_FG);
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
