@@ -5,6 +5,84 @@ Everything here is **render-path** work that has NOT been verified in-client
 (no client available while the designer was AFK). Treat every layout/spacing
 choice as provisional until screenshot-verified.
 
+## Section-selected dock — the last 1.0.0 parity gap (latest)
+
+Sections are now selectable, so `DockContext.State.SECTION` is finally produced
+and the SECTION action surface is wired. This closes the last "Section selected"
+gap in `docs/action-dock-parity.md`.
+
+### Selection mechanism
+- **`SectionHeaderRow`**: the WEST **chevron** is now the collapse target (its own
+  MouseListener → `onToggle`); clicking the **rest of the row** fires a **new
+  `onSelect` callback** that selects the section. Swing does not bubble a child's
+  clicks to the parent, so chevron-click never also selects and the select-all
+  glyph (its own listener, `mousePressed`) still neither selects nor collapses. A
+  selected header paints a 2px white inset outline (mirrors `GoalCard`). The row
+  stores its section id (`getSectionId()`) and exposes `setSelected(boolean)` so
+  the panel repaints the highlight without a full rebuild. Class doc updated.
+- **`GoalPanel.selectedSectionId`** (new field): the selected section, **mutually
+  exclusive** with the goal selection. `selectSection()` sets it + calls
+  `api.clearGoalSelection()`; the exclusion is enforced centrally in `refreshDock`
+  (goals present → id cleared; a per-row highlight pass runs every refresh). The
+  goal card-click path clears the section for free because any goal selection
+  drops the id in that same pass. A stale id (section deleted while selected) is
+  dropped at the top of `refreshDock`.
+
+### DockContext signature change
+- **`DockContext.of(Set<String> selectedGoalIds, String selectedSectionId)`** added
+  (the old `of(Set)` overload retained and delegates). Goals win → GOAL/MULTI;
+  else section id → SECTION; else EMPTY. New `getSectionId()` accessor. Stays pure;
+  `DockContextTest` extended with SECTION / goals-win / empty cases. The single
+  refreshDock call site now passes `selectedSectionId`.
+
+### buildSectionDock — actions above the permanent footer
+`refreshDock`'s SECTION case mounts `buildSectionDock(sv)` via
+`setExpandedComponent` (same host as the goal EDIT view), guarded by
+`dockSectionMounted`/`Id`/`Group` so an in-place action does not thrash. A
+full-width indicator bar names the section; a muted meta line shows kind + goal
+count. Actions use the **same drill-in group pattern** as the edit chips
+(`SectionGroup { EDIT, LAYOUT, SHARE }` + `refreshSectionDock()`), each REUSING an
+existing handler/dialog — `GoalContextMenuBuilder`'s section menu is the parity
+reference and stays intact. **Wired:** Select/Deselect all, Add goal (dialog,
+hidden on Completed), Edit group (Rename / Change color / Delete-with-move-instead
+confirm — user sections), Change color as a direct chip on built-ins, Layout group
+(dependency-nesting cycle on all sections + completed-archive cycle on user
+sections; each chip's label shows current state, tap advances Default→On→Off),
+Share group (Copy/Save this section or all, gated on `isShareAvailable` +
+`isSavedPlansAvailable` + goals present), Deselect. **Built-in gating mirrors the
+menu:** no rename/delete/archive on Incomplete/Completed/Repeatable; Add goal
+hidden on Completed.
+
+**Deferred (flagged, not invented):** "Add requirements to this section" — there
+is no section-level seed-requirements handler; `seedRequirementsForGoal` is
+per-goal (surfaced on the goal EDIT view as "Add reqs to section"). A true
+section-level seed would need new API; left for a follow-up.
+
+**Unlock:** this removes the last blocker for deleting `GoalContextMenuBuilder`'s
+section menu (the token-cap relief) once verified in-client.
+
+### NEEDS-SCREENSHOT (section-selected pass) — in-client loop
+- **Header click selects vs chevron collapses**: clicking the row body highlights
+  the header and opens the SECTION dock; clicking the chevron still toggles
+  collapse and does NOT select. Confirm the two hit areas feel right (chevron is
+  ~14px on the left edge).
+- **Selection highlight**: the white 2px outline reads as selected (like a card),
+  and a user-colored header still shows it clearly over the darkened fill.
+- **Section surface above the footer**: the action chips render above the still-
+  visible Create Goal/Section footer, capped + scrolling like the edit view.
+- **Mutual exclusivity**: selecting a goal clears a selected section's highlight
+  and vice-versa; only one is ever highlighted/active.
+- **Each action**: Rename, Change color, Delete (with the move-instead checkbox),
+  Add goal (lands in this section; hidden on Completed), the nesting cycle and the
+  archive cycle (labels update in place on each tap), Copy/Save code + Copy/Save
+  all, Select/Deselect all (label flips; moves the dock to goal/multi state).
+- **Built-in gating**: Incomplete/Completed/Repeatable show only Color + Layout
+  (nesting) + Select-all/Share where applicable — no Rename/Delete/archive; Add
+  goal absent on Completed.
+- **Drill-in group nav + Back**: Edit/Layout/Share swap the chip row cleanly and
+  "< Back" returns to the top; a same-section cycle stays in-group.
+- Font scales 1.0 / 1.3 across the above.
+
 ## Permanent create footer — the surface renders ABOVE the buttons (latest)
 
 The Create Goal / Create Section buttons are now a **permanent footer** at the

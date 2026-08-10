@@ -57,19 +57,22 @@ Dispositions:
 | Bulk relations (Requires / Required by / remove common) | dialog | NOT wired — bulk relation edge editing deferred (see progress doc) |
 | Bulk move up/down/top/bottom | **drop** | in-section bulk reorder; drag-reorder covers it |
 
-## Section selected (NEW — sections become selectable)
+## Section selected (sections are now selectable — click the header body)
+
+Clicking a section header's body SELECTS it (dock SECTION state); the chevron
+still toggles collapse. Goal and section selection are mutually exclusive.
 
 | Action | Disposition | Notes |
 |---|---|---|
-| Rename | dialog | |
-| Change Color | dialog | |
-| Delete Section | button | confirm |
-| Add Goal (into section) | button | opens add-goal dialog targeting it |
-| Add requirements to this section | button | |
-| Dependency nesting (nested/flat/default) | button cycle | |
-| Completed-goal handling (archive override) | button cycle | |
-| Copy / Save share code (section) | button | |
-| Select all / Deselect all in section | button | |
+| Rename | dialog | ✅ dock — Edit group, reuses showRenameSectionDialog (user sections) |
+| Change Color | dialog | ✅ dock — reuses showSectionColorDialog (all sections) |
+| Delete Section | button | ✅ dock — confirm w/ move-instead checkbox (user sections) |
+| Add Goal (into section) | button | ✅ dock — reuses showAddGoalDialog(sectionId); hidden on Completed |
+| Add requirements to this section | button | NOT wired — no section-level seed handler exists (seedRequirementsForGoal is per-goal); deferred |
+| Dependency nesting (nested/flat/default) | button cycle | ✅ dock — Layout group, cycles setSectionNestedOverride (all sections) |
+| Completed-goal handling (archive override) | button cycle | ✅ dock — Layout group, cycles setSectionAutoArchiveOverride (user sections) |
+| Copy / Save share code (section) | button | ✅ dock — Share group, this/all sections, gated on availability + goals |
+| Select all / Deselect all in section | button | ✅ dock — reuses selectAllInSection / deselectAllInSection |
 
 ## Nothing selected (panel level)
 
