@@ -925,3 +925,43 @@ COMBAT_ACHIEVEMENT/BOSS/ITEM/SKILL/ACCOUNT).
   section." banner appears and auto-dismisses. Confirm no modal dialog.
 - Add an ordinary INCOMPLETE goal: no info banner, normal selection behavior
   (regression check that the reveal stays scoped to complete-on-add).
+
+## Create-form verification fixes (in-client feedback pass)
+
+Four fixes from the user's in-client verification of the dock create forms.
+
+### Task 1 - Diary add failed on all areas/tiers (BUG, root cause)
+
+**Root cause:** the dock create forms build their goal inside the section-pick
+consumer (`goToSectionPick(sectionId -> ...)`), which fires on the **EDT**.
+`GoalCreationService.addDiaryGoal` resolves diary requirements via
+`DiaryRequirementResolver.resolve(area, tier, client)`, which **reads the live
+Client** (`getRealSkillLevel`, `Quest.getState`, `AccountMetric.currentValue`).
+A client read off the client thread trips RuneLite's dev-mode `-ea`
+client-thread assert, so the create threw and **silently failed for every
+area/tier** - exactly the reported symptom. (Repeatable skill/boss already
+guarded this by wrapping the create in `runOnClientThread`; the non-repeatable
+section-pick paths did not.)
+
+**Fix:** new `GoalPanel.clientThreadCreateInSection(desc, sectionId, create)`
+helper runs the create + `moveGoalToSection` together on the client thread as one
+compound (clean single undo), mirroring the standalone-repeatable wrap.
+
+**EDT-client-read audit of all non-tall / non-repeatable create paths:**
+- **DIARY** - `addDiaryGoal` -> resolver reads client. **FIXED** (the reported bug).
+- **QUEST** - `addQuestGoal` -> `resolveQuestRequirements` + `seedPrereqsInto`
+  (`Quest.getState`) read client. **FIXED** (same latent bug).
+- **BOSS (non-repeatable)** - `addBossGoal` -> `seedBossPrereqs` ->
+  `seedPrereqsInto` / `resolveQuestRequirements` read client for quest prereqs.
+  **FIXED** (same latent bug).
+- **ITEM** - `addItemGoal` reads only `ItemManager`, no Client. Safe, unchanged.
+- **ACCOUNT** - `addAccountGoal` -> `autoLinkSkillOrItemChain`, no Client read.
+  Safe, unchanged.
+- **CUSTOM** - no Client read. Safe, unchanged.
+- **COMBAT_ACHIEVEMENT** - `addCombatAchievementGoal` seeds no prereqs, no Client
+  read. Safe, unchanged.
+- **SKILL one-time** - `addSkillGoal` -> `autoLinkSkillOrItemChain`, no Client
+  read. Safe. (Repeatable skill path already wrapped.)
+
+**Regression test:** `AddDiaryGoalAllAreasTest` calls `addDiaryGoal` for every
+area x tier the dock offers and asserts a DIARY goal is created each time.

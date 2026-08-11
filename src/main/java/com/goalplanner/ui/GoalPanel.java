@@ -3468,6 +3468,39 @@ public class GoalPanel extends PluginPanel
 		navigateCreateNav(CreateNav.SECTION_PICK);
 	}
 
+	/**
+	 * Run a section-pick create whose add path resolves requirements against live
+	 * Client state (DIARY/QUEST/BOSS - {@code DiaryRequirementResolver.resolve},
+	 * {@code resolveQuestRequirements}, {@code q.getState}). Those reads MUST run on
+	 * the client thread: the section-pick consumer fires on the EDT, and a client
+	 * read off the client thread trips RuneLite's {@code -ea} client-thread assert,
+	 * silently failing the create (the diary-add bug). Wrapping create + move on the
+	 * client thread in one compound fixes it AND gives a clean single undo, mirroring
+	 * the standalone-repeatable client-thread wrap (buildSkillDetails/buildBossDetails).
+	 * Safe types (item/account/custom/CA/skill one-time) read no Client state and skip
+	 * this - they create directly on the EDT.
+	 */
+	private void clientThreadCreateInSection(String compoundDesc, String sectionId,
+		java.util.function.Supplier<String> create)
+	{
+		runOnClientThread(() ->
+		{
+			api.beginCompound(compoundDesc);
+			try
+			{
+				String id = create.get();
+				if (id != null)
+				{
+					api.moveGoalToSection(id, sectionId);
+				}
+			}
+			finally
+			{
+				api.endCompound();
+			}
+		});
+	}
+
 	/** Run the pending goal-create against the chosen section, then return to the
 	 *  type grid (note 3). */
 	private void chooseSection(String sectionId)
@@ -4126,11 +4159,12 @@ public class GoalPanel extends PluginPanel
 			}
 			else
 			{
+				// addBossGoal seeds boss prereqs, which resolve quest prereqs against
+				// the live Client (resolveQuestRequirements/q.getState), so create + move
+				// run on the client thread - same EDT-client-read latent bug as diary.
 				goToSectionPick(sectionId ->
-				{
-					String id = api.addBossGoal(boss, kc);
-					api.moveGoalToSection(id, sectionId);
-				});
+					clientThreadCreateInSection("Add boss goal", sectionId,
+						() -> api.addBossGoal(boss, kc)));
 			}
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd,
@@ -4232,11 +4266,12 @@ public class GoalPanel extends PluginPanel
 		{
 			final net.runelite.api.Quest quest = (net.runelite.api.Quest) questCombo.getSelectedItem();
 			if (quest == null) return;
+			// addQuestGoal resolves quest prereqs against the live Client (q.getState),
+			// so create + move run on the client thread - same EDT-client-read latent bug
+			// as diary (Task 1 audit).
 			goToSectionPick(sectionId ->
-			{
-				String id = api.addQuestGoal(quest);
-				api.moveGoalToSection(id, sectionId);
-			});
+				clientThreadCreateInSection("Add quest goal", sectionId,
+					() -> api.addQuestGoal(quest)));
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
 	}
@@ -4284,11 +4319,13 @@ public class GoalPanel extends PluginPanel
 			final com.goalplanner.api.GoalPlannerApi.DiaryTier tier =
 				(com.goalplanner.api.GoalPlannerApi.DiaryTier) tierCombo.getSelectedItem();
 			if (area == null || tier == null) return;
+			// addDiaryGoal resolves diary requirements against the live Client
+			// (skills/quests/metrics), so create + move must run on the client thread -
+			// running it on the EDT is the reported "diary add fails on all areas/tiers"
+			// bug (dev-mode -ea client-thread assert). See clientThreadCreateInSection.
 			goToSectionPick(sectionId ->
-			{
-				String id = api.addDiaryGoal(area, tier);
-				api.moveGoalToSection(id, sectionId);
-			});
+				clientThreadCreateInSection("Add diary goal", sectionId,
+					() -> api.addDiaryGoal(area, tier)));
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.DIARY, body, onAdd);
 	}
