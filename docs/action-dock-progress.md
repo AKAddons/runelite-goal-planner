@@ -1093,3 +1093,13 @@ line: `buildRelationsLines(g)` resolves `api.getRequirements(id)` /
 "+N more"; a line is omitted when its set is empty and both are omitted when the
 goal has no relations (dangling ids with no live goal are skipped). Display-only -
 the Relations chip group still owns editing.
+
+### Task 6 — boss/item picker no longer over-expands; results scroll in place
+The boss and item pickers' result lists are now hosted in a height-capped
+(`PICKER_RESULTS_H` = 150px) vertical scroll pane (`boundedResultsScroll` around a
+width-tracking `resultsColumn`), so the list scrolls IN PLACE while the search field
+stays fixed and the whole surface stays within the dock's `CREATE_MAX_H`. The boss
+picker's default (empty-search) view now shows a SHORT curated head of common
+bosses (`recommendedBosses`, filtered to names present in the data, topped up
+alphabetically to 8) instead of the first 12 of the entire list; typing narrows
+across the full corpus (cap 25). Item search cap raised 8 -> 15 (it scrolls).

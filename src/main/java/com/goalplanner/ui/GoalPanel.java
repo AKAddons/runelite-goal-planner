@@ -4109,10 +4109,11 @@ public class GoalPanel extends PluginPanel
 	{
 		JPanel body = formBody();
 
-		JPanel results = new JPanel();
-		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
-		results.setOpaque(false);
-		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+		// Results scroll INSIDE a height-capped pane (Task 6) so the list never
+		// grows the surface past the dock's cap and strands itself off-screen; the
+		// search field above stays fixed while the list scrolls.
+		final ScrollablePanel results = resultsColumn();
+		JScrollPane resultsScroll = boundedResultsScroll(results);
 
 		JTextField searchField = new JTextField(14);
 		styleField(searchField);
@@ -4122,24 +4123,38 @@ public class GoalPanel extends PluginPanel
 		{
 			results.removeAll();
 			String q = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
-			int shown = 0;
-			for (final String b : bosses)
+			java.util.List<String> show;
+			if (q.isEmpty())
 			{
-				if (!q.isEmpty() && !b.toLowerCase(java.util.Locale.ROOT).contains(q))
+				// Default view: a SHORT curated head of common bosses, not the whole
+				// list. Typing narrows across the full corpus below.
+				show = recommendedBosses(bosses, 8);
+			}
+			else
+			{
+				show = new java.util.ArrayList<>();
+				for (String b : bosses)
 				{
-					continue;
+					if (b.toLowerCase(java.util.Locale.ROOT).contains(q))
+					{
+						show.add(b);
+						if (show.size() >= 25)
+						{
+							break;
+						}
+					}
 				}
+			}
+			for (final String b : show)
+			{
 				results.add(tappableRow(null, b, null, () ->
 				{
 					dockPickedBoss = b;
 					navigateCreateStep(CreateStep.DETAILS);
 				}));
-				if (++shown >= 12)
-				{
-					break;
-				}
 			}
 			results.revalidate();
+			results.repaint();
 			remeasureDock();
 		};
 		searchField.addActionListener(e -> doSearch.run());
@@ -4154,7 +4169,7 @@ public class GoalPanel extends PluginPanel
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(searchBtn, BorderLayout.EAST);
 
-		JLabel bossLabel = new JLabel("Pick a boss");
+		JLabel bossLabel = new JLabel("Pick a boss (common bosses shown; type to search)");
 		bossLabel.setForeground(CREATE_FG_DIM);
 		bossLabel.setFont(bossLabel.getFont().deriveFont(10f));
 		bossLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -4162,7 +4177,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(2));
 		body.add(searchRow);
 		body.add(Box.createVerticalStrut(4));
-		body.add(results);
+		body.add(resultsScroll);
 		autofocus(searchField);
 		doSearch.run();
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, null);
@@ -4538,10 +4553,10 @@ public class GoalPanel extends PluginPanel
 	{
 		JPanel body = formBody();
 
-		JPanel results = new JPanel();
-		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
-		results.setOpaque(false);
-		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+		// Results scroll inside a height-capped pane (Task 6): the item list scrolls
+		// in place rather than growing the surface past the dock cap.
+		final ScrollablePanel results = resultsColumn();
+		JScrollPane resultsScroll = boundedResultsScroll(results);
 
 		JTextField searchField = new JTextField(14);
 		styleField(searchField);
@@ -4554,11 +4569,11 @@ public class GoalPanel extends PluginPanel
 			{
 				try
 				{
-					// Same source the icon picker uses; cap the list so the dock
-					// stays compact (it scrolls past this cap anyway).
+					// Same source the icon picker uses; cap the list, and it scrolls
+					// inside the bounded results pane past that cap.
 					java.util.List<net.runelite.http.api.item.ItemPrice> found =
 						itemManager.search(query);
-					int max = Math.min(found.size(), 8);
+					int max = Math.min(found.size(), 15);
 					for (int i = 0; i < max; i++)
 					{
 						net.runelite.http.api.item.ItemPrice it = found.get(i);
@@ -4604,7 +4619,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(2));
 		body.add(searchRow);
 		body.add(Box.createVerticalStrut(4));
-		body.add(results);
+		body.add(resultsScroll);
 		autofocus(searchField);
 		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, null);
 	}
@@ -4738,6 +4753,75 @@ public class GoalPanel extends PluginPanel
 			});
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.COMBAT_ACHIEVEMENT, body, onAdd);
+	}
+
+	/** Height cap (px) for a picker's scrollable results area (Task 6): the boss /
+	 *  item result list scrolls INSIDE the dock rather than growing the surface past
+	 *  {@code CREATE_MAX_H} and stranding the list off-screen. */
+	private static final int PICKER_RESULTS_H = 150;
+
+	/** A BoxLayout results panel that tracks the viewport width (so no horizontal
+	 *  scroll) for use inside {@link #boundedResultsScroll}. */
+	private ScrollablePanel resultsColumn()
+	{
+		ScrollablePanel p = new ScrollablePanel(null);
+		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+		p.setOpaque(false);
+		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return p;
+	}
+
+	/** Wrap a results column in a height-capped vertical scroll pane so a long
+	 *  picker list scrolls in place while the search field above stays fixed
+	 *  (Task 6). */
+	private JScrollPane boundedResultsScroll(JComponent results)
+	{
+		JScrollPane sp = new JScrollPane(results,
+			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		sp.setBorder(null);
+		sp.setOpaque(false);
+		sp.getViewport().setOpaque(false);
+		sp.getVerticalScrollBar().setUnitIncrement(16);
+		sp.setAlignmentX(Component.LEFT_ALIGNMENT);
+		sp.setPreferredSize(new Dimension(0, PICKER_RESULTS_H));
+		sp.setMaximumSize(new Dimension(Integer.MAX_VALUE, PICKER_RESULTS_H));
+		return sp;
+	}
+
+	/** A curated short head of commonly-picked bosses for the boss picker's default
+	 *  (empty-search) view (Task 6), filtered to names actually present in the data;
+	 *  topped up alphabetically to {@code n} so the default is never empty whatever
+	 *  the corpus. */
+	private java.util.List<String> recommendedBosses(String[] all, int n)
+	{
+		java.util.Set<String> present = new java.util.HashSet<>(java.util.Arrays.asList(all));
+		String[] curated = {
+			"Zulrah", "Vorkath", "Vardorvis", "Alchemical Hydra", "Cerberus",
+			"Kraken", "Giant Mole", "Abyssal Sire", "Corporeal Beast", "Nex",
+			"General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth",
+			"Phantom Muspah", "Duke Sucellus",
+		};
+		java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+		for (String b : curated)
+		{
+			if (present.contains(b))
+			{
+				out.add(b);
+			}
+			if (out.size() >= n)
+			{
+				break;
+			}
+		}
+		for (String b : all)
+		{
+			if (out.size() >= n)
+			{
+				break;
+			}
+			out.add(b);
+		}
+		return new java.util.ArrayList<>(out);
 	}
 
 	/** A tappable result row (optional icon + label) that runs {@code onPick} when
