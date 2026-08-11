@@ -3973,6 +3973,47 @@ public class GoalPanel extends PluginPanel
 		styleField(targetField);
 		addFormRow(body, "Target", targetField);
 
+		// Quick-fill presets (Task 3): a Max button + a few nice-rounded fractions
+		// (~25/50/75% of the ceiling), data-driven off AccountMetric.maxTarget (static -
+		// no Client read). Tapping one fills the target field; typing a custom value
+		// still works. Rebuilt whenever the metric changes.
+		JLabel quickLbl = new JLabel("Quick fill");
+		quickLbl.setForeground(CREATE_FG_DIM);
+		quickLbl.setFont(quickLbl.getFont().deriveFont(10f));
+		quickLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(quickLbl);
+		body.add(Box.createVerticalStrut(2));
+		JPanel presetRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+		presetRow.setOpaque(false);
+		presetRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(presetRow);
+		body.add(Box.createVerticalStrut(6));
+		Runnable rebuildPresets = () ->
+		{
+			presetRow.removeAll();
+			com.goalplanner.model.AccountMetric m =
+				(com.goalplanner.model.AccountMetric) metricCombo.getSelectedItem();
+			if (m != null)
+			{
+				int max = m.getMaxTarget();
+				for (int v : com.goalplanner.ui.AccountTargetPresets.presetsFor(m))
+				{
+					final int val = v;
+					String label = v == max
+						? "Max (" + com.goalplanner.util.FormatUtil.formatNumber(v) + ")"
+						: com.goalplanner.util.FormatUtil.formatNumber(v);
+					JButton pill = flatButton(label, false);
+					pill.setToolTipText("Set target to " + val);
+					pill.addActionListener(e -> targetField.setText(Integer.toString(val)));
+					presetRow.add(pill);
+				}
+			}
+			presetRow.revalidate();
+			remeasureDock();
+		};
+		metricCombo.addActionListener(e -> rebuildPresets.run());
+		rebuildPresets.run();
+
 		Runnable onAdd = () ->
 		{
 			final com.goalplanner.model.AccountMetric metric =

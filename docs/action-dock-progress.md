@@ -995,3 +995,16 @@ Repeatable" progressive disclosure (`addRepeatDisclosure` + `RepeatControls`) is
 delta)` (pure), covered by `RelativeTargetResolverTest.KillCount` (add, zero/negative
 current floored to 0, non-positive delta -> -1). The in-game Add dialog
 (`GoalDialogFactory`) is left INTACT.
+
+### Task 3 - Account goals: Max + milestone presets
+
+`buildAccountForm` now shows a "Quick fill" row of one-tap preset buttons under the
+target field, rebuilt whenever the metric changes. Presets come from the new pure
+`AccountTargetPresets.presetsFor(metric)`: nice-rounded ~25% / 50% / 75% of the
+metric's ceiling (de-duplicated, clamped to [min, max]) followed by a **Max
+(N)** button. All data-driven off the static `AccountMetric.getMaxTarget()` - no
+per-metric hardcoded table and no live Client read. Tapping a preset fills the
+target field; typing a custom value still works unchanged.
+
+Covered by `AccountTargetPresetsTest` (max always last & in-range for every metric;
+small ceilings like DoM depth 8 stay distinct 2/4/6/8; nice-round step scaling).

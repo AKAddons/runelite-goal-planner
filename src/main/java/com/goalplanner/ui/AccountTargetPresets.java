@@ -1,0 +1,90 @@
+package com.goalplanner.ui;
+
+import com.goalplanner.model.AccountMetric;
+
+/**
+ * Pure quick-fill target presets for account-metric goals (Task 3). Data-driven
+ * off each metric's static {@link AccountMetric#getMaxTarget()} - no per-metric
+ * hardcoded tables and no live Client read. The dock's account create form offers
+ * these as one-tap buttons alongside the free-text target field, so common
+ * milestones (a quarter/half/three-quarters of the ceiling, and the ceiling
+ * itself) don't have to be typed. Typing a custom value still works.
+ */
+public final class AccountTargetPresets
+{
+	private AccountTargetPresets() {}
+
+	/** The fractions of max offered below the Max button. */
+	private static final double[] FRACTIONS = { 0.25, 0.50, 0.75 };
+
+	/**
+	 * Ordered, de-duplicated quick-fill targets for {@code metric}: roughly
+	 * 25% / 50% / 75% of the ceiling (nice-rounded and clamped to the metric's
+	 * [min, max] range), followed by the max itself. The max is always the last
+	 * element, so the array is never empty. Fractions that round to a duplicate
+	 * (common on small-ceiling metrics) are dropped.
+	 */
+	public static int[] presetsFor(AccountMetric metric)
+	{
+		if (metric == null)
+		{
+			return new int[0];
+		}
+		int min = metric.getMinTarget();
+		int max = metric.getMaxTarget();
+		// Preserve insertion order, drop duplicates.
+		java.util.LinkedHashSet<Integer> out = new java.util.LinkedHashSet<>();
+		for (double f : FRACTIONS)
+		{
+			int v = niceRound((int) Math.round(max * f));
+			v = Math.max(min, Math.min(max, v));
+			if (v > 0 && v < max)
+			{
+				out.add(v);
+			}
+		}
+		out.add(max);
+		int[] arr = new int[out.size()];
+		int i = 0;
+		for (int v : out)
+		{
+			arr[i++] = v;
+		}
+		return arr;
+	}
+
+	/**
+	 * Round {@code v} to a human-friendly step scaled to its magnitude (small
+	 * values are left exact so tiny ceilings like Diary Tiers (48) or DoM depth
+	 * (8) still produce distinct quarter/half/three-quarter presets).
+	 */
+	static int niceRound(int v)
+	{
+		if (v <= 0)
+		{
+			return 0;
+		}
+		if (v < 50)
+		{
+			return v;
+		}
+		int step;
+		if (v < 200)
+		{
+			step = 5;
+		}
+		else if (v < 2000)
+		{
+			step = 10;
+		}
+		else if (v < 20000)
+		{
+			step = 100;
+		}
+		else
+		{
+			step = 1000;
+		}
+		return Math.round((float) v / step) * step;
+	}
+}
