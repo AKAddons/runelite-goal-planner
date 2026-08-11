@@ -1139,9 +1139,9 @@ public class GoalPanel extends PluginPanel
 				isAllCompleteInSection(sectionIdRef));
 			headerRow.setSelected(sectionIdRef.equals(selectedSectionId));
 			headerRows.add(headerRow);
-			// All sections get a right-click menu. User sections get the full
-			// rename/move/delete/color menu; built-ins get only Change Color.
-			contextMenuBuilder.attachSectionContextMenu(headerRow, section, sectionViews);
+			// Section right-click menu retired (1.0.0): right-clicking the header
+			// now selects the section (like goal cards), and section actions live in
+			// the dock's SECTION state. Menu builder stays until the diet removes it.
 			goalListPanel.add(headerRow);
 			goalListPanel.add(Box.createVerticalStrut(2));
 
@@ -1296,10 +1296,10 @@ public class GoalPanel extends PluginPanel
 				// whether a move is actually possible.
 				card.setFirstInList(firstInList);
 				card.setLastInList(lastInList);
-				contextMenuBuilder.addContextMenu(card, goal, index, sectionStart, sectionEnd,
-					nestParents.contains(goalIdRef)
-						? () -> { api.toggleGoalNestCollapsed(goalIdRef); rebuild(); }
-						: null);
+				// Panel right-click menu retired (1.0.0): right-click now selects
+				// (see attachSelectionClick), every action lives in the dock, and
+				// nest-collapse rides the SectionNestContainer chevron. The menu
+				// builder stays until the diet removes it. In-game menus unaffected.
 				attachSelectionClick(card, view);
 
 				// Relation-pick (orange) / move-pick (blue) source highlight.
@@ -1727,7 +1727,12 @@ public class GoalPanel extends PluginPanel
 			@Override
 			public void mouseClicked(MouseEvent e)
 			{
-				if (e.getButton() != MouseEvent.BUTTON1) return;
+				// Right-click (BUTTON3) now behaves exactly like Cmd/Ctrl-click -
+				// toggle this card in the selection - instead of opening a context
+				// menu (the panel menu is retired in 1.0.0; in-game right-clicks are
+				// unaffected). Left-click keeps its plain/modifier semantics.
+				boolean rightClick = e.getButton() == MouseEvent.BUTTON3;
+				if (e.getButton() != MouseEvent.BUTTON1 && !rightClick) return;
 				if (!pendingRelationSourceIds.isEmpty())
 				{
 					handleRelationPickTarget(goalId);
@@ -1740,7 +1745,7 @@ public class GoalPanel extends PluginPanel
 				}
 				// Check LIVE selection state, not the stale build-time value.
 				boolean isSelected = api.getSelectedGoalIds().contains(goalId);
-				boolean cmdCtrl = e.isMetaDown() || e.isControlDown();
+				boolean cmdCtrl = e.isMetaDown() || e.isControlDown() || rightClick;
 				boolean shift = e.isShiftDown();
 				if (shift && selectionAnchorId != null && !cmdCtrl)
 				{
@@ -5477,13 +5482,36 @@ public class GoalPanel extends PluginPanel
 		p.setAlignmentX(Component.LEFT_ALIGNMENT);
 		if (requires != null)
 		{
-			p.add(mutedTip("Requires: " + requires));
+			// Requires -> an up arrow (this goal sits ON TOP of what it needs).
+			p.add(relationRow(ShapeIcons.upTriangle(9, RELATION_REQ_COLOR),
+				"Requires: " + requires));
 		}
 		if (requiredBy != null)
 		{
-			p.add(mutedTip("Required by: " + requiredBy));
+			if (requires != null)
+			{
+				p.add(Box.createVerticalStrut(3));
+			}
+			// Required by -> a down arrow (things below depend on this goal).
+			p.add(relationRow(ShapeIcons.downTriangle(9, RELATION_DEP_COLOR),
+				"Required by: " + requiredBy));
 		}
 		return p;
+	}
+
+	private static final Color RELATION_REQ_COLOR = new Color(0x8F, 0xBF, 0x8F);
+	private static final Color RELATION_DEP_COLOR = new Color(0xD0, 0xA8, 0x5A);
+
+	/** A relation line: a direction arrow + full-strength label at readable size
+	 *  (larger than the footnote tips, per user feedback). */
+	private JComponent relationRow(javax.swing.Icon icon, String text)
+	{
+		JLabel l = new JLabel(text, icon, SwingConstants.LEFT);
+		l.setForeground(CREATE_FG);
+		l.setFont(l.getFont().deriveFont(12f));
+		l.setIconTextGap(6);
+		l.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return l;
 	}
 
 	/** Resolve relation ids to a compact, name-based summary; null when empty.

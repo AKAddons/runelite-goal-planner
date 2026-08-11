@@ -207,11 +207,12 @@ public class SectionHeaderRow extends JPanel
 			@Override
 			public void mouseClicked(MouseEvent e)
 			{
-				// Left-clicking the row body SELECTS the section (the chevron and
-				// the select-all glyph have their own listeners, so their clicks
-				// never reach here). Right-click is reserved for the context menu
-				// attached by GoalPanel.
-				if (e.getButton() == MouseEvent.BUTTON1 && onSelect != null)
+				// Clicking the row body SELECTS the section - left OR right click
+				// (right-click is retired as a context-menu trigger in 1.0.0; it now
+				// just selects, like on goal cards). The chevron and select-all glyph
+				// have their own listeners, so their clicks never reach here.
+				if ((e.getButton() == MouseEvent.BUTTON1 || e.getButton() == MouseEvent.BUTTON3)
+					&& onSelect != null)
 				{
 					onSelect.run();
 				}
