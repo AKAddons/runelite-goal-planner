@@ -1072,3 +1072,15 @@ full-width button in a new `leadHost` panel pinned ABOVE the two strips (counted
 `getPreferredSize` only while visible). `buildMultiDock` no longer appends the
 Deselect chip; `refreshDock`'s MULTI case builds the lead as
 `"Deselect (" + n + ")"`. Single-GOAL legacy strips pass `lead = null`.
+
+### Task 1 — section "Add goal" opens the DOCK create flow (lands in the section)
+`buildSectionChipsTop`'s "Add goal" no longer opens `showAddGoalDialog(sid)`. New
+`openCreateFlowForSection(sid)` arms `dockCreateTargetSection`, clears the section
+(and any goal) selection so the dock resolves to EMPTY, and opens the create type
+grid. `goToSectionPick` short-circuits when a target is armed: it runs the create's
+consumer straight against that section (the same create+move+reveal `chooseSection`
+does), then returns to the grid - NO section-pick step. The target is one-shot
+(consumed in `goToSectionPick`) and also cleared whenever the create surface leaves
+(a selection via refreshDock's reset block; a fresh footer Create Goal / Create
+Section). Repeatable standalone adds ignore the target by design (they always live
+in the Repeatable section).

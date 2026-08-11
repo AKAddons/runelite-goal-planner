@@ -112,6 +112,12 @@ public class GoalPanel extends PluginPanel
 	 *  exclusive with the goal selection: selecting a section clears the goal
 	 *  selection and vice-versa (enforced in {@link #refreshDock()}). */
 	private String selectedSectionId = null;
+	/** When a section's "Add goal" opened the in-dock create flow (Task 1), the id
+	 *  of that landing section: the create flow SKIPS the section-pick step and
+	 *  lands the created goal directly here. Consumed by {@link #goToSectionPick}
+	 *  and cleared whenever the create surface leaves (a selection or a fresh
+	 *  footer-create). Null = the normal flow that prompts for a section. */
+	private String dockCreateTargetSection = null;
 	/** Which section drill-in group is open in the SECTION dock (null = top level).
 	 *  Reset when a different section mounts, so a new selection starts at top. */
 	private SectionGroup dockSectionGroup = null;
@@ -1933,6 +1939,7 @@ public class GoalPanel extends PluginPanel
 			dockCreateStep = CreateStep.PICKER;
 			dockCreateMountedStep = null;
 			dockCreateOpen = false;
+			dockCreateTargetSection = null;
 			resetCreatePicks();
 			// A pending seed survives only the transition INTO the create surface
 			// (selection just cleared -> EMPTY), so it must not be cleared here.
@@ -2099,6 +2106,9 @@ public class GoalPanel extends PluginPanel
 		dockCreateType = null;
 		dockPendingCreate = null;
 		dockCreateStep = CreateStep.PICKER;
+		// A plain footer create is not section-targeted (Task 1): drop any armed
+		// landing section so it prompts normally.
+		dockCreateTargetSection = null;
 		resetCreatePicks();
 		mountCreateSurface();
 		actionDock.setExpanded(true);
@@ -2127,6 +2137,7 @@ public class GoalPanel extends PluginPanel
 		dockCreateNav = CreateNav.SECTION_NEW;
 		dockCreateType = null;
 		dockPendingCreate = null;
+		dockCreateTargetSection = null;
 		mountCreateSurface();
 		actionDock.setExpanded(true);
 	}
@@ -3472,9 +3483,25 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** Stash a validated goal-create and navigate to the landing-section chooser
-	 *  (note 3). The consumer runs once the user picks a section. */
+	 *  (note 3). The consumer runs once the user picks a section.
+	 *
+	 *  <p>Task 1: when a fixed landing section is armed (a section's "Add goal"
+	 *  opened this flow), the chooser is SKIPPED - the create runs straight against
+	 *  that section (the same create logic {@link #chooseSection} runs), then the
+	 *  flow returns to the type grid. The target is one-shot: it is consumed here. */
 	private void goToSectionPick(java.util.function.Consumer<String> pending)
 	{
+		if (dockCreateTargetSection != null)
+		{
+			String target = dockCreateTargetSection;
+			dockCreateTargetSection = null;
+			pending.accept(target);
+			// A complete-on-add goal reconciles into Completed; arm a reveal so it
+			// does not read as "didn't show up" (mirrors chooseSection).
+			armCreateReveal();
+			navigateCreate(null);
+			return;
+		}
 		dockPendingCreate = pending;
 		navigateCreateNav(CreateNav.SECTION_PICK);
 	}
@@ -5302,6 +5329,26 @@ public class GoalPanel extends PluginPanel
 		refreshDock();
 	}
 
+	/** Task 1: open the in-dock create flow (type grid + stepper) with {@code sid}
+	 *  as the fixed landing section. Clears the section selection so the dock
+	 *  resolves to EMPTY (where the create surface lives), arms the target so
+	 *  {@link #goToSectionPick} skips the chooser, and opens the grid. */
+	private void openCreateFlowForSection(String sid)
+	{
+		dockCreateTargetSection = sid;
+		selectedSectionId = null;
+		dockSectionGroup = null;
+		// Leaving any goal selection too keeps the state unambiguously EMPTY.
+		api.clearGoalSelection();
+		dockCreateOpen = true;
+		dockCreateNav = CreateNav.GRID;
+		dockCreateType = null;
+		dockPendingCreate = null;
+		dockCreateStep = CreateStep.PICKER;
+		resetCreatePicks();
+		refreshDock();
+	}
+
 	/** Drop the SECTION mount guard and refresh so an in-place section action
 	 *  (drill-in group nav, a nesting/archive cycle) re-renders the surface off
 	 *  fresh section data. Mirrors {@link #refreshEditForm}. */
@@ -5932,14 +5979,13 @@ public class GoalPanel extends PluginPanel
 		}
 
 		// Add a goal into this section. Hidden on Completed (auto-managed), mirroring
-		// the menu. Reuses the existing add-goal dialog targeting this section.
+		// the menu. Task 1: opens the in-dock create flow (type grid + stepper) with
+		// this section as the fixed landing target, so the created goal lands here
+		// with no section-pick step - not the Swing add-goal dialog.
 		if (!completed)
 		{
 			wrap.add(chip("Add goal", "Add a goal into this section",
-				() -> {
-					dialogFactory.pendingAddPositionInSection = Integer.MAX_VALUE;
-					dialogFactory.showAddGoalDialog(sid);
-				}));
+				() -> openCreateFlowForSection(sid)));
 		}
 
 		// Rename/color/delete only make sense on user sections; a built-in gets a
