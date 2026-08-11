@@ -186,4 +186,28 @@ class BossGoalPrereqSeedingTest
 		assertTrue(hasBrutusPrereq,
 			"Demonic Brutus should seed 'Brutus' as a boss prereq");
 	}
+
+	@Test
+	@DisplayName("addBossGoalNoPrereqs creates just the boss goal, no prereq tree")
+	void bareAddSeedsNoPrereqs()
+	{
+		// Amoxliatl normally chains Heart of Darkness + its transitive skills/quests
+		// (see amoxliatlChainsThroughHeartOfDarkness). The bare add (Task 4's
+		// unchecked "Add prerequisites") must create ONLY the boss goal.
+		String bossId = api.addBossGoalNoPrereqs("Amoxliatl", 50);
+		assertNotNull(bossId, "bare boss goal should be created");
+
+		List<Goal> bossGoals = store.getGoals().stream()
+			.filter(g -> g.getType() == GoalType.BOSS)
+			.collect(Collectors.toList());
+		assertEquals(1, bossGoals.size(),
+			"bare add should create exactly one BOSS goal, no boss prereqs: "
+				+ bossGoals.stream().map(Goal::getBossName).collect(Collectors.toList()));
+		assertEquals("Amoxliatl", bossGoals.get(0).getBossName());
+
+		assertTrue(questNames().isEmpty(),
+			"bare add must not seed quest prereqs: " + questNames());
+		assertTrue(skillGoals().isEmpty(),
+			"bare add must not seed skill prereqs");
+	}
 }

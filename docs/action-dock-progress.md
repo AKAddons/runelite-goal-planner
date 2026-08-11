@@ -1008,3 +1008,42 @@ target field; typing a custom value still works unchanged.
 
 Covered by `AccountTargetPresetsTest` (max always last & in-range for every metric;
 small ceilings like DoM depth 8 stay distinct 2/4/6/8; nice-round step scaling).
+
+### Task 4 - "Add prerequisites" toggle (default ON) for quest / boss (CA gated)
+
+An **"Add prerequisites"** checkbox, **CHECKED by default**, on the create details:
+- **QUEST** - checked -> `addQuestGoal(quest)` (seeds the requirement tree, the
+  existing default); unchecked -> `addQuestGoalWithPrereqs(quest, List.of())` (bare).
+- **BOSS** - checked -> `addBossGoal` (seeds prereqs); unchecked -> new
+  `addBossGoalNoPrereqs`. Applies to **Total** and **Relative** only; it **hides**
+  in **Repeatable** mode (a repeatable chunk seeds no prereqs anyway).
+- **COMBAT_ACHIEVEMENT - GATED / FLAGGED.** `addCombatAchievementGoal` seeds **no**
+  prerequisite tree at all (it only creates the goal + boss/slayer display tags),
+  and there is no `...WithPrereqs` variant. A checkbox here would toggle nothing, so
+  per the guardrail it was **omitted** rather than shown as a no-op. **FLAG:** if CA
+  prereqs (e.g. tier-lock / boss-access seeding) are ever wanted, that seeding has to
+  be built first; only then does the toggle make sense for CA.
+
+**New API + test:** `GoalCreationService.addBossGoalNoPrereqs` (refactored so
+`addBossGoal` and it share `addBossGoalInternal(..., withPrereqs)`), exposed on
+`GoalPlannerApiImpl`. The bare add still attaches the cosmetic BOSS tag (a tag, not
+a prereq) and reads no Client state. Covered by
+`BossGoalPrereqSeedingTest.bareAddSeedsNoPrereqs` (Amoxliatl bare add creates
+exactly one BOSS goal, zero quest/skill prereqs).
+
+### NEEDS-SCREENSHOT (create-form verification pass)
+- **Diary** (Task 1): add a diary tier on any area/tier -> the DIARY goal (and its
+  seeded prereqs) actually appear. Previously failed silently on all areas/tiers.
+- **Boss 3-mode** (Task 2): the [ Total | Relative | Repeatable ] segmented toggle;
+  switching shows exactly one input set. Total -> absolute KC. Relative -> "Kills
+  beyond current" creates a goal with target = current KC + N (verify against the
+  boss's live kill count). Repeatable -> lands in the Repeatable section, no
+  choose-section step.
+- **Account presets** (Task 3): pick a metric (e.g. Quest Points, Museum Kudos,
+  Total Level) -> the "Quick fill" row shows nice-rounded ~25/50/75% buttons + a
+  **Max (N)** button; tapping fills the target; the row updates when the metric
+  changes; a custom typed value still creates.
+- **Prereq toggle** (Task 4): QUEST and BOSS (Total/Relative) show a checked-by-
+  default "Add prerequisites" box; unchecking it and creating adds ONLY the bare
+  goal (no seeded requirement cards). Confirm the box is hidden in Boss Repeatable
+  mode and absent on the Combat Achievement form.

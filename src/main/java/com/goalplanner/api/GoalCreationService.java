@@ -1986,7 +1986,24 @@ class GoalCreationService
 
 	String addBossGoal(String bossName, int targetKills)
 	{
-		log.debug("API.public addBossGoal(boss={}, target={})", bossName, targetKills);
+		return addBossGoalInternal(bossName, targetKills, /*withPrereqs=*/true);
+	}
+
+	/**
+	 * Bare boss add: the goal (and its cosmetic BOSS tag) only, with NO prerequisite
+	 * tree seeded. The counterpart to {@code addQuestGoalWithPrereqs(quest, [])} for
+	 * the dock's "Add prerequisites" toggle (Task 4). Reads no live Client state, so
+	 * it is safe on any thread.
+	 */
+	String addBossGoalNoPrereqs(String bossName, int targetKills)
+	{
+		return addBossGoalInternal(bossName, targetKills, /*withPrereqs=*/false);
+	}
+
+	private String addBossGoalInternal(String bossName, int targetKills, boolean withPrereqs)
+	{
+		log.debug("API.public addBossGoal(boss={}, target={}, withPrereqs={})",
+			bossName, targetKills, withPrereqs);
 		if (bossName == null || !com.goalplanner.data.BossKillData.isKnownBoss(bossName))
 		{
 			log.warn("addBossGoal: unknown boss {}", bossName);
@@ -2019,16 +2036,20 @@ class GoalCreationService
 		try
 		{
 			executeAddGoal(goal, goalId, "Add boss goal: " + displayName);
-			// Auto-tag with BOSS category.
+			// Auto-tag with BOSS category (a display tag, not a prerequisite).
 			api.addTagWithCategory(goalId, bossName, TagCategory.BOSS.name());
 
-			seedBossPrereqs(goalId, bossName, true);
+			if (withPrereqs)
+			{
+				seedBossPrereqs(goalId, bossName, true);
+			}
 		}
 		finally
 		{
 			api.endCompound();
 		}
-		log.info("addBossGoal created: {} ({} x {})", goalId, bossName, targetKills);
+		log.info("addBossGoal created: {} ({} x {}, withPrereqs={})",
+			goalId, bossName, targetKills, withPrereqs);
 		return goalId;
 	}
 

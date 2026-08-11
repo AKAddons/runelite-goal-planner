@@ -4192,6 +4192,13 @@ public class GoalPanel extends PluginPanel
 		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
 		repeatPane.add(lock);
 
+		// "Add prerequisites" create option (Task 4), CHECKED by default: on = seed the
+		// boss prereq tree (the existing default); off = the bare boss goal only. Only
+		// applies to Total/Relative (a Repeatable chunk seeds no prereqs), so it hides in
+		// Repeatable mode.
+		final JCheckBox addPrereqs = createFilterToggle("Add prerequisites", true);
+		addPrereqs.setToolTipText("Also add unmet requirements (skills/quests/items) as linked goals");
+
 		// 0 = Total (default), 1 = Relative, 2 = Repeatable. A repeat seed opens on
 		// the Repeatable segment (note 5).
 		final int[] mode = { seedRepeat ? 2 : 0 };
@@ -4202,6 +4209,7 @@ public class GoalPanel extends PluginPanel
 			{
 				panes[i].setVisible(i == mode[0]);
 			}
+			addPrereqs.setVisible(mode[0] != 2);
 			remeasureDock();
 		};
 		JComponent segmented = buildSegmentedToggle(
@@ -4211,10 +4219,13 @@ public class GoalPanel extends PluginPanel
 		body.add(totalPane);
 		body.add(relativePane);
 		body.add(repeatPane);
+		body.add(Box.createVerticalStrut(4));
+		body.add(addPrereqs);
 		for (int i = 0; i < panes.length; i++)
 		{
 			panes[i].setVisible(i == mode[0]);
 		}
+		addPrereqs.setVisible(mode[0] != 2);
 
 		Runnable onAdd = () ->
 		{
@@ -4276,7 +4287,9 @@ public class GoalPanel extends PluginPanel
 							int target = com.goalplanner.ui.RelativeTargetResolver
 								.resolveKillCount(currentKc, delta);
 							if (target <= 0) { return; }
-							String id = api.addBossGoal(boss, target);
+							String id = addPrereqs.isSelected()
+								? api.addBossGoal(boss, target)
+								: api.addBossGoalNoPrereqs(boss, target);
 							if (id != null) { api.moveGoalToSection(id, sectionId); }
 						}
 						finally
@@ -4297,9 +4310,12 @@ public class GoalPanel extends PluginPanel
 					warnCreate("Enter a target kill count above zero.");
 					return;
 				}
+				final boolean withPrereqs = addPrereqs.isSelected();
 				goToSectionPick(sectionId ->
 					clientThreadCreateInSection("Add boss goal", sectionId,
-						() -> api.addBossGoal(boss, kc)));
+						() -> withPrereqs
+							? api.addBossGoal(boss, kc)
+							: api.addBossGoalNoPrereqs(boss, kc)));
 			}
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, onAdd,
@@ -4397,16 +4413,28 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(6));
 		addFormRow(body, "Quest", questCombo);
 
+		// "Add prerequisites" create option (Task 4), CHECKED by default: on = seed the
+		// unmet skill/quest requirement tree (the existing default); off = the bare quest
+		// goal only. Distinct from the list filters above.
+		final JCheckBox addPrereqs = createFilterToggle("Add prerequisites", true);
+		addPrereqs.setToolTipText("Also add unmet skill/quest requirements as linked goals");
+		body.add(addPrereqs);
+		body.add(Box.createVerticalStrut(2));
+
 		Runnable onAdd = () ->
 		{
 			final net.runelite.api.Quest quest = (net.runelite.api.Quest) questCombo.getSelectedItem();
 			if (quest == null) return;
+			final boolean withPrereqs = addPrereqs.isSelected();
 			// addQuestGoal resolves quest prereqs against the live Client (q.getState),
 			// so create + move run on the client thread - same EDT-client-read latent bug
-			// as diary (Task 1 audit).
+			// as diary (Task 1 audit). The bare path (no prereqs) is client-safe but shares
+			// the wrapper for one uniform single-undo compound.
 			goToSectionPick(sectionId ->
 				clientThreadCreateInSection("Add quest goal", sectionId,
-					() -> api.addQuestGoal(quest)));
+					() -> withPrereqs
+						? api.addQuestGoal(quest)
+						: api.addQuestGoalWithPrereqs(quest, java.util.List.of())));
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
 	}

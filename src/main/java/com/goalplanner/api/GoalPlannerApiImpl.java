@@ -212,6 +212,9 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	 *  through this accessor). Empty until the wiki data has loaded. */
 	public java.util.List<WikiCaRepository.CaInfo> searchCombatAchievements(String query, int limit) { return wikiCaRepository.search(query, limit); }
 	@Override public String addBossGoal(String bossName, int targetKills) { String id = creationService.addBossGoal(bossName, targetKills); selectAfterCreate(id); return id; }
+	// Bare boss add (no prereq tree), for the dock's "Add prerequisites" toggle.
+	// Mirrors the bare-add intent of addQuestGoalWithPrereqs(..., []).
+	public String addBossGoalNoPrereqs(String bossName, int targetKills) { String id = creationService.addBossGoalNoPrereqs(bossName, targetKills); selectAfterCreate(id); return id; }
 	@Override public String addAccountGoal(String metricName, int target) { String id = creationService.addAccountGoal(metricName, target); selectAfterCreate(id); return id; }
 	public String addCustomGoal(String name, String description) { return creationService.addCustomGoal(name, description); }
 
