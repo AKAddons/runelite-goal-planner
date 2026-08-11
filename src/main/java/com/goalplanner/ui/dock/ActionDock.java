@@ -19,6 +19,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
+import com.goalplanner.ui.RoundedPaint;
 import net.runelite.client.ui.ColorScheme;
 
 /**
@@ -114,8 +115,8 @@ public class ActionDock extends JPanel
 	// state (ADR-0008 refinement). The contextual surface (create grid/form, a
 	// selected goal's edit view, or the multi-select action strips) renders ABOVE
 	// it in centerHost; the footer never swaps out and stays put when collapsed.
-	private final JButton createGoalBtn = new JButton("Create Goal");
-	private final JButton createSectionBtn = new JButton("Create Section");
+	private final JButton createGoalBtn = new RoundedPaint.RoundedButton("Create Goal");
+	private final JButton createSectionBtn = new RoundedPaint.RoundedButton("Create Section");
 	private final JPanel footerRow = new JPanel(new GridLayout(1, 2, 1, 0));
 	private Runnable onCreateGoal = null;
 	private Runnable onCreateSection = null;
@@ -245,12 +246,8 @@ public class ActionDock extends JPanel
 			leadHost.setVisible(false);
 			return;
 		}
-		JButton b = new JButton(lead.label);
+		JButton b = new RoundedPaint.RoundedButton(lead.label);
 		b.setToolTipText(lead.tooltip);
-		b.setFocusPainted(false);
-		b.setBorderPainted(false);
-		b.setContentAreaFilled(true);
-		b.setOpaque(true);
 		b.setBackground(BTN_BG);
 		b.setForeground(BTN_FG);
 		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 11f));
@@ -356,13 +353,9 @@ public class ActionDock extends JPanel
 
 	private JButton makeButton(Item item)
 	{
-		JButton b = new JButton(item.label);
+		JButton b = new RoundedPaint.RoundedButton(item.label);
 		b.setToolTipText(item.tooltip);
 		b.setEnabled(item.enabled);
-		b.setFocusPainted(false);
-		b.setBorderPainted(false);
-		b.setContentAreaFilled(false);
-		b.setOpaque(true);
 		b.setBackground(BTN_BG);
 		b.setForeground(item.enabled ? BTN_FG : BTN_FG_OFF);
 		b.setFont(b.getFont().deriveFont(11f));
@@ -421,8 +414,6 @@ public class ActionDock extends JPanel
 	{
 		b.setFocusPainted(false);
 		b.setBorderPainted(false);
-		b.setContentAreaFilled(true);
-		b.setOpaque(true);
 		b.setBackground(bg);
 		b.setForeground(fg);
 		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 12f));
