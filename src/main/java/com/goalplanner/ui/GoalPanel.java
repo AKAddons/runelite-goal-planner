@@ -3282,6 +3282,9 @@ public class GoalPanel extends PluginPanel
 	private static final Color IND_CREATE_FG = new Color(0xBF, 0xE0, 0xBF);
 	private static final Color IND_EDIT_BG = new Color(0x24, 0x24, 0x28);
 	private static final Color IND_EDIT_FG = new Color(0xBC, 0xBC, 0xBC);
+	/** Subtle rounded-card fill behind a create / edit / section surface so it
+	 *  reads as a card rather than a hard rectangle (glam pass). */
+	private static final Color SURFACE_CARD_BG = new Color(0x23, 0x23, 0x26);
 
 	/** Non-interactive completion indicator on the absolute-goal edit surface: a
 	 *  clear green tick when complete, a muted empty box when not. Painted via
@@ -3713,7 +3716,7 @@ public class GoalPanel extends PluginPanel
 	 *  body carries its own padding. */
 	private JComponent surfaceShell(String indicator, boolean createTone, JComponent inner)
 	{
-		ScrollablePanel root = new ScrollablePanel(new BorderLayout());
+		ScrollablePanel root = new ScrollablePanel(new BorderLayout()).asCard(SURFACE_CARD_BG);
 		root.setOpaque(false);
 		root.add(indicatorBar(indicator, createTone), BorderLayout.NORTH);
 		root.add(inner, BorderLayout.CENTER);
@@ -3726,18 +3729,37 @@ public class GoalPanel extends PluginPanel
 	 *  width-tracking ScrollablePanel so rows still lay out full-width. */
 	private JComponent plainSurface(JComponent inner)
 	{
-		ScrollablePanel root = new ScrollablePanel(new BorderLayout());
+		ScrollablePanel root = new ScrollablePanel(new BorderLayout()).asCard(SURFACE_CARD_BG);
 		root.setOpaque(false);
 		root.add(inner, BorderLayout.CENTER);
 		return root;
 	}
 
-	/** The full-width small-caps context bar for {@link #surfaceShell}. */
+	/** The full-width small-caps context bar for {@link #surfaceShell}. Its top
+	 *  corners round to match the surface card cap (glam); the bottom stays square
+	 *  so the bar meets the body flush. */
 	private JComponent indicatorBar(String text, boolean createTone)
 	{
-		JLabel bar = new JLabel(text.toUpperCase(java.util.Locale.ROOT));
-		bar.setOpaque(true);
-		bar.setBackground(createTone ? IND_CREATE_BG : IND_EDIT_BG);
+		final Color barBg = createTone ? IND_CREATE_BG : IND_EDIT_BG;
+		JLabel bar = new JLabel(text.toUpperCase(java.util.Locale.ROOT))
+		{
+			@Override
+			protected void paintComponent(java.awt.Graphics g)
+			{
+				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+				try
+				{
+					RoundedPaint.fillTop(g2, getWidth(), getHeight(),
+						RoundedPaint.SURFACE_RADIUS, barBg);
+				}
+				finally
+				{
+					g2.dispose();
+				}
+				super.paintComponent(g);
+			}
+		};
+		bar.setOpaque(false);
 		bar.setForeground(createTone ? IND_CREATE_FG : IND_EDIT_FG);
 		bar.setFont(bar.getFont().deriveFont(Font.BOLD, 10f));
 		bar.setBorder(new EmptyBorder(4, 10, 4, 10));
@@ -6359,7 +6381,35 @@ public class GoalPanel extends PluginPanel
 	 *  full-width indicator bar would not span the dock. */
 	private static final class ScrollablePanel extends JPanel implements javax.swing.Scrollable
 	{
+		/** When set, the panel paints a rounded card fill of this color (glam
+		 *  surfaces); null keeps it fully transparent (result columns). */
+		private Color cardBg = null;
+
 		ScrollablePanel(java.awt.LayoutManager lm) { super(lm); }
+
+		/** Paint a rounded {@link RoundedPaint#SURFACE_RADIUS} card behind this
+		 *  panel so a surface reads as a card. Returns this for chaining. */
+		ScrollablePanel asCard(Color bg) { this.cardBg = bg; return this; }
+
+		@Override
+		protected void paintComponent(java.awt.Graphics g)
+		{
+			if (cardBg != null)
+			{
+				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+				try
+				{
+					RoundedPaint.fill(g2, 0, 0, getWidth(), getHeight(),
+						RoundedPaint.SURFACE_RADIUS, cardBg);
+				}
+				finally
+				{
+					g2.dispose();
+				}
+			}
+			super.paintComponent(g);
+		}
+
 		@Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
 		@Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) { return 16; }
 		@Override public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) { return 48; }
