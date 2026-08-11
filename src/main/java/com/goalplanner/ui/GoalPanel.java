@@ -1951,6 +1951,8 @@ public class GoalPanel extends PluginPanel
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
 		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new java.util.ArrayList<>();
 		String hint = null;
+		// Optional full-width lead button above the strips (MULTI "Deselect (N)").
+		com.goalplanner.ui.dock.ActionDock.Item lead = null;
 
 		switch (ctx.getState())
 		{
@@ -1991,10 +1993,14 @@ public class GoalPanel extends PluginPanel
 			}
 			case MULTI:
 			{
-				hint = ctx.getCount() + " selected";
+				int n = ctx.getCount();
+				hint = n + " selected";
 				java.util.Set<String> ids =
 					new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
 				buildMultiDock(ids, top, bottom);
+				// Full-width "Deselect (N)" pinned at the top of the multi surface.
+				lead = new com.goalplanner.ui.dock.ActionDock.Item("Deselect (" + n + ")",
+					"Clear the selection", () -> api.clearGoalSelection());
 				break;
 			}
 			case SECTION:
@@ -2061,7 +2067,7 @@ public class GoalPanel extends PluginPanel
 		// GOAL (legacy strip) / MULTI: the action strips auto-expand above the
 		// permanent footer.
 		actionDock.setExpanded(true);
-		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom));
+		actionDock.setRows(new com.goalplanner.ui.dock.ActionDock.Rows(hint, top, bottom, lead));
 	}
 
 	/**
@@ -2441,8 +2447,9 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
-		bottom.add(sep("select"));
-		bottom.add(item("Deselect all", "Clear the selection", () -> api.clearGoalSelection()));
+		// Deselect is no longer a trailing chip: it is a full-width "Deselect (N)"
+		// button pinned at the TOP of the multi surface (Task 2), built as the Rows
+		// lead in refreshDock's MULTI case.
 	}
 
 	private void bulkSetOptional(java.util.List<Goal> targets, boolean optional)
@@ -3443,11 +3450,15 @@ public class GoalPanel extends PluginPanel
 
 		inner.add(body, BorderLayout.CENTER);
 
+		// A prominent FULL-WIDTH primary button that commits on a single click
+		// (Task 3): a right-aligned pill read as secondary and invited a stray
+		// double-click. BorderLayout.CENTER stretches it edge to edge; Enter in the
+		// name field still commits via the field's action listener above.
 		JButton create = flatButton("Create section", true);
 		create.addActionListener(e -> commit.run());
-		JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+		JPanel footer = new JPanel(new BorderLayout());
 		footer.setOpaque(false);
-		footer.add(create);
+		footer.add(create, BorderLayout.CENTER);
 		inner.add(footer, BorderLayout.SOUTH);
 
 		return plainSurface(inner);
@@ -4554,6 +4565,10 @@ public class GoalPanel extends PluginPanel
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(searchBtn, BorderLayout.EAST);
 
+		body.add(mutedTip("Tip: it's sometimes easier to add items from the "
+			+ "in-game Collection Log."));
+		body.add(Box.createVerticalStrut(6));
+
 		JLabel itemLabel = new JLabel("Pick an item");
 		itemLabel.setForeground(CREATE_FG_DIM);
 		itemLabel.setFont(itemLabel.getFont().deriveFont(10f));
@@ -4664,6 +4679,10 @@ public class GoalPanel extends PluginPanel
 			searchField.getPreferredSize().height));
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(searchBtn, BorderLayout.EAST);
+
+		body.add(mutedTip("Tip: it's often easier to add these from the "
+			+ "in-game Combat Achievements log."));
+		body.add(Box.createVerticalStrut(6));
 
 		JLabel taskLabel = new JLabel("Task");
 		taskLabel.setForeground(CREATE_FG_DIM);
@@ -4988,6 +5007,18 @@ public class GoalPanel extends PluginPanel
 		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
 		body.add(field);
 		body.add(Box.createVerticalStrut(6));
+	}
+
+	/** A small left-aligned muted advisory line (the {@link #buildAddedLine}
+	 *  styling) for the create forms - "Tip: ..." helpers pointing at an easier
+	 *  in-game path. Wraps so a long tip does not force the dock wider. */
+	private JLabel mutedTip(String text)
+	{
+		JLabel l = new JLabel("<html>" + text + "</html>");
+		l.setForeground(CREATE_FG_DIM);
+		l.setFont(l.getFont().deriveFont(10f));
+		l.setAlignmentX(Component.LEFT_ALIGNMENT);
+		return l;
 	}
 
 	private JButton flatButton(String text, boolean primary)

@@ -1047,3 +1047,28 @@ exactly one BOSS goal, zero quest/skill prereqs).
   default "Add prerequisites" box; unchecking it and creating adds ONLY the bare
   goal (no seeded requirement cards). Confirm the box is hidden in Boss Repeatable
   mode and absent on the Combat Achievement form.
+
+## In-client verification pass (8 tasks) — feat/action-dock
+
+Eight UI/behavior fixes from the designer's first in-client run of the dock. Each
+is a render-path change committed and gated green (compileJava + test + checkGlyphs);
+none is screenshot-verified yet (see the NEEDS-SCREENSHOT list at the end).
+
+### Task 4 + 5 — create-form tips
+`buildCombatForm` and `buildItemPicker` each gain a muted advisory line (new
+`mutedTip(String)` helper, `buildAddedLine` styling) pointing at the easier in-game
+path: the Combat Achievements log and the Collection Log respectively. HTML-wrapped
+so a long tip wraps rather than widening the dock.
+
+### Task 3 — prominent single-click "Create section"
+`buildSectionNewForm`'s commit button was a right-aligned pill (read as secondary,
+invited a stray double-click). It is now a FULL-WIDTH primary button
+(`BorderLayout.CENTER`) that commits on a single click; Enter-in-field still commits
+via the field's action listener.
+
+### Task 2 — "Deselect (N)" full-width, top-pinned in MULTI
+`ActionDock.Rows` gained an optional `lead` Item; `ActionDock` renders it as a
+full-width button in a new `leadHost` panel pinned ABOVE the two strips (counted in
+`getPreferredSize` only while visible). `buildMultiDock` no longer appends the
+Deselect chip; `refreshDock`'s MULTI case builds the lead as
+`"Deselect (" + n + ")"`. Single-GOAL legacy strips pass `lead = null`.

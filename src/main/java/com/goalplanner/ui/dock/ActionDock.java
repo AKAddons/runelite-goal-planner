@@ -65,14 +65,23 @@ public class ActionDock extends JPanel
 		final List<Item> top;
 		final List<Item> bottom;
 		final String hint;
+		/** Optional full-width button pinned ABOVE the two strips (e.g. the MULTI
+		 *  "Deselect (N)"); null for none. */
+		final Item lead;
 
 		/** @param hint short status text shown at the left of the top row
 		 *              (e.g. "3 selected"); null for none. */
 		public Rows(String hint, List<Item> top, List<Item> bottom)
 		{
+			this(hint, top, bottom, null);
+		}
+
+		public Rows(String hint, List<Item> top, List<Item> bottom, Item lead)
+		{
 			this.hint = hint;
 			this.top = top != null ? top : List.of();
 			this.bottom = bottom != null ? bottom : List.of();
+			this.lead = lead;
 		}
 	}
 
@@ -85,6 +94,9 @@ public class ActionDock extends JPanel
 
 	private final JPanel content = new JPanel();
 	private final JPanel centerHost = new JPanel(new BorderLayout());
+	/** Holds the optional full-width lead button above the strips (MULTI
+	 *  "Deselect (N)"); hidden when no lead is set. */
+	private final JPanel leadHost = new JPanel(new BorderLayout());
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
 	// The PERMANENT footer: Create Goal | Create Section, always visible in every
@@ -112,6 +124,10 @@ public class ActionDock extends JPanel
 
 		content.setLayout(new javax.swing.BoxLayout(content, javax.swing.BoxLayout.Y_AXIS));
 		content.setOpaque(false);
+		leadHost.setOpaque(false);
+		leadHost.setVisible(false);
+		leadHost.setAlignmentX(Component.LEFT_ALIGNMENT);
+		content.add(leadHost);
 		content.add(scrollStrip(topRow));
 		content.add(scrollStrip(bottomRow));
 
@@ -174,10 +190,44 @@ public class ActionDock extends JPanel
 			customView = null;
 		}
 		this.current = rows;
+		renderLead(rows.lead);
 		rebuildStrip(topRow, rows.hint, rows.top);
 		rebuildStrip(bottomRow, null, rows.bottom);
 		revalidate();
 		repaint();
+	}
+
+	/** Render (or clear) the full-width lead button pinned above the strips. A
+	 *  null lead hides the host so it reserves no height. */
+	private void renderLead(Item lead)
+	{
+		leadHost.removeAll();
+		if (lead == null || lead.action == null)
+		{
+			leadHost.setVisible(false);
+			return;
+		}
+		JButton b = new JButton(lead.label);
+		b.setToolTipText(lead.tooltip);
+		b.setFocusPainted(false);
+		b.setBorderPainted(false);
+		b.setContentAreaFilled(true);
+		b.setOpaque(true);
+		b.setBackground(BTN_BG);
+		b.setForeground(BTN_FG);
+		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 11f));
+		b.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
+		b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+		b.addMouseListener(new java.awt.event.MouseAdapter()
+		{
+			@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(BTN_HOVER); }
+			@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(BTN_BG); }
+		});
+		b.addActionListener(e -> lead.action.run());
+		leadHost.add(b, BorderLayout.CENTER);
+		leadHost.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			b.getPreferredSize().height + 4));
+		leadHost.setVisible(true);
 	}
 
 	/**
@@ -376,6 +426,12 @@ public class ActionDock extends JPanel
 		else
 		{
 			surface = 2 * (ROW_H + 4) + 2;
+			// The optional full-width lead button (MULTI "Deselect (N)") sits above
+			// the two strips; count its height only while it is showing.
+			if (leadHost.isVisible())
+			{
+				surface += leadHost.getPreferredSize().height;
+			}
 		}
 		// The permanent footer is always counted; the surface only adds height
 		// while expanded.
