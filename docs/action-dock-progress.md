@@ -1084,3 +1084,12 @@ does), then returns to the grid - NO section-pick step. The target is one-shot
 (a selection via refreshDock's reset block; a fresh footer Create Goal / Create
 Section). Repeatable standalone adds ignore the target by design (they always live
 in the Repeatable section).
+
+### Task 7 — current relations shown in the Selected view
+`editFormScaffold` now stacks read-only relation lines under the "Added: <date>"
+line: `buildRelationsLines(g)` resolves `api.getRequirements(id)` /
+`api.getDependents(id)` to goal names and renders muted "Requires: A, B" /
+"Required by: C" lines (mutedTip styling). `relationSummary` caps at 3 names then
+"+N more"; a line is omitted when its set is empty and both are omitted when the
+goal has no relations (dangling ids with no live goal are skipped). Display-only -
+the Relations chip group still owns editing.

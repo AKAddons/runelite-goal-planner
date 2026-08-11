@@ -5253,15 +5253,37 @@ public class GoalPanel extends PluginPanel
 
 		inner.add(body, BorderLayout.CENTER);
 
-		// "Added <date>" metadata sits just above the action chips. Hidden for
-		// goals created before the createdAt field existed (they deserialize as 0).
+		// "Added <date>" metadata + read-only relation lines (Task 7) sit just above
+		// the action chips. Added is hidden for goals created before the createdAt
+		// field existed (they deserialize as 0); relation lines are omitted when the
+		// goal has no requirements / dependents.
 		JComponent added = buildAddedLine(g);
+		JComponent relations = buildRelationsLines(g);
 		JComponent chips = buildEditChips(g);
-		if (added != null)
+		JComponent meta = null;
+		if (added != null || relations != null)
+		{
+			JPanel m = new JPanel();
+			m.setLayout(new BoxLayout(m, BoxLayout.Y_AXIS));
+			m.setOpaque(false);
+			m.setAlignmentX(Component.LEFT_ALIGNMENT);
+			if (added != null)
+			{
+				added.setAlignmentX(Component.LEFT_ALIGNMENT);
+				m.add(added);
+			}
+			if (relations != null)
+			{
+				relations.setAlignmentX(Component.LEFT_ALIGNMENT);
+				m.add(relations);
+			}
+			meta = m;
+		}
+		if (meta != null)
 		{
 			JPanel south = new JPanel(new BorderLayout(0, 4));
 			south.setOpaque(false);
-			south.add(added, BorderLayout.NORTH);
+			south.add(meta, BorderLayout.NORTH);
 			south.add(chips, BorderLayout.CENTER);
 			inner.add(south, BorderLayout.SOUTH);
 		}
@@ -5293,6 +5315,64 @@ public class GoalPanel extends PluginPanel
 		l.setForeground(CREATE_FG_DIM);
 		l.setFont(l.getFont().deriveFont(10f));
 		return l;
+	}
+
+	/** Task 7: read-only muted "Requires: A, B" / "Required by: C" lines for the
+	 *  Selected view, resolving relation ids to goal names. Returns null when the
+	 *  goal has neither requirements nor dependents; a single line is omitted when
+	 *  that relation set is empty. Display-only - the Relations chip group still
+	 *  does the editing. */
+	private JComponent buildRelationsLines(Goal g)
+	{
+		String requires = relationSummary(api.getRequirements(g.getId()));
+		String requiredBy = relationSummary(api.getDependents(g.getId()));
+		if (requires == null && requiredBy == null)
+		{
+			return null;
+		}
+		JPanel p = new JPanel();
+		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
+		p.setOpaque(false);
+		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		if (requires != null)
+		{
+			p.add(mutedTip("Requires: " + requires));
+		}
+		if (requiredBy != null)
+		{
+			p.add(mutedTip("Required by: " + requiredBy));
+		}
+		return p;
+	}
+
+	/** Resolve relation ids to a compact, name-based summary; null when empty.
+	 *  Caps the list at 3 names then appends "+N more" so a long relation set stays
+	 *  compact. Ids with no live goal (a dangling relation) are skipped. */
+	private String relationSummary(java.util.List<String> ids)
+	{
+		if (ids == null || ids.isEmpty())
+		{
+			return null;
+		}
+		java.util.List<String> names = new ArrayList<>();
+		for (String id : ids)
+		{
+			Goal r = goalStore.findGoalById(id);
+			if (r != null && r.getName() != null)
+			{
+				names.add(r.getName());
+			}
+		}
+		if (names.isEmpty())
+		{
+			return null;
+		}
+		final int max = 3;
+		if (names.size() <= max)
+		{
+			return String.join(", ", names);
+		}
+		return String.join(", ", names.subList(0, max)) + ", +" + (names.size() - max) + " more";
 	}
 
 	/** Re-render the mounted edit form (after a structural change) by dropping
