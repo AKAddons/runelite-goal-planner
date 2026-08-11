@@ -127,6 +127,23 @@ public class GoalPanel extends PluginPanel
 	private boolean dockSectionMounted = false;
 	private String dockSectionMountedId = null;
 	private SectionGroup dockSectionMountedGroup = null;
+	/** Which surface the in-dock color picker returns to when a swatch is tapped
+	 *  (or Back is pressed): the GOAL edit form, the MULTI action strips, or the
+	 *  SECTION dock. Null = the color overlay is not active. */
+	private enum ColorReturn { GOAL, MULTI, SECTION }
+	/** Marker {@link #dockColorTarget} value for the MULTI bulk-recolor overlay
+	 *  (the selection is read live from {@code api.getSelectedGoalIds()}); a
+	 *  control char so it can never collide with a real goal/section id. */
+	private static final String COLOR_TARGET_MULTI = "__GP_MULTI__";
+	/** Transient in-dock color-picker overlay (inline-color pass). When
+	 *  {@link #dockColorReturn} is non-null the dock mounts {@link #buildColorSurface}
+	 *  above the permanent footer instead of the normal edit/multi/section surface;
+	 *  tapping a swatch applies immediately and returns to the surface named by
+	 *  {@link #dockColorReturn}. {@link #dockColorTarget} holds the goal id (GOAL),
+	 *  the section id (SECTION), or {@link #COLOR_TARGET_MULTI} (MULTI). */
+	private ColorReturn dockColorReturn = null;
+	private String dockColorTarget = null;
+	private boolean dockColorMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1932,6 +1949,32 @@ public class GoalPanel extends PluginPanel
 		// drivers and rests the dock at the footer from any state.
 		actionDock.setOnDismiss(this::dismissDock);
 
+		// Inline color picker (inline-color pass): a transient overlay that mounts
+		// its swatch grid above the footer instead of the normal edit/multi/section
+		// surface. The underlying selection is left intact - closing the overlay
+		// remounts whichever surface it belongs to. If the target vanished (goal /
+		// section deleted, or the MULTI selection cleared), drop the overlay and
+		// fall through to normal routing.
+		if (dockColorReturn != null)
+		{
+			if (!colorTargetValid())
+			{
+				dockColorReturn = null;
+				dockColorTarget = null;
+				dockColorMounted = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockColorMounted)
+				{
+					actionDock.setExpandedComponent(buildColorSurface());
+					dockColorMounted = true;
+				}
+				return;
+			}
+		}
+
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
 		// type grid, forget the mounted create view, and rest the create surface
@@ -2236,7 +2279,7 @@ public class GoalPanel extends PluginPanel
 		}
 
 		top.add(item("Color", "Change this goal's color",
-			() -> dialogFactory.showGoalColorDialog(g)));
+			() -> openColorSurfaceForGoal(g.getId())));
 
 		// --- BOTTOM: organize ---
 		// Tags.
@@ -2406,7 +2449,7 @@ public class GoalPanel extends PluginPanel
 		{
 			bottom.add(sep("edit"));
 			bottom.add(item("Color", "Change the color of every selected goal",
-				() -> dialogFactory.showBulkChangeColorDialog(recolor)));
+				() -> openColorSurfaceForMulti()));
 		}
 
 		// Tags.
@@ -5665,6 +5708,215 @@ public class GoalPanel extends PluginPanel
 		refreshDock();
 	}
 
+	// --- Inline color picker overlay (inline-color pass) -----------------------
+	// The Color actions used to open a Swing JOptionPane hosting ColorPickerField;
+	// they now open an IN-DOCK swatch grid above the permanent footer. The overlay
+	// is a transient nav target: the underlying goal / multi / section selection
+	// stays put, and closing the overlay remounts that surface. Tapping a swatch
+	// applies immediately (one undo) and closes.
+
+	/** Open the color overlay for a single goal's edit form. */
+	private void openColorSurfaceForGoal(String goalId)
+	{
+		dockColorReturn = ColorReturn.GOAL;
+		dockColorTarget = goalId;
+		dockColorMounted = false;
+		refreshDock();
+	}
+
+	/** Open the color overlay for the current multi-selection (bulk recolor). */
+	private void openColorSurfaceForMulti()
+	{
+		dockColorReturn = ColorReturn.MULTI;
+		dockColorTarget = COLOR_TARGET_MULTI;
+		dockColorMounted = false;
+		refreshDock();
+	}
+
+	/** Open the color overlay for a section. */
+	private void openColorSurfaceForSection(String sectionId)
+	{
+		dockColorReturn = ColorReturn.SECTION;
+		dockColorTarget = sectionId;
+		dockColorMounted = false;
+		refreshDock();
+	}
+
+	/** Close the color overlay and return to the surface it belongs to WITHOUT
+	 *  changing anything (also the path after a swatch applies). The overlay
+	 *  replaced the expanded component, so force the edit / section surface to
+	 *  remount; MULTI rebuilds its strips every refresh and needs no guard drop. */
+	private void closeColorSurface()
+	{
+		dockColorReturn = null;
+		dockColorTarget = null;
+		dockColorMounted = false;
+		dockEditMounted = false;
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** Whether the color overlay's target still exists, so refreshDock can drop a
+	 *  stale overlay (goal / section deleted, or the selection cleared) instead of
+	 *  mounting an empty surface. */
+	private boolean colorTargetValid()
+	{
+		if (dockColorReturn == null)
+		{
+			return false;
+		}
+		switch (dockColorReturn)
+		{
+			case GOAL:    return goalStore.findGoalById(dockColorTarget) != null;
+			case SECTION: return findSectionView(dockColorTarget) != null;
+			case MULTI:   return !api.getSelectedGoalIds().isEmpty();
+			default:      return false;
+		}
+	}
+
+	/** Build the in-dock color surface: a 4x3 grid of the curated
+	 *  {@link ColorPickerField#PRESETS} rounded swatches plus a Default tile, headed
+	 *  by a "Color" bar and a Back that returns without changing anything. The
+	 *  currently-selected color is highlighted. Tapping a swatch (or Default) applies
+	 *  immediately for the overlay's target and returns to the prior surface. */
+	private JComponent buildColorSurface()
+	{
+		// Resolve the current selection + default per return type, and the apply sink.
+		final int currentRgb;
+		final int defaultRgb;
+		final java.util.function.IntConsumer apply;
+		switch (dockColorReturn)
+		{
+			case GOAL:
+			{
+				final String gid = dockColorTarget;
+				Goal g = goalStore.findGoalById(gid);
+				java.awt.Color c = g.getType().getColor();
+				currentRgb = g.getCustomColorRgb();
+				defaultRgb = (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue();
+				apply = rgb -> { api.setGoalColor(gid, rgb); closeColorSurface(); };
+				break;
+			}
+			case SECTION:
+			{
+				com.goalplanner.api.SectionView sv = findSectionView(dockColorTarget);
+				final String sid = sv.id;
+				currentRgb = sv.colorOverridden ? sv.colorRgb : -1;
+				defaultRgb = sv.defaultColorRgb;
+				apply = rgb -> { api.setSectionColor(sid, rgb); closeColorSurface(); };
+				break;
+			}
+			case MULTI:
+			default:
+			{
+				// A mixed selection has no single current color; default is neutral
+				// (mirrors the old bulk dialog). Applies to EVERY selected goal as one
+				// compound (one undo), reusing the bulk recolor path.
+				currentRgb = -1;
+				defaultRgb = 0x3C3C3C;
+				apply = rgb -> {
+					java.util.Set<String> ids =
+						new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+					api.beginCompound("Recolor " + ids.size() + " goals");
+					try
+					{
+						for (String id : ids)
+						{
+							api.setGoalColor(id, rgb);
+						}
+					}
+					finally
+					{
+						api.endCompound();
+					}
+					closeColorSurface();
+				};
+				break;
+			}
+		}
+
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		// Back returns to the prior surface WITHOUT changing anything.
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without changing the color",
+			this::closeColorSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		// The 4x3 swatch grid + a full-width Default tile beneath it.
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		JPanel grid = new JPanel(new GridLayout(3, 4, 6, 6));
+		grid.setOpaque(false);
+		grid.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		for (java.awt.Color preset : ColorPickerField.PRESETS)
+		{
+			int rgb = (preset.getRed() << 16) | (preset.getGreen() << 8) | preset.getBlue();
+			grid.add(colorSwatch(preset, rgb == currentRgb, () -> apply.accept(rgb)));
+		}
+		grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, grid.getPreferredSize().height));
+		body.add(grid);
+		body.add(Box.createVerticalStrut(8));
+
+		// Default resets to the goal/section's own default color (custom < 0).
+		JButton def = chip("Default", "Reset to the default color",
+			() -> apply.accept(-1));
+		if (currentRgb < 0)
+		{
+			def.setBorder(RoundedPaint.border(CREATE_SEL_BORDER, 2,
+				RoundedPaint.RADIUS, new Insets(4, 10, 4, 10)));
+		}
+		def.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		body.add(def);
+
+		inner.add(body, BorderLayout.CENTER);
+		return surfaceShell("Color", false, inner);
+	}
+
+	/** A single rounded color swatch tile filled with {@code color}. Selected tiles
+	 *  get a white 2px rounded outline; the rest a hairline. Tapping runs {@code apply}. */
+	private JComponent colorSwatch(final java.awt.Color color, boolean selected, Runnable apply)
+	{
+		final RoundedPaint.RoundedPanel tile =
+			new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
+		tile.setBackground(color);
+		tile.setPreferredSize(new Dimension(26, 26));
+		tile.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+		tile.setToolTipText(String.format("#%02X%02X%02X",
+			color.getRed(), color.getGreen(), color.getBlue()));
+		final java.awt.Color unselBorder = new java.awt.Color(80, 80, 80);
+		tile.setBorder(RoundedPaint.border(selected ? CREATE_SEL_BORDER : unselBorder,
+			selected ? 2 : 1, RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
+		tile.addMouseListener(new java.awt.event.MouseAdapter()
+		{
+			@Override
+			public void mouseClicked(java.awt.event.MouseEvent e)
+			{
+				apply.run();
+			}
+
+			@Override
+			public void mouseEntered(java.awt.event.MouseEvent e)
+			{
+				tile.setBorder(RoundedPaint.border(CREATE_SEL_BORDER, 2,
+					RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
+			}
+
+			@Override
+			public void mouseExited(java.awt.event.MouseEvent e)
+			{
+				tile.setBorder(RoundedPaint.border(selected ? CREATE_SEL_BORDER : unselBorder,
+					selected ? 2 : 1, RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
+			}
+		});
+		return tile;
+	}
+
 	/** The current {@link com.goalplanner.api.SectionView} for {@code id}, or null
 	 *  if no such section exists (e.g. it was deleted while selected). */
 	private com.goalplanner.api.SectionView findSectionView(String id)
@@ -6085,7 +6337,7 @@ public class GoalPanel extends PluginPanel
 				() -> { api.setGoalOptional(gid, !g.isOptional()); refreshEditForm(); }));
 		}
 		wrap.add(chip("Color", "Change this goal's color",
-			() -> dialogFactory.showGoalColorDialog(g)));
+			() -> openColorSurfaceForGoal(gid)));
 		wrap.add(chip("Add tag", "Add a tag to this goal",
 			() -> { dockAddTag(g); refreshEditForm(); }));
 		java.util.List<Tag> removable = removableTagsFor(g);
@@ -6280,7 +6532,7 @@ public class GoalPanel extends PluginPanel
 		else
 		{
 			wrap.add(chip("Change color", "Change this section's color",
-				() -> dialogFactory.showSectionColorDialog(sv)));
+				() -> openColorSurfaceForSection(sv.id)));
 		}
 
 		// Layout: dependency nesting (all sections) + completed handling (user only).
@@ -6304,7 +6556,7 @@ public class GoalPanel extends PluginPanel
 		wrap.add(chip("Rename", "Rename this section",
 			() -> dialogFactory.showRenameSectionDialog(sv)));
 		wrap.add(chip("Change color", "Change this section's color",
-			() -> dialogFactory.showSectionColorDialog(sv)));
+			() -> openColorSurfaceForSection(sv.id)));
 		wrap.add(chip("Delete", "Delete this section (undoable)",
 			() -> confirmDeleteSection(sv)));
 	}
