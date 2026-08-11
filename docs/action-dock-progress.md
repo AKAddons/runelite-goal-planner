@@ -1184,6 +1184,22 @@ A create now ends with a collapse to the resting footer.
   scrolls the Completed card by that id via `scrollRectToVisible`, independent of
   the live selection, so clearing the selection does not break complete-on-add.
 
+### Fix 2 — create type-tile colors match the goals they create
+The create type grid (`buildTypeTile`) used only a thin colored top rule from
+`type.getColor()`; the tile body was a flat neutral grey, so the tiles did not
+read as "the Skill/Quest/Diary/... color". Each tile now TINTS its background
+toward the type's color.
+
+- New `tintTile(base, accent)` blends the dark tile surface ~32% toward the type
+  accent - a muted tint that keeps the light-grey (`CREATE_FG`) label legible at
+  font 1.0 AND 1.3 while making the tile recognizably the type's color. Applied to
+  both the resting (`CREATE_TILE_BG`) and hover (`CREATE_TILE_HOVER`) states.
+- The accent (a full-strength `type.getColor()`) is kept as the top rule, thickened
+  2px -> 3px so the identity band still reads over the tint.
+- The near-black fallback (Boss: sum < 120 -> `0x555558`) is preserved, so Boss
+  gets a visible grey tint + rule instead of vanishing into the surface. The tint
+  color = the same value used for the card's identity, so the tile matches the card.
+
 ## NEEDS-SCREENSHOT (post-1.0.0 dock fixes)
 - **Fix 1 (async)**: add a DIARY goal, a QUEST goal, and a BOSS goal (Total) via the
   dock -> after each create the pane FULLY COLLAPSES to the resting footer (no edit

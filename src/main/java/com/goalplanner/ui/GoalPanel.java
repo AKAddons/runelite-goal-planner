@@ -3748,29 +3748,48 @@ public class GoalPanel extends PluginPanel
 
 	private JButton buildTypeTile(com.goalplanner.model.GoalType type)
 	{
-		Color swatch = type.getColor();
-		if (swatch.getRed() + swatch.getGreen() + swatch.getBlue() < 120)
+		// Task 2: a create tile carries the SAME color as the goal cards it creates.
+		// The accent is the type's own color; near-black types (e.g. Boss) fall back
+		// to a visible swatch so they don't vanish on the dark surface.
+		Color accent = type.getColor();
+		if (accent.getRed() + accent.getGreen() + accent.getBlue() < 120)
 		{
-			// Near-black types (e.g. Boss) would vanish on the dark tile.
-			swatch = new Color(0x55, 0x55, 0x58);
+			accent = new Color(0x55, 0x55, 0x58);
 		}
+		// Tint the tile background toward the type color - muted (blended into the
+		// dark tile surface at ~1/3) so the ASCII label stays legible in light grey
+		// at both font 1.0 and 1.3, while the tile still reads as "the <type> color".
+		final Color base = tintTile(CREATE_TILE_BG, accent);
+		final Color hovered = tintTile(CREATE_TILE_HOVER, accent);
 		JButton b = new JButton(tileLabel(type));
 		b.setForeground(CREATE_FG);
-		b.setBackground(CREATE_TILE_BG);
+		b.setBackground(base);
 		b.setOpaque(true);
 		b.setFocusPainted(false);
 		b.setBorderPainted(false);
 		b.setContentAreaFilled(true);
 		b.setFont(b.getFont().deriveFont(11f));
-		// A colored top rule stands in for the type's identity (icon deferred on
-		// the token budget - see docs/action-dock-progress.md).
+		// A full-strength colored top rule over the tinted body pins the identity
+		// (icon deferred on the token budget - see docs/action-dock-progress.md).
 		b.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-			javax.swing.BorderFactory.createMatteBorder(2, 0, 0, 0, swatch),
-			new EmptyBorder(6, 2, 6, 2)));
+			javax.swing.BorderFactory.createMatteBorder(3, 0, 0, 0, accent),
+			new EmptyBorder(5, 2, 6, 2)));
 		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-		hover(b, CREATE_TILE_BG, CREATE_TILE_HOVER);
+		hover(b, base, hovered);
 		b.addActionListener(e -> navigateCreate(type));
 		return b;
+	}
+
+	/** Blend a create-tile base color ~1/3 of the way toward the type accent: a
+	 *  muted tint that keeps the light-grey label readable while making the tile
+	 *  recognizably the type's color. */
+	private static Color tintTile(Color base, Color accent)
+	{
+		final double t = 0.32;
+		return new Color(
+			(int) Math.round(base.getRed()   + (accent.getRed()   - base.getRed())   * t),
+			(int) Math.round(base.getGreen() + (accent.getGreen() - base.getGreen()) * t),
+			(int) Math.round(base.getBlue()  + (accent.getBlue()  - base.getBlue())  * t));
 	}
 
 	/** Shared background-swap-on-hover, deduplicated across the create tiles and
