@@ -3271,6 +3271,8 @@ public class GoalPanel extends PluginPanel
 	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
 	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
 	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
+	/** Subtle rounded outline drawn around text fields (glam pass). */
+	private static final Color CREATE_FIELD_STROKE = new Color(0x4A, 0x4A, 0x50);
 	/** Highlight for the selected icon-button in a picker grid (skill/boss/etc). */
 	private static final Color CREATE_SEL_BG = new Color(0x2E, 0x4D, 0x32);
 	private static final Color CREATE_SEL_BORDER = new Color(0x5A, 0x9A, 0x5A);
@@ -3685,12 +3687,10 @@ public class GoalPanel extends PluginPanel
 	 *  highlighted (green border) to mark the preselected choice. */
 	private JComponent sectionPickRow(String label, boolean isDefault, Runnable onPick)
 	{
-		JPanel row = new JPanel(new BorderLayout());
-		row.setOpaque(true);
+		JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
 		row.setBackground(isDefault ? CREATE_SEL_BG : CREATE_TILE_BG);
-		row.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(isDefault ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
-			new EmptyBorder(4, 6, 4, 6)));
+		row.setBorder(RoundedPaint.border(isDefault ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
+			RoundedPaint.RADIUS, new java.awt.Insets(4, 6, 4, 6)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -3761,19 +3761,17 @@ public class GoalPanel extends PluginPanel
 		// at both font 1.0 and 1.3, while the tile still reads as "the <type> color".
 		final Color base = tintTile(CREATE_TILE_BG, accent);
 		final Color hovered = tintTile(CREATE_TILE_HOVER, accent);
-		JButton b = new JButton(tileLabel(type));
+		// A full-strength colored top accent over the tinted body pins the identity
+		// (icon deferred on the token budget - see docs/action-dock-progress.md); the
+		// accent is clipped to the rounded shape so it keeps the rounded top corners.
+		RoundedPaint.RoundedButton b = new RoundedPaint.RoundedButton(tileLabel(type))
+			.withTopAccent(accent, 3);
 		b.setForeground(CREATE_FG);
 		b.setBackground(base);
-		b.setOpaque(true);
-		b.setFocusPainted(false);
-		b.setBorderPainted(false);
-		b.setContentAreaFilled(true);
 		b.setFont(b.getFont().deriveFont(11f));
-		// A full-strength colored top rule over the tinted body pins the identity
-		// (icon deferred on the token budget - see docs/action-dock-progress.md).
-		b.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-			javax.swing.BorderFactory.createMatteBorder(3, 0, 0, 0, accent),
-			new EmptyBorder(5, 2, 6, 2)));
+		// Top inset (8) reserves the 3px accent + the prior 5px text gap; sides/bottom
+		// unchanged, so the tile keeps its previous preferred size.
+		b.setBorder(new EmptyBorder(8, 2, 6, 2));
 		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		hover(b, base, hovered);
 		b.addActionListener(e -> navigateCreate(type));
@@ -4879,12 +4877,10 @@ public class GoalPanel extends PluginPanel
 	private JComponent tappableRow(javax.swing.Icon icon, String label, String tooltip,
 		Runnable onPick)
 	{
-		final JPanel row = new JPanel(new BorderLayout(6, 0));
-		row.setOpaque(true);
+		final JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(6, 0), RoundedPaint.RADIUS);
 		row.setBackground(CREATE_TILE_BG);
-		row.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
-			new EmptyBorder(3, 5, 3, 5)));
+		row.setBorder(RoundedPaint.border(CREATE_TILE_BG, 1,
+			RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -4915,12 +4911,10 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildPickRow(String label, String tooltip, int id, int[] selectedId,
 		JLabel selectedLabel, JPanel results)
 	{
-		JPanel row = new JPanel(new BorderLayout());
-		row.setOpaque(true);
+		JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
 		row.setBackground(CREATE_TILE_BG);
-		row.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(CREATE_TILE_BG, 1),
-			new EmptyBorder(3, 5, 3, 5)));
+		row.setBorder(RoundedPaint.border(CREATE_TILE_BG, 1,
+			RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -4943,10 +4937,9 @@ public class GoalPanel extends PluginPanel
 					c.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
 					if (c instanceof JComponent)
 					{
-						((JComponent) c).setBorder(BorderFactory.createCompoundBorder(
-							BorderFactory.createLineBorder(
-								sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
-							new EmptyBorder(3, 5, 3, 5)));
+						((JComponent) c).setBorder(RoundedPaint.border(
+							sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
+							RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
 					}
 				}
 				results.repaint();
@@ -4999,19 +4992,15 @@ public class GoalPanel extends PluginPanel
 				JButton b = segs[i];
 				b.setBackground(on ? CREATE_SEL_BG : CREATE_TILE_BG);
 				b.setForeground(on ? CREATE_PRIMARY_FG : CREATE_FG);
-				b.setBorder(BorderFactory.createCompoundBorder(
-					BorderFactory.createLineBorder(on ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
-					new EmptyBorder(4, 10, 4, 10)));
+				b.setBorder(RoundedPaint.border(on ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
+					RoundedPaint.RADIUS, new java.awt.Insets(4, 10, 4, 10)));
 			}
 		};
 		for (int i = 0; i < labels.length; i++)
 		{
 			final int idx = i;
-			JButton b = new JButton(labels[i]);
+			JButton b = new RoundedPaint.RoundedButton(labels[i]);
 			segs[i] = b;
-			b.setOpaque(true);
-			b.setFocusPainted(false);
-			b.setContentAreaFilled(true);
 			b.setFont(b.getFont().deriveFont(Font.BOLD, 11f));
 			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			b.addActionListener(e ->
@@ -5065,11 +5054,7 @@ public class GoalPanel extends PluginPanel
 		};
 		for (com.goalplanner.model.RepeatPeriod p : periods)
 		{
-			JButton b = new JButton(p.getLabel());
-			b.setOpaque(true);
-			b.setFocusPainted(false);
-			b.setBorderPainted(false);
-			b.setContentAreaFilled(true);
+			JButton b = new RoundedPaint.RoundedButton(p.getLabel());
 			b.setFont(b.getFont().deriveFont(11f));
 			b.setBorder(new EmptyBorder(3, 10, 3, 10));
 			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -5182,13 +5167,9 @@ public class GoalPanel extends PluginPanel
 
 	private JButton flatButton(String text, boolean primary)
 	{
-		JButton b = new JButton(text);
+		JButton b = new RoundedPaint.RoundedButton(text);
 		b.setForeground(primary ? CREATE_PRIMARY_FG : CREATE_FG);
 		b.setBackground(primary ? CREATE_PRIMARY_BG : CREATE_TILE_BG);
-		b.setOpaque(true);
-		b.setFocusPainted(false);
-		b.setBorderPainted(false);
-		b.setContentAreaFilled(true);
 		b.setFont(b.getFont().deriveFont(primary ? Font.BOLD : Font.PLAIN, 11f));
 		b.setBorder(new EmptyBorder(4, 10, 4, 10));
 		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -5204,7 +5185,13 @@ public class GoalPanel extends PluginPanel
 		f.setFont(f.getFont().deriveFont(11f));
 		if (f instanceof JTextField)
 		{
-			((JTextField) f).setBorder(new EmptyBorder(3, 5, 3, 5));
+			// A rounded outline replaces the square field edge. The field is made
+			// non-opaque so its square background fill can't poke square corners
+			// past the rounded stroke; padding matches the prior EmptyBorder so the
+			// field keeps its size. The dark surface shows through the rounded box.
+			f.setOpaque(false);
+			f.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
+				RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
 		}
 	}
 
@@ -5964,11 +5951,7 @@ public class GoalPanel extends PluginPanel
 		};
 		for (com.goalplanner.model.RepeatPeriod p : periods)
 		{
-			JButton b = new JButton(p.getLabel());
-			b.setOpaque(true);
-			b.setFocusPainted(false);
-			b.setBorderPainted(false);
-			b.setContentAreaFilled(true);
+			JButton b = new RoundedPaint.RoundedButton(p.getLabel());
 			b.setFont(b.getFont().deriveFont(11f));
 			b.setBorder(new EmptyBorder(3, 10, 3, 10));
 			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
