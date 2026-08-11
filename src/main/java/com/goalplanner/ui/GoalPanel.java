@@ -5919,8 +5919,79 @@ public class GoalPanel extends PluginPanel
 		def.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		body.add(def);
 
+		// Hex input: the inline custom-color path beyond the 12 presets (a full
+		// color wheel stays a dialog concern, so it is intentionally not mirrored).
+		// Accepts "#RRGGBB" or "RRGGBB"; the Set button or Enter commits through the
+		// SAME apply sink the swatches use. Invalid input shows a brief inline hint
+		// (no dialog) and is otherwise ignored.
+		body.add(Box.createVerticalStrut(8));
+		final JLabel hexHint = new JLabel(" ");
+		hexHint.setForeground(CREATE_FG);
+		hexHint.setFont(hexHint.getFont().deriveFont(10f));
+		hexHint.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+
+		JPanel hexRow = new JPanel(new BorderLayout(4, 0));
+		hexRow.setOpaque(false);
+		hexRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		JLabel hexLbl = new JLabel("Hex ");
+		hexLbl.setForeground(CREATE_FG);
+		hexLbl.setFont(hexLbl.getFont().deriveFont(11f));
+		final JTextField hexField = new JTextField();
+		styleField(hexField);
+		hexField.setToolTipText("Custom color: #RRGGBB or RRGGBB");
+		JButton hexBtn = flatButton("Set", true);
+		hexBtn.setToolTipText("Apply this hex color");
+		Runnable commitHex = () -> {
+			int rgb = parseHexRgb(hexField.getText());
+			if (rgb < 0)
+			{
+				hexHint.setText("Enter a hex color like #1F8B4C");
+				hexHint.revalidate();
+				hexHint.repaint();
+				return;
+			}
+			apply.accept(rgb);
+		};
+		hexBtn.addActionListener(e -> commitHex.run());
+		hexField.addActionListener(e -> commitHex.run());
+		hexRow.add(hexLbl, BorderLayout.WEST);
+		hexRow.add(hexField, BorderLayout.CENTER);
+		hexRow.add(hexBtn, BorderLayout.EAST);
+		hexRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, hexRow.getPreferredSize().height));
+		body.add(hexRow);
+		body.add(hexHint);
+
 		inner.add(body, BorderLayout.CENTER);
 		return surfaceShell("Color", false, inner);
+	}
+
+	/** Parse a "#RRGGBB" or "RRGGBB" hex string into a 0xRRGGBB int, or -1 if it is
+	 *  not exactly six hex digits. -1 doubles as "invalid" here (a real color is
+	 *  always >= 0), so callers guard on {@code < 0} and never mistake it for the
+	 *  Default sentinel. Backs the inline custom-color path in {@link #buildColorSurface}. */
+	private static int parseHexRgb(String raw)
+	{
+		if (raw == null)
+		{
+			return -1;
+		}
+		String s = raw.trim();
+		if (s.startsWith("#"))
+		{
+			s = s.substring(1);
+		}
+		if (s.length() != 6)
+		{
+			return -1;
+		}
+		try
+		{
+			return Integer.parseInt(s, 16) & 0xFFFFFF;
+		}
+		catch (NumberFormatException e)
+		{
+			return -1;
+		}
 	}
 
 	/** A single rounded color swatch tile filled with {@code color}. Selected tiles
