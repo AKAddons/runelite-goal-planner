@@ -144,6 +144,27 @@ public class GoalPanel extends PluginPanel
 	private ColorReturn dockColorReturn = null;
 	private String dockColorTarget = null;
 	private boolean dockColorMounted = false;
+	/** Which inline tag surface is mounted: {@link TagMode#ADD} (existing-tag
+	 *  chips + a new-tag field) or {@link TagMode#REMOVE} (removable-tag chips).
+	 *  Null = no tag overlay is active (mirrors {@link #dockColorReturn}). */
+	private enum TagMode { ADD, REMOVE }
+	/** Which surface the inline tag overlay returns to when Back is pressed (or a
+	 *  chip applies): the GOAL edit form or the MULTI action strips. */
+	private enum TagReturn { GOAL, MULTI }
+	/** Marker {@link #dockTagTarget} value for the MULTI bulk-tag overlay (the
+	 *  selection is read live from {@code api.getSelectedGoalIds()}); a control
+	 *  char so it can never collide with a real goal id. */
+	private static final String TAG_TARGET_MULTI = "__GP_MULTI_TAG__";
+	/** Transient in-dock tag overlay (inline-tag pass), mirroring the color
+	 *  picker. When {@link #dockTagMode} is non-null the dock mounts
+	 *  {@link #buildTagSurface} above the permanent footer instead of the normal
+	 *  edit/multi surface; the underlying selection is left intact.
+	 *  {@link #dockTagTarget} holds the goal id (GOAL) or {@link #TAG_TARGET_MULTI}
+	 *  (MULTI). */
+	private TagMode dockTagMode = null;
+	private TagReturn dockTagReturn = null;
+	private String dockTagTarget = null;
+	private boolean dockTagMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -1975,6 +1996,32 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		// Inline tag add/remove surface (inline-tag pass): the same overlay pattern
+		// as the color picker. When active it mounts the Add/Remove tag surface above
+		// the footer, leaving the underlying selection intact. If the target vanished
+		// (goal deleted, or the MULTI selection cleared) drop the overlay and fall
+		// through to normal routing.
+		if (dockTagMode != null)
+		{
+			if (!tagTargetValid())
+			{
+				dockTagMode = null;
+				dockTagReturn = null;
+				dockTagTarget = null;
+				dockTagMounted = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockTagMounted)
+				{
+					actionDock.setExpandedComponent(buildTagSurface());
+					dockTagMounted = true;
+				}
+				return;
+			}
+		}
+
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
 		// type grid, forget the mounted create view, and rest the create surface
@@ -2284,12 +2331,12 @@ public class GoalPanel extends PluginPanel
 		// --- BOTTOM: organize ---
 		// Tags.
 		bottom.add(sep("tag"));
-		bottom.add(item("Add tag", "Add a tag to this goal", () -> dockAddTag(g)));
+		bottom.add(item("Add tag", "Add a tag to this goal", () -> openTagAddSurfaceForGoal(gid)));
 		java.util.List<Tag> removable = removableTagsFor(g);
 		if (!removable.isEmpty())
 		{
 			bottom.add(item("Drop tags", "Remove tags from this goal",
-				() -> dockRemoveTags(g, removable)));
+				() -> openTagRemoveSurfaceForGoal(gid)));
 		}
 
 		// Requirements graph - hidden on completed goals (reference history).
@@ -2462,14 +2509,12 @@ public class GoalPanel extends PluginPanel
 			if (!tagAdd.isEmpty())
 			{
 				bottom.add(item("Add tag", "Add a tag to every selected goal",
-					() -> dialogFactory.showBulkAddTagDialog(tagAdd)));
+					() -> openTagAddSurfaceForMulti()));
 			}
 			if (!removableOpts.isEmpty())
 			{
-				final java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> opts =
-					removableOpts;
 				bottom.add(item("Drop tags", "Remove tags from the selected goals",
-					() -> dialogFactory.showBulkRemoveTagDialog(sel, opts)));
+					() -> openTagRemoveSurfaceForMulti()));
 			}
 		}
 
@@ -5917,6 +5962,315 @@ public class GoalPanel extends PluginPanel
 		return tile;
 	}
 
+	// ------------------------------------------------------------
+	// Inline tag surfaces (inline-tag pass): the Add Tag / Remove Tag UX moved
+	// into the dock, mirroring the inline color picker exactly. Openers set the
+	// tag nav drivers and refresh; refreshDock mounts buildTagSurface above the
+	// footer and returns early. Back / apply route through closeTagSurface, which
+	// remounts the surface the overlay replaced. The right-click menus still open
+	// the (intact, dead-in-dock) TagPickerDialog / MultiSelectDialog dialogs.
+	// ------------------------------------------------------------
+
+	/** Open the inline Add Tag surface for a single goal. */
+	private void openTagAddSurfaceForGoal(String goalId)
+	{
+		dockTagMode = TagMode.ADD;
+		dockTagReturn = TagReturn.GOAL;
+		dockTagTarget = goalId;
+		dockTagMounted = false;
+		refreshDock();
+	}
+
+	/** Open the inline Remove Tag surface for a single goal. */
+	private void openTagRemoveSurfaceForGoal(String goalId)
+	{
+		dockTagMode = TagMode.REMOVE;
+		dockTagReturn = TagReturn.GOAL;
+		dockTagTarget = goalId;
+		dockTagMounted = false;
+		refreshDock();
+	}
+
+	/** Open the inline Add Tag surface for the current multi-selection. */
+	private void openTagAddSurfaceForMulti()
+	{
+		dockTagMode = TagMode.ADD;
+		dockTagReturn = TagReturn.MULTI;
+		dockTagTarget = TAG_TARGET_MULTI;
+		dockTagMounted = false;
+		refreshDock();
+	}
+
+	/** Open the inline Remove Tag surface for the current multi-selection. */
+	private void openTagRemoveSurfaceForMulti()
+	{
+		dockTagMode = TagMode.REMOVE;
+		dockTagReturn = TagReturn.MULTI;
+		dockTagTarget = TAG_TARGET_MULTI;
+		dockTagMounted = false;
+		refreshDock();
+	}
+
+	/** Close the tag overlay and return to the surface it belongs to WITHOUT any
+	 *  further change (also the path after a chip applies). Force the edit / section
+	 *  surface to remount; MULTI rebuilds its strips every refresh. Mirrors
+	 *  {@link #closeColorSurface}. */
+	private void closeTagSurface()
+	{
+		dockTagMode = null;
+		dockTagReturn = null;
+		dockTagTarget = null;
+		dockTagMounted = false;
+		dockEditMounted = false;
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** Rebuild the mounted tag surface in place (after a removal) so several tags
+	 *  can be dropped without leaving the overlay. Keeps {@link #dockTagMode} set. */
+	private void remountTagSurface()
+	{
+		dockTagMounted = false;
+		refreshDock();
+	}
+
+	/** Whether the tag overlay's target still exists, so refreshDock can drop a
+	 *  stale overlay (goal deleted, or the selection cleared) instead of mounting an
+	 *  empty surface. Mirrors {@link #colorTargetValid}. */
+	private boolean tagTargetValid()
+	{
+		if (dockTagReturn == null)
+		{
+			return false;
+		}
+		switch (dockTagReturn)
+		{
+			case GOAL:  return goalStore.findGoalById(dockTagTarget) != null;
+			case MULTI: return !api.getSelectedGoalIds().isEmpty();
+			default:    return false;
+		}
+	}
+
+	/** Dispatch to the active inline tag surface (ADD or REMOVE). */
+	private JComponent buildTagSurface()
+	{
+		return dockTagMode == TagMode.ADD ? buildTagAddSurface() : buildTagRemoveSurface();
+	}
+
+	/** Display name for a {@link com.goalplanner.model.TagCategory} enum name, or
+	 *  the raw name if it does not resolve. */
+	private static String tagCategoryDisplay(String categoryName)
+	{
+		if (categoryName == null)
+		{
+			return null;
+		}
+		try
+		{
+			return com.goalplanner.model.TagCategory.valueOf(categoryName).getDisplayName();
+		}
+		catch (IllegalArgumentException e)
+		{
+			return categoryName;
+		}
+	}
+
+	/** Build the inline Add Tag surface (GOAL or MULTI): every existing tag from
+	 *  {@code api.queryAllTags()} rendered as a rounded tappable chip that adds it and
+	 *  returns, plus a "New tag" text field + Add button that creates-and-adds a
+	 *  brand-new label. Tapping an existing chip preserves its category
+	 *  ({@code addTagWithCategory}); a brand-new label goes to the OTHER (user/custom)
+	 *  category via {@code api.addTag}, since this compact surface has no category
+	 *  picker (the dialog's category dropdown is intentionally not mirrored). For
+	 *  MULTI every add applies to the whole selection as one compound (one undo). */
+	private JComponent buildTagAddSurface()
+	{
+		// (label, categoryName) -> add an existing tag preserving its category.
+		final java.util.function.BiConsumer<String, String> addExisting;
+		// label -> create-and-add a brand-new tag (OTHER / user-custom category).
+		final java.util.function.Consumer<String> addNew;
+		if (dockTagReturn == TagReturn.MULTI)
+		{
+			final java.util.Set<String> ids =
+				new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+			final int n = ids.size();
+			addExisting = (label, cat) -> {
+				api.beginCompound("Add tag '" + label + "' to " + n + " goals");
+				try
+				{
+					for (String id : ids)
+					{
+						api.addTagWithCategory(id, label, cat);
+					}
+				}
+				finally
+				{
+					api.endCompound();
+				}
+				closeTagSurface();
+			};
+			addNew = label -> {
+				api.beginCompound("Add tag '" + label + "' to " + n + " goals");
+				try
+				{
+					for (String id : ids)
+					{
+						api.addTag(id, label);
+					}
+				}
+				finally
+				{
+					api.endCompound();
+				}
+				closeTagSurface();
+			};
+		}
+		else
+		{
+			final String gid = dockTagTarget;
+			addExisting = (label, cat) -> { api.addTagWithCategory(gid, label, cat); closeTagSurface(); };
+			addNew = label -> { api.addTag(gid, label); closeTagSurface(); };
+		}
+
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		// Back returns to the prior surface WITHOUT adding anything.
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without adding a tag", this::closeTagSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		// Existing tags as rounded tappable chips; tapping adds and returns.
+		JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		chips.setOpaque(false);
+		chips.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		java.util.List<com.goalplanner.api.TagView> all = api.queryAllTags();
+		for (com.goalplanner.api.TagView t : all)
+		{
+			final String label = t.label;
+			final String cat = t.category;
+			String catName = tagCategoryDisplay(cat);
+			String tip = catName != null ? "Add " + label + " (" + catName + ")" : "Add " + label;
+			chips.add(chip(label, tip, () -> addExisting.accept(label, cat)));
+		}
+		if (all.isEmpty())
+		{
+			JLabel none = new JLabel("No existing tags yet");
+			none.setForeground(CREATE_FG);
+			none.setFont(none.getFont().deriveFont(11f));
+			chips.add(none);
+		}
+		chips.setMaximumSize(new Dimension(Integer.MAX_VALUE, chips.getPreferredSize().height));
+		body.add(chips);
+		body.add(Box.createVerticalStrut(8));
+
+		// New-tag inline field + Add button (create-and-add a brand-new label).
+		JPanel newRow = new JPanel(new BorderLayout(4, 0));
+		newRow.setOpaque(false);
+		newRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		final JTextField field = new JTextField();
+		styleField(field);
+		field.setToolTipText("Type a new tag label");
+		JButton addBtn = flatButton("Add", true);
+		addBtn.setToolTipText("Create and add this tag");
+		Runnable commit = () -> {
+			String text = field.getText() == null ? "" : field.getText().trim();
+			if (!text.isEmpty())
+			{
+				addNew.accept(text);
+			}
+		};
+		addBtn.addActionListener(e -> commit.run());
+		field.addActionListener(e -> commit.run());
+		newRow.add(field, BorderLayout.CENTER);
+		newRow.add(addBtn, BorderLayout.EAST);
+		newRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, newRow.getPreferredSize().height));
+		body.add(newRow);
+
+		inner.add(body, BorderLayout.CENTER);
+		return surfaceShell("Add Tag", false, inner);
+	}
+
+	/** Build the inline Remove Tag surface (GOAL or MULTI): the removable tags as
+	 *  rounded tappable chips. Tapping one removes it immediately and re-renders the
+	 *  surface (so several can be dropped without leaving); Back returns. For a goal
+	 *  the chips are {@link #removableTagsFor}; for MULTI they are the merged
+	 *  removable set from {@code api.getRemovableTagsForSelection} (label + count),
+	 *  each removed across the selection as one compound. */
+	private JComponent buildTagRemoveSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		// Back returns to the prior surface WITHOUT changing anything further.
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without removing more tags", this::closeTagSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		chips.setOpaque(false);
+
+		boolean any = false;
+		if (dockTagReturn == TagReturn.MULTI)
+		{
+			final java.util.Set<String> ids =
+				new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+			java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> opts =
+				api.getRemovableTagsForSelection(ids);
+			for (com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption o : opts)
+			{
+				any = true;
+				final String tagId = o.tagId;
+				final String label = o.label;
+				final int count = o.count;
+				chips.add(chip(label, "Remove " + label + " (" + count + ") from the selection", () -> {
+					api.beginCompound("Remove tag '" + label + "' from selection");
+					try
+					{
+						api.bulkRemoveTagFromGoals(ids, tagId);
+					}
+					finally
+					{
+						api.endCompound();
+					}
+					remountTagSurface();
+				}));
+			}
+		}
+		else
+		{
+			final String gid = dockTagTarget;
+			Goal g = goalStore.findGoalById(gid);
+			java.util.List<Tag> removable = g != null
+				? removableTagsFor(g) : java.util.Collections.emptyList();
+			for (Tag t : removable)
+			{
+				any = true;
+				final String label = t.getLabel();
+				chips.add(chip(label,
+					"Remove " + label + " (" + t.getCategory().getDisplayName() + ")",
+					() -> { api.removeTag(gid, label); remountTagSurface(); }));
+			}
+		}
+		if (!any)
+		{
+			JLabel none = new JLabel("No tags to remove");
+			none.setForeground(CREATE_FG);
+			none.setFont(none.getFont().deriveFont(11f));
+			chips.add(none);
+		}
+		inner.add(chips, BorderLayout.CENTER);
+		return surfaceShell("Remove Tag", false, inner);
+	}
+
 	/** The current {@link com.goalplanner.api.SectionView} for {@code id}, or null
 	 *  if no such section exists (e.g. it was deleted while selected). */
 	private com.goalplanner.api.SectionView findSectionView(String id)
@@ -6339,12 +6693,12 @@ public class GoalPanel extends PluginPanel
 		wrap.add(chip("Color", "Change this goal's color",
 			() -> openColorSurfaceForGoal(gid)));
 		wrap.add(chip("Add tag", "Add a tag to this goal",
-			() -> { dockAddTag(g); refreshEditForm(); }));
+			() -> openTagAddSurfaceForGoal(gid)));
 		java.util.List<Tag> removable = removableTagsFor(g);
 		if (!removable.isEmpty())
 		{
 			wrap.add(chip("Drop tags", "Remove tags from this goal",
-				() -> { dockRemoveTags(g, removable); refreshEditForm(); }));
+				() -> openTagRemoveSurfaceForGoal(gid)));
 		}
 		if (api.isGoalOverridden(gid))
 		{
