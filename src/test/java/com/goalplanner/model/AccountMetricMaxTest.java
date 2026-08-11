@@ -45,8 +45,8 @@ class AccountMetricMaxTest
 		// (the live DB-table sum over-counted; wiki static is authoritative).
 		Client client = mock(Client.class);
 		when(client.getVarpValue(anyInt())).thenReturn(99999);
-		assertEquals(339, AccountMetric.QUEST_POINTS.effectiveMaxTarget(client));
-		assertEquals(339, AccountMetric.TOG_MAX_TEARS.effectiveMaxTarget(client));
+		assertEquals(341, AccountMetric.QUEST_POINTS.effectiveMaxTarget(client));
+		assertEquals(341, AccountMetric.TOG_MAX_TEARS.effectiveMaxTarget(client));
 		assertEquals(AccountMetric.QUEST_POINTS.getMaxTarget(),
 			AccountMetric.QUEST_POINTS.effectiveMaxTarget(client));
 	}

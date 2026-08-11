@@ -7,7 +7,7 @@
     "accountReqs": [],
     "bossKills": [
       {
-        "bossName": "Kree\u0027arra",
+        "bossName": "Kree'arra",
         "killCount": 1
       },
       {
@@ -19,7 +19,7 @@
         "killCount": 1
       },
       {
-        "bossName": "K\u0027ril Tsutsaroth",
+        "bossName": "K'ril Tsutsaroth",
         "killCount": 1
       }
     ],
@@ -114,7 +114,7 @@
     "itemReqs": [
       {
         "itemId": 28334,
-        "displayName": "Awakener\u0027s orb",
+        "displayName": "Awakener's orb",
         "quantity": 1
       }
     ],
@@ -149,7 +149,7 @@
     "bossKills": [],
     "alternatives": []
   },
-  "Kree\u0027arra": {
+  "Kree'arra": {
     "skills": [
       {
         "skill": "RANGED",
@@ -189,7 +189,7 @@
     "bossKills": [],
     "alternatives": []
   },
-  "Phosani\u0027s Nightmare": {
+  "Phosani's Nightmare": {
     "skills": [],
     "unlocks": [],
     "quests": [
@@ -239,7 +239,7 @@
     "itemReqs": [
       {
         "itemId": 28334,
-        "displayName": "Awakener\u0027s orb",
+        "displayName": "Awakener's orb",
         "quantity": 1
       }
     ],
@@ -435,7 +435,7 @@
     "itemReqs": [
       {
         "itemId": 28334,
-        "displayName": "Awakener\u0027s orb",
+        "displayName": "Awakener's orb",
         "quantity": 1
       }
     ],
@@ -707,7 +707,7 @@
     "itemReqs": [
       {
         "itemId": 22372,
-        "displayName": "Bryophyta\u0027s essence",
+        "displayName": "Bryophyta's essence",
         "quantity": 1
       }
     ],
@@ -715,7 +715,7 @@
     "bossKills": [],
     "alternatives": []
   },
-  "K\u0027ril Tsutsaroth": {
+  "K'ril Tsutsaroth": {
     "skills": [
       {
         "skill": "HITPOINTS",
@@ -789,7 +789,7 @@
     "itemReqs": [
       {
         "itemId": 28334,
-        "displayName": "Awakener\u0027s orb",
+        "displayName": "Awakener's orb",
         "quantity": 1
       }
     ],
@@ -881,6 +881,17 @@
     "unlocks": [],
     "quests": [
       "THE_BLOOD_MOON_RISES"
+    ],
+    "itemReqs": [],
+    "accountReqs": [],
+    "bossKills": [],
+    "alternatives": []
+  },
+  "Mad Angel": {
+    "skills": [],
+    "unlocks": [],
+    "quests": [
+      "FALLEN_FROM_GRACE"
     ],
     "itemReqs": [],
     "accountReqs": [],
