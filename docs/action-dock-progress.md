@@ -1298,3 +1298,86 @@ preserved:
   `GrabHandle` pill is unchanged.
 - **Combos left square**: eyeball whether the square combos clash next to the
   rounded fields, or are acceptable as-is (arrow-button widgets don't round cleanly).
+
+## Inline color picker — the swatch grid moves INTO the dock (latest)
+
+The **Color** actions no longer open a Swing `JOptionPane` hosting
+`ColorPickerField`. They now mount an **in-dock color surface** above the
+permanent footer, exactly like `buildEditSurface` / `buildSectionDock`.
+
+### buildColorSurface — the swatch grid surface
+`buildColorSurface()` builds a `surfaceShell("Color", ...)` whose body is:
+- A **"< Back"** chip that returns to the prior surface WITHOUT changing anything
+  (`closeColorSurface`).
+- A **4x3 grid** of the 12 curated `ColorPickerField.PRESETS` (still the PUBLIC
+  source of the palette), each a **rounded** swatch tile (`colorSwatch` →
+  `RoundedPaint.RoundedPanel` at `RADIUS`, ~26px, hand cursor, hex tooltip). The
+  **currently-selected** color gets a white 2px rounded outline; hover previews
+  the same outline.
+- A full-width **Default** chip beneath the grid that resets to the item's own
+  default color (applies `rgb = -1`, matching `getCustomColorRgb() < 0` =
+  "no override"). Default is highlighted when the item currently has no override.
+
+Tapping a swatch (or Default) **applies immediately** and returns to the prior
+surface. One undo per change.
+
+### Transient nav target
+- **`ColorReturn` enum** `{ GOAL, MULTI, SECTION }` + **`dockColorReturn`** — null
+  means the overlay is inactive.
+- **`dockColorTarget`** holds the goal id (GOAL), the section id (SECTION), or the
+  **`COLOR_TARGET_MULTI`** marker (MULTI; the selection is read live from
+  `api.getSelectedGoalIds()`).
+- **`dockColorMounted`** guards the `setExpandedComponent` remount so a refresh
+  while the overlay is open does not thrash it.
+- **`refreshDock`** mounts the overlay (right after the footer/dismiss wiring) and
+  **returns early** while `dockColorReturn != null`, leaving the underlying
+  goal/multi/section selection intact. `colorTargetValid()` drops a **stale**
+  overlay (deleted goal/section, or an emptied MULTI selection) and falls through
+  to normal routing.
+- **`closeColorSurface`** clears the overlay and forces `dockEditMounted` /
+  `dockSectionMounted` false, so the surface the overlay replaced remounts (MULTI
+  rebuilds its strips every refresh and needs no guard drop).
+
+### Rerouted entry points (5)
+- **Goal edit "Color" chip** (`buildDataChips`) → `openColorSurfaceForGoal(gid)`;
+  applies via `api.setGoalColor`, returns to the goal EDIT form.
+- **Legacy button-strip "Color"** (`buildGoalDock`, COLLECTION_LOG fallback) →
+  `openColorSurfaceForGoal(g.getId())`.
+- **MULTI bulk "Color"** (`buildMultiDock`) → `openColorSurfaceForMulti()`; a
+  swatch applies to **every** selected goal as one compound
+  (`beginCompound`/`endCompound` over `api.getSelectedGoalIds()`), returns to
+  MULTI.
+- **SECTION "Change color"** — both the built-in direct chip
+  (`buildSectionChipsTop`) and the user-section Edit-group chip
+  (`buildSectionEditChips`) → `openColorSurfaceForSection(sv.id)`; applies via
+  `api.setSectionColor`, returns to the SECTION dock.
+
+### Section-color status
+**WIRED.** `api.setSectionColor(sectionId, rgb)` exists, so section color runs
+through the same in-dock surface as goals/multi — no invented API, no dialog left
+behind for sections.
+
+### Deferred (intact, swept later)
+`GoalDialogFactory.showGoalColorDialog` / `showBulkChangeColorDialog` /
+`showSectionColorDialog` and `ColorPickerField` are now **dead but INTACT** (no
+longer called from `GoalPanel`). They come out in the final dialog sweep.
+
+### NEEDS-SCREENSHOT (inline color pass) — in-client loop
+Verify each at font scale **1.0 AND 1.3**; swatch tiles must be smoothly rounded,
+not clipped:
+- **Goal color**: select a goal → Data group → tap **Color** → the swatch grid
+  mounts above the footer → tap a swatch → the color applies to the goal AND the
+  dock returns to that goal's EDIT form.
+- **Current swatch highlighted**: a goal with a custom color shows that swatch
+  outlined white on entry; a goal with no override shows **Default** highlighted.
+- **Default resets**: tapping **Default** clears the custom color (goal card falls
+  back to its type color) and returns to the edit form.
+- **Back is a no-op**: tapping **< Back** returns without changing the color.
+- **MULTI bulk**: select several goals → **Color** → one swatch recolors **all**
+  of them (single undo) and returns to the MULTI strips.
+- **SECTION color**: select a user section → Edit → **Change color** (and a
+  built-in section's direct **Change color** chip) → a swatch recolors the section
+  header and returns to the SECTION dock.
+- **Rounded swatches**: the 12 tiles + the Default chip read as tasteful rounded
+  swatches at both font scales; hover outline + selected outline both render.
+- **Undo**: each apply (goal / section / bulk) is a single undo step.
