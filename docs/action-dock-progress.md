@@ -1142,3 +1142,62 @@ while expanded.
   DOWN (or click it) -> the surface collapses to the resting footer and does not
   immediately re-expand (selection/section/create all cleared). Footer + divider
   stay visible; the handle only shows while expanded.
+
+## Post-1.0.0 dock fixes (2026-08-10)
+
+### Fix 1 — a dock create collapses to the resting footer (not the edit view)
+Every API create runs `selectAfterCreate(id)`, which leaves the new goal as the
+sole selection; the permanent-footer model auto-expands a selected goal's EDIT
+view in `refreshDock`, so after a create the pane stayed OPEN on the new goal.
+A create now ends with a collapse to the resting footer.
+
+- **`collapseDockToFooter()`** extracted from the old `dismissDock` body (clears
+  goal + section selection, resets create nav incl. `dockCreateTargetSection`,
+  `setExpanded(false)`, `refreshDock`). Both `dismissDock()` (grab-handle) and the
+  new **`finishDockCreate()`** delegate to it; `finishDockCreate` carries the
+  ordering contract in its javadoc.
+- **Every create-success point now calls `finishDockCreate()`** instead of the old
+  `navigateCreate(null)`: `chooseSection` (section-routed terminal), the armed-target
+  skip in `goToSectionPick`, and the two standalone-repeatable creates (skill, boss).
+  Back buttons and section creation keep `navigateCreate(null)`.
+
+- **Ordering guarantee (the tricky part).** SYNC creates (skill one-time / item /
+  account / custom / CA) run inline on the EDT: `chooseSection` calls
+  `finishDockCreate()` synchronously right after the create, in the SAME EDT event,
+  so it clears the fresh selection before any posted `refreshSelection` /
+  debounced-rebuild runs -> stays collapsed. ASYNC creates (diary / quest / boss,
+  and the standalone repeatables) run inside a **client-thread compound**:
+  `selectAfterCreate`'s `onSelectionChanged` is SUPPRESSED while `isInCompound()`
+  (see `replaceGoalSelection`), and `endCompound` fires `onGoalsChanged`, which the
+  plugin posts as `SwingUtilities.invokeLater(rebuildDebounce::restart)` (a 200ms
+  Swing timer -> `panel.rebuild()` -> `refreshDock` -> re-selects the new goal ->
+  would re-open). The fix posts `SwingUtilities.invokeLater(this::finishDockCreate)`
+  from INSIDE each client-thread runnable, right after `endCompound()`. On the EDT
+  that runnable is strictly after the `onGoalsChanged` post (same client-thread
+  call, later line) and both are well before the 200ms debounce fires -> by the
+  time the debounced `rebuild` runs the selection is already cleared, so
+  `refreshDock` resolves EMPTY and stays collapsed. The section-routed async paths
+  ALSO collapse synchronously via `chooseSection`; the posted collapse is what wins
+  against the later rebuild.
+- **Reveal preserved.** `armCreateReveal()` still runs before the collapse and
+  captures `pendingRevealGoalId` from the selection; `maybeRevealPendingCreate()`
+  scrolls the Completed card by that id via `scrollRectToVisible`, independent of
+  the live selection, so clearing the selection does not break complete-on-add.
+
+## NEEDS-SCREENSHOT (post-1.0.0 dock fixes)
+- **Fix 1 (async)**: add a DIARY goal, a QUEST goal, and a BOSS goal (Total) via the
+  dock -> after each create the pane FULLY COLLAPSES to the resting footer (no edit
+  view, no grid, no re-open flash ~200ms later).
+- **Fix 1 (sync)**: add a SKILL one-time, an ITEM, an ACCOUNT, a CUSTOM, and a
+  COMBAT ACHIEVEMENT goal -> pane collapses to the footer immediately, no re-open.
+- **Fix 1 (repeatable)**: add a repeatable SKILL goal and a repeatable BOSS goal
+  (standalone, skip section-pick) -> pane collapses to the footer, no re-open.
+- **Fix 1 (armed section)**: from a user section's "Add goal", create any type ->
+  lands in that section AND the pane collapses to the footer.
+- **Fix 1 (reveal)**: add a diary tier already 100% on the account (complete-on-add)
+  -> the dock collapses AND the goal is revealed/scrolled in the Completed section
+  with the "Already complete" notice.
+- **Fix 2**: open the create type grid -> each tile (Skill / Quest / Diary / Boss /
+  Item / Account / Custom / CA) is recognizably the SAME color as the goal cards it
+  creates; near-black types (Boss) still show a visible swatch; labels stay legible
+  at font 1.0 AND 1.3.

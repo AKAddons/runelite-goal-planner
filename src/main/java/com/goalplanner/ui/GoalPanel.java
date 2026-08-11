@@ -3502,7 +3502,10 @@ public class GoalPanel extends PluginPanel
 			// A complete-on-add goal reconciles into Completed; arm a reveal so it
 			// does not read as "didn't show up" (mirrors chooseSection).
 			armCreateReveal();
-			navigateCreate(null);
+			// Task 1: collapse to the resting footer rather than re-open the new
+			// goal's edit view. Sync creates settle here; async creates also post
+			// finishDockCreate from their client-thread runnable to beat the debounce.
+			finishDockCreate();
 			return;
 		}
 		dockPendingCreate = pending;
@@ -3539,6 +3542,12 @@ public class GoalPanel extends PluginPanel
 			{
 				api.endCompound();
 			}
+			// Task 1: collapse the dock AFTER the compound settles. endCompound's
+			// onGoalsChanged rebuild (debounced) re-selects the new goal via
+			// selectAfterCreate and would re-open the edit view; this invokeLater is
+			// queued strictly after that post and before the debounce fires, so by
+			// the time the rebuild runs the selection is cleared and it stays closed.
+			javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
 		});
 	}
 
@@ -3556,7 +3565,12 @@ public class GoalPanel extends PluginPanel
 			// reveal so it does not read as "didn't show up".
 			armCreateReveal();
 		}
-		navigateCreate(null);
+		// Task 1: collapse to the resting footer rather than re-open the new goal's
+		// edit view. Sync creates (skill one-time / item / account / custom / CA)
+		// settle synchronously here; async creates (diary / quest / boss) ALSO post
+		// finishDockCreate from clientThreadCreateInSection after their compound so
+		// the later debounced rebuild finds no selection and stays collapsed.
+		finishDockCreate();
 	}
 
 	/** The landing-section chooser (note 3): the pending goal-create's target. The
@@ -3924,8 +3938,12 @@ public class GoalPanel extends PluginPanel
 					{
 						api.endCompound();
 					}
+					// Task 1: collapse AFTER the compound settles - the post-endCompound
+					// debounced rebuild re-selects the new goal, so the winning collapse
+					// must be queued here (after that post, before the debounce fires).
+					javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
 				});
-				navigateCreate(null);
+				finishDockCreate();
 			}
 			else
 			{
@@ -4313,8 +4331,11 @@ public class GoalPanel extends PluginPanel
 					{
 						api.endCompound();
 					}
+					// Task 1: collapse AFTER the compound settles (see the skill
+					// repeatable path) so the debounced rebuild finds no selection.
+					javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
 				});
-				navigateCreate(null);
+				finishDockCreate();
 			}
 			else if (mode[0] == 1)
 			{
@@ -4352,6 +4373,11 @@ public class GoalPanel extends PluginPanel
 						{
 							api.endCompound();
 						}
+						// Task 1: collapse AFTER the compound settles so the debounced
+						// onGoalsChanged rebuild (which re-selects the new goal) does not
+						// re-open the edit view. chooseSection also collapses synchronously
+						// on the pick, but that runs before this create; this wins last.
+						javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
 					}));
 			}
 			else
@@ -5496,11 +5522,13 @@ public class GoalPanel extends PluginPanel
 		refreshDock();
 	}
 
-	/** Task 8: dismiss the expanded surface from ANY state back to the resting
-	 *  footer. Clears everything that drives the surface - the goal selection, the
-	 *  section selection, and the create navigation - then collapses. The permanent
-	 *  footer stays visible; refreshDock re-resolves to EMPTY + collapsed. */
-	private void dismissDock()
+	/** Collapse the expanded surface from ANY state back to the resting footer.
+	 *  Clears everything that drives the surface - the goal selection, the section
+	 *  selection, and the create navigation - then collapses. The permanent footer
+	 *  stays visible; refreshDock re-resolves to EMPTY + collapsed. Shared by
+	 *  {@link #dismissDock()} (the grab-handle dismiss) and {@link #finishDockCreate()}
+	 *  (the post-create collapse). */
+	private void collapseDockToFooter()
 	{
 		selectedSectionId = null;
 		dockSectionGroup = null;
@@ -5517,6 +5545,42 @@ public class GoalPanel extends PluginPanel
 		// dismiss (create / section state) still re-renders to the resting footer.
 		api.clearGoalSelection();
 		refreshDock();
+	}
+
+	/** Task 8: dismiss the expanded surface from ANY state back to the resting
+	 *  footer. */
+	private void dismissDock()
+	{
+		collapseDockToFooter();
+	}
+
+	/** Task 1: after a successful dock create (ANY goal type, sync or async),
+	 *  collapse to the resting footer instead of re-opening the new goal's EDIT view.
+	 *  Every API create calls {@code selectAfterCreate}, which selects the new goal,
+	 *  and a selected goal auto-expands its edit view in refreshDock - so without this
+	 *  the pane stays open on the new goal after a create.
+	 *
+	 *  <p><b>Ordering guarantee.</b> For SYNC creates (skill one-time / item / account
+	 *  / custom / CA) the create + selectAfterCreate run inline on the EDT, so calling
+	 *  this synchronously right after the create clears that fresh selection before any
+	 *  posted refresh runs - it stays collapsed. For ASYNC creates (diary / quest /
+	 *  boss / standalone-repeatable) the create runs inside a client-thread compound;
+	 *  selectAfterCreate's onSelectionChanged is suppressed while in the compound, and
+	 *  the re-open instead rides the {@code onGoalsChanged} rebuild that endCompound
+	 *  posts (a 200ms debounce that re-selects the new goal). Posting this via
+	 *  {@code SwingUtilities.invokeLater} from INSIDE the client-thread runnable AFTER
+	 *  endCompound queues it strictly after that onGoalsChanged post and well before
+	 *  the debounced rebuild fires - so the selection is already cleared by the time
+	 *  the rebuild runs, and the dock stays collapsed.
+	 *
+	 *  <p>The complete-on-add reveal is unaffected: {@code armCreateReveal} captured
+	 *  {@code pendingRevealGoalId} from the selection before this clears it, and
+	 *  {@link #maybeRevealPendingCreate()} scrolls the Completed card via
+	 *  {@code scrollRectToVisible} keyed off that id, independent of the live
+	 *  selection. */
+	private void finishDockCreate()
+	{
+		collapseDockToFooter();
 	}
 
 	/** Task 1: open the in-dock create flow (type grid + stepper) with {@code sid}
