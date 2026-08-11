@@ -143,10 +143,15 @@ public class ActionDock extends JPanel
 		content.add(scrollStrip(topRow));
 		content.add(scrollStrip(bottomRow));
 
-		centerHost.setOpaque(false);
+		// Opaque dark backing so nothing behind the dock (e.g. an optional goal's
+		// diagonal hatch in the list) bleeds through the rounded, non-opaque surface
+		// card or the non-opaque DockDivider seam.
+		centerHost.setOpaque(true);
+		centerHost.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		// The grab handle stays pinned at the top of the expanded surface; the
 		// swappable surface (strips or a custom view) lives in surfaceHost below it.
-		surfaceHost.setOpaque(false);
+		surfaceHost.setOpaque(true);
+		surfaceHost.setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		surfaceHost.add(content, BorderLayout.CENTER);
 		centerHost.add(grabHandle, BorderLayout.NORTH);
 		centerHost.add(surfaceHost, BorderLayout.CENTER);

@@ -3788,17 +3788,14 @@ public class GoalPanel extends PluginPanel
 		// at both font 1.0 and 1.3, while the tile still reads as "the <type> color".
 		final Color base = tintTile(CREATE_TILE_BG, accent);
 		final Color hovered = tintTile(CREATE_TILE_HOVER, accent);
-		// A full-strength colored top accent over the tinted body pins the identity
-		// (icon deferred on the token budget - see docs/action-dock-progress.md); the
-		// accent is clipped to the rounded shape so it keeps the rounded top corners.
-		RoundedPaint.RoundedButton b = new RoundedPaint.RoundedButton(tileLabel(type))
-			.withTopAccent(accent, 3);
+		// A FULL rounded border in the type's own color frames the whole tile (user
+		// feedback: full borders over the top-only tab accent), over the tinted body,
+		// so each tile clearly reads as "the <type> color".
+		RoundedPaint.RoundedButton b = new RoundedPaint.RoundedButton(tileLabel(type));
 		b.setForeground(CREATE_FG);
 		b.setBackground(base);
 		b.setFont(b.getFont().deriveFont(11f));
-		// Top inset (8) reserves the 3px accent + the prior 5px text gap; sides/bottom
-		// unchanged, so the tile keeps its previous preferred size.
-		b.setBorder(new EmptyBorder(8, 2, 6, 2));
+		b.setBorder(RoundedPaint.border(accent, 2, RoundedPaint.RADIUS, new Insets(6, 4, 6, 4)));
 		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		hover(b, base, hovered);
 		b.addActionListener(e -> navigateCreate(type));
