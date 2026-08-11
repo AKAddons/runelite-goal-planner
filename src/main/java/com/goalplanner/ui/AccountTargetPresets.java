@@ -61,6 +61,17 @@ public final class AccountTargetPresets
 				}
 			}
 		}
+		// Collection Log: the Gilded staff unlocks at 90% of the total, rounded
+		// down to the nearest 25 - a headline tier between Dragon (1200) and full
+		// completion. Computed off the live max so it tracks as the log grows.
+		if (metric == AccountMetric.COLLECTION_LOG_SLOTS)
+		{
+			int gilded = (int) (Math.floor(0.9 * max / 25.0) * 25);
+			if (gilded > min && gilded < max)
+			{
+				out.add(gilded);
+			}
+		}
 		out.add(max);
 		int[] arr = new int[out.size()];
 		int i = 0;
@@ -83,6 +94,10 @@ public final class AccountTargetPresets
 			// 2277 = all 99s before Sailing (the classic max cape); max (2376) appended.
 			case TOTAL_LEVEL:  return new int[]{ 1500, 2000, 2277 };
 			case QUEST_POINTS: return new int[]{ 100, 200, 300 };
+			// Collection-log reward-staff tiers: Bronze..Dragon are fixed slot
+			// counts; Gilded (90% of the dynamic max) is added in presetsFor; the
+			// full-completion max is appended by the caller.
+			case COLLECTION_LOG_SLOTS: return new int[]{ 100, 300, 500, 700, 900, 1000, 1100, 1200 };
 			default:           return null;
 		}
 	}
