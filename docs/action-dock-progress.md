@@ -1103,3 +1103,42 @@ picker's default (empty-search) view now shows a SHORT curated head of common
 bosses (`recommendedBosses`, filtered to names present in the data, topped up
 alphabetically to 8) instead of the first 12 of the entire list; typing narrows
 across the full corpus (cap 25). Item search cap raised 8 -> 15 (it scrolls).
+
+### Task 8 — drag-down / click to dismiss the dock from any state
+`ActionDock` gains a `GrabHandle`: a short centered horizontal bar pinned at the
+TOP of the expanded surface (inside `centerHost`, so it shows only when expanded).
+The surface was refactored into a `surfaceHost` below the handle so swapping the
+mounted surface (`setRows` / `setExpandedComponent`) never removes the handle.
+Dragging the handle DOWN past a 24px threshold, or clicking it, fires
+`triggerDismiss()` -> the panel-supplied `onDismiss` (`GoalPanel.dismissDock`),
+which clears the goal selection, `selectedSectionId`, and the create nav
+(including `dockCreateTargetSection`), then collapses. The permanent footer and
+the `DockDivider` stay intact; `getPreferredSize` counts the handle height only
+while expanded.
+
+## NEEDS-SCREENSHOT (8-task in-client verification pass)
+- **Task 1**: select a user section -> Add goal -> the in-dock type grid opens (NOT
+  the Swing dialog). Pick a type, fill details, create -> the goal lands in THAT
+  section with no section-pick step. Back-out mid-flow and a footer Create Goal
+  afterwards prompts normally (target cleared).
+- **Task 2**: select 2+ goals -> a full-width "Deselect (N)" button sits at the TOP
+  of the multi surface (above the action chips); N matches the count; tapping it
+  clears the selection.
+- **Task 3**: Create Section footer -> the name form's "Create section" is a
+  prominent full-width button; a SINGLE click creates and returns to the grid;
+  Enter in the field also creates.
+- **Task 4**: Combat Achievement create form shows the muted tip about the in-game
+  Combat Achievements log.
+- **Task 5**: Item create picker shows the muted tip about the in-game Collection
+  Log.
+- **Task 6**: Boss picker opens at a sensible height with a SHORT list of common
+  bosses; typing narrows; the results list SCROLLS inside the dock (search field
+  stays put) and the whole surface fits/scrolls within the dock. Confirm at font
+  1.0 AND 1.3. Same scroll behavior for the Item picker with many matches.
+- **Task 7**: select a goal with relations -> the Selected view shows muted
+  "Requires: ..." / "Required by: ..." lines under "Added: <date>"; a goal with no
+  relations shows neither; a long list truncates to "+N more".
+- **Task 8**: from create / edit / section / multi state, drag the top grab handle
+  DOWN (or click it) -> the surface collapses to the resting footer and does not
+  immediately re-expand (selection/section/create all cleared). Footer + divider
+  stay visible; the handle only shows while expanded.

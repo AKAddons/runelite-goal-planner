@@ -1923,6 +1923,9 @@ public class GoalPanel extends PluginPanel
 		// the footer callbacks every refresh (cheap); the handlers own the
 		// open/switch/collapse semantics because they read the create nav state.
 		actionDock.setFooterActions(this::onFooterCreateGoal, this::onFooterCreateSection);
+		// The grab handle's drag-down / click dismiss (Task 8) clears the surface
+		// drivers and rests the dock at the footer from any state.
+		actionDock.setOnDismiss(this::dismissDock);
 
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
@@ -5490,6 +5493,29 @@ public class GoalPanel extends PluginPanel
 	{
 		selectedSectionId = null;
 		dockSectionGroup = null;
+		refreshDock();
+	}
+
+	/** Task 8: dismiss the expanded surface from ANY state back to the resting
+	 *  footer. Clears everything that drives the surface - the goal selection, the
+	 *  section selection, and the create navigation - then collapses. The permanent
+	 *  footer stays visible; refreshDock re-resolves to EMPTY + collapsed. */
+	private void dismissDock()
+	{
+		selectedSectionId = null;
+		dockSectionGroup = null;
+		dockCreateOpen = false;
+		dockCreateNav = CreateNav.GRID;
+		dockCreateType = null;
+		dockPendingCreate = null;
+		dockCreateStep = CreateStep.PICKER;
+		dockCreateTargetSection = null;
+		resetCreatePicks();
+		actionDock.setExpanded(false);
+		// Clearing the goal selection funnels back through refreshDock (which then
+		// resolves EMPTY + collapsed); call it directly too so a no-selection
+		// dismiss (create / section state) still re-renders to the resting footer.
+		api.clearGoalSelection();
 		refreshDock();
 	}
 

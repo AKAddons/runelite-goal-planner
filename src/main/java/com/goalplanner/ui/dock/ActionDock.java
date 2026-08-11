@@ -94,11 +94,22 @@ public class ActionDock extends JPanel
 
 	private final JPanel content = new JPanel();
 	private final JPanel centerHost = new JPanel(new BorderLayout());
+	/** Holds the mounted surface (content strips or a custom view) BELOW the grab
+	 *  handle, so swapping the surface never removes the handle (Task 8). */
+	private final JPanel surfaceHost = new JPanel(new BorderLayout());
 	/** Holds the optional full-width lead button above the strips (MULTI
 	 *  "Deselect (N)"); hidden when no lead is set. */
 	private final JPanel leadHost = new JPanel(new BorderLayout());
 	private final JPanel topRow = strip();
 	private final JPanel bottomRow = strip();
+	/** Drag-down / click-to-dismiss handle pinned at the top of the expanded
+	 *  surface (Task 8). Only visible while expanded (it lives inside centerHost,
+	 *  which hides on collapse). */
+	private final GrabHandle grabHandle = new GrabHandle();
+	/** Panel-supplied dismiss action: clear whatever drives the surface (goal /
+	 *  section selection, create nav) and collapse, so the dock rests at the footer
+	 *  from ANY state. Falls back to a plain collapse when unset. */
+	private Runnable onDismiss = null;
 	// The PERMANENT footer: Create Goal | Create Section, always visible in every
 	// state (ADR-0008 refinement). The contextual surface (create grid/form, a
 	// selected goal's edit view, or the multi-select action strips) renders ABOVE
@@ -132,7 +143,12 @@ public class ActionDock extends JPanel
 		content.add(scrollStrip(bottomRow));
 
 		centerHost.setOpaque(false);
-		centerHost.add(content, BorderLayout.CENTER);
+		// The grab handle stays pinned at the top of the expanded surface; the
+		// swappable surface (strips or a custom view) lives in surfaceHost below it.
+		surfaceHost.setOpaque(false);
+		surfaceHost.add(content, BorderLayout.CENTER);
+		centerHost.add(grabHandle, BorderLayout.NORTH);
+		centerHost.add(surfaceHost, BorderLayout.CENTER);
 
 		buildFooterRow();
 		// Surface above, permanent create footer below.
@@ -152,6 +168,28 @@ public class ActionDock extends JPanel
 	{
 		this.onCreateGoal = onCreateGoal;
 		this.onCreateSection = onCreateSection;
+	}
+
+	/** Wire the drag-down / click dismiss action (Task 8). The panel clears the
+	 *  surface drivers (selection, section, create nav) and collapses; without it
+	 *  the handle just collapses the surface. */
+	public void setOnDismiss(Runnable onDismiss)
+	{
+		this.onDismiss = onDismiss;
+	}
+
+	/** Fired by the grab handle: hand off to the panel-supplied dismiss, or fall
+	 *  back to a plain collapse. */
+	private void triggerDismiss()
+	{
+		if (onDismiss != null)
+		{
+			onDismiss.run();
+		}
+		else
+		{
+			setExpanded(false);
+		}
 	}
 
 	/**
@@ -184,9 +222,9 @@ public class ActionDock extends JPanel
 	{
 		if (customView != null)
 		{
-			// Leave create mode: swap the strips back into the center host.
-			centerHost.removeAll();
-			centerHost.add(content, BorderLayout.CENTER);
+			// Leave create mode: swap the strips back into the surface host.
+			surfaceHost.removeAll();
+			surfaceHost.add(content, BorderLayout.CENTER);
 			customView = null;
 		}
 		this.current = rows;
@@ -239,7 +277,7 @@ public class ActionDock extends JPanel
 	public void setExpandedComponent(JComponent view)
 	{
 		this.customView = view;
-		centerHost.removeAll();
+		surfaceHost.removeAll();
 		JScrollPane sp = new JScrollPane(view,
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -247,7 +285,7 @@ public class ActionDock extends JPanel
 		sp.setOpaque(false);
 		sp.getViewport().setOpaque(false);
 		sp.getVerticalScrollBar().setUnitIncrement(16);
-		centerHost.add(sp, BorderLayout.CENTER);
+		surfaceHost.add(sp, BorderLayout.CENTER);
 		revalidate();
 		repaint();
 	}
@@ -433,11 +471,115 @@ public class ActionDock extends JPanel
 				surface += leadHost.getPreferredSize().height;
 			}
 		}
+		// The grab handle sits above the surface while expanded (Task 8).
+		if (!collapsed)
+		{
+			surface += grabHandle.getPreferredSize().height;
+		}
 		// The permanent footer is always counted; the surface only adds height
 		// while expanded.
 		int footerH = footerRow.getPreferredSize().height;
 		int h = footerH + (collapsed ? 0 : surface);
 		return new Dimension(super.getPreferredSize().width, h);
+	}
+
+	private static final int HANDLE_H = 12;
+	private static final int DISMISS_DRAG_THRESHOLD = 24;
+	private static final Color HANDLE_COLOR = new Color(0x6A, 0x6A, 0x70);
+	private static final Color HANDLE_HOVER = new Color(0x9A, 0x9A, 0xA2);
+
+	/**
+	 * A short centered horizontal bar at the top of the expanded surface (Task 8)
+	 * signalling the dock is dismissable. Dragging it DOWN past a small threshold
+	 * collapses the surface; a plain CLICK is the no-drag fallback. Both route
+	 * through {@link #triggerDismiss()} so the panel can also clear the surface
+	 * drivers (selection / section / create nav), resting the dock at the footer
+	 * from any state.
+	 */
+	private final class GrabHandle extends JPanel
+	{
+		private int pressY = -1;
+		private boolean fired = false;
+		private boolean hover = false;
+
+		GrabHandle()
+		{
+			setOpaque(false);
+			Dimension d = new Dimension(0, HANDLE_H);
+			setPreferredSize(d);
+			setMinimumSize(d);
+			setMaximumSize(new Dimension(Integer.MAX_VALUE, HANDLE_H));
+			setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR));
+			setToolTipText("Drag down or click to dismiss");
+			java.awt.event.MouseAdapter ma = new java.awt.event.MouseAdapter()
+			{
+				@Override public void mousePressed(java.awt.event.MouseEvent e)
+				{
+					pressY = e.getYOnScreen();
+					fired = false;
+				}
+
+				@Override public void mouseDragged(java.awt.event.MouseEvent e)
+				{
+					if (!fired && pressY >= 0
+						&& e.getYOnScreen() - pressY > DISMISS_DRAG_THRESHOLD)
+					{
+						fired = true;
+						triggerDismiss();
+					}
+				}
+
+				@Override public void mouseReleased(java.awt.event.MouseEvent e)
+				{
+					pressY = -1;
+				}
+
+				@Override public void mouseClicked(java.awt.event.MouseEvent e)
+				{
+					// No-drag fallback: a click also collapses.
+					if (!fired)
+					{
+						triggerDismiss();
+					}
+				}
+
+				@Override public void mouseEntered(java.awt.event.MouseEvent e)
+				{
+					hover = true;
+					repaint();
+				}
+
+				@Override public void mouseExited(java.awt.event.MouseEvent e)
+				{
+					hover = false;
+					repaint();
+				}
+			};
+			addMouseListener(ma);
+			addMouseMotionListener(ma);
+		}
+
+		@Override
+		protected void paintComponent(Graphics g)
+		{
+			super.paintComponent(g);
+			Graphics2D g2 = (Graphics2D) g.create();
+			try
+			{
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+					RenderingHints.VALUE_ANTIALIAS_ON);
+				int w = 36;
+				int barH = 4;
+				int x = (getWidth() - w) / 2;
+				int y = (getHeight() - barH) / 2;
+				g2.setColor(hover ? HANDLE_HOVER : HANDLE_COLOR);
+				g2.fillRoundRect(x, y, w, barH, barH, barH);
+			}
+			finally
+			{
+				g2.dispose();
+			}
+		}
 	}
 
 	/**
