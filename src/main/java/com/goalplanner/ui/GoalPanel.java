@@ -5945,31 +5945,10 @@ public class GoalPanel extends PluginPanel
 	/** Top level: [Make repeatable?] [Data] [Relations] [Actions] [Deselect]. */
 	private void buildEditChipsTop(Goal g, JPanel wrap)
 	{
-		final GoalType type = g.getType();
-
-		// Make repeatable stays prominent at the top level (note 5). A plain grind
-		// with no derived slice can spin one off; the SKILL/BOSS paths hand off to
-		// the pre-seeded create flow, the item path keeps its derive chooser (no
-		// single obvious create form for the item->boss-kill slice).
-		if (g.getRepeatChunk() <= 0)
-		{
-			if (type == GoalType.SKILL && g.getSkillName() != null)
-			{
-				wrap.add(chip("Make repeatable", "Set up a per-period XP slice",
-					() -> makeRepeatableFromSkill(g)));
-			}
-			else if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
-			{
-				wrap.add(chip("Make repeatable", "Set up a per-period kill slice",
-					() -> makeRepeatableFromBoss(g)));
-			}
-			else if (g.getItemId() > 0
-				&& !com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId()).isEmpty())
-			{
-				wrap.add(chip("Make repeatable", "Turn this into a per-period kill slice",
-					() -> dockDeriveItemRepeat(g)));
-			}
-		}
+		// "Make repeatable" was removed from the goal card (user, 2026-08-10): now
+		// that a repeatable goal is a first-class create-flow choice (the One-time /
+		// Repeatable / Relative toggles), the per-card derive tunnel is redundant.
+		// makeRepeatableFromSkill/Boss + CreateSeed are now dead - swept in the diet.
 
 		wrap.add(chip("Data", "Optional, color, tags",
 			() -> { dockEditGroup = EditGroup.DATA; refreshEditForm(); }));

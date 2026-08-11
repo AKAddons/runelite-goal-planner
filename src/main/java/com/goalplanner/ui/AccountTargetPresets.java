@@ -34,13 +34,31 @@ public final class AccountTargetPresets
 		int max = metric.getMaxTarget();
 		// Preserve insertion order, drop duplicates.
 		java.util.LinkedHashSet<Integer> out = new java.util.LinkedHashSet<>();
-		for (double f : FRACTIONS)
+
+		int[] milestones = milestonesFor(metric);
+		if (milestones != null)
 		{
-			int v = niceRound((int) Math.round(max * f));
-			v = Math.max(min, Math.min(max, v));
-			if (v > 0 && v < max)
+			// Curated significant milestones read better than fractions-of-max for
+			// metrics like Total Level (594/1188/1782 was meaningless). Clamp into
+			// range, keep those below max, then append max as the last element.
+			for (int m : milestones)
 			{
-				out.add(v);
+				if (m > min && m < max)
+				{
+					out.add(m);
+				}
+			}
+		}
+		else
+		{
+			for (double f : FRACTIONS)
+			{
+				int v = niceRound((int) Math.round(max * f));
+				v = Math.max(min, Math.min(max, v));
+				if (v > 0 && v < max)
+				{
+					out.add(v);
+				}
 			}
 		}
 		out.add(max);
@@ -51,6 +69,22 @@ public final class AccountTargetPresets
 			arr[i++] = v;
 		}
 		return arr;
+	}
+
+	/**
+	 * Curated significant milestones (sub-max; the caller appends the metric's
+	 * max) for metrics where a quarter/half/three-quarter of the ceiling reads as
+	 * an arbitrary number. {@code null} = use the fraction fallback.
+	 */
+	private static int[] milestonesFor(AccountMetric metric)
+	{
+		switch (metric)
+		{
+			// 2277 = all 99s before Sailing (the classic max cape); max (2376) appended.
+			case TOTAL_LEVEL:  return new int[]{ 1500, 2000, 2277 };
+			case QUEST_POINTS: return new int[]{ 100, 200, 300 };
+			default:           return null;
+		}
 	}
 
 	/**
