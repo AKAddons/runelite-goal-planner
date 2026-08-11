@@ -1381,3 +1381,97 @@ not clipped:
 - **Rounded swatches**: the 12 tiles + the Default chip read as tasteful rounded
   swatches at both font scales; hover outline + selected outline both render.
 - **Undo**: each apply (goal / section / bulk) is a single undo step.
+
+## Inline tag surfaces — Add Tag / Remove Tag move INTO the dock (latest)
+
+The **Add tag** / **Drop tags** actions no longer open the `TagPickerDialog`
+(Add) or `MultiSelectDialog` (Remove) Swing dialogs. They now mount an **in-dock
+tag surface** above the permanent footer, built the SAME way as the inline color
+picker (`buildColorSurface` + its nav).
+
+### buildTagAddSurface — existing chips + a new-tag field
+`surfaceShell("Add Tag", ...)` whose body is:
+- A **"< Back"** chip that returns WITHOUT adding anything (`closeTagSurface`).
+- Every existing tag from **`api.queryAllTags()`** as a **rounded tappable chip**
+  (reuses `chip()` → `RoundedPaint.RoundedButton`, tooltip = `label (Category)`).
+  Tapping one **adds it and returns**, preserving the tag's category via
+  `api.addTagWithCategory(id, label, category)`.
+- A **"New tag"** inline `JTextField` (`styleField`) + a small primary **Add**
+  button (Enter in the field also commits). Creating a brand-new label routes
+  through **`api.addTag(id, label)`**.
+
+### buildTagRemoveSurface — removable chips, tap-to-drop, re-render
+`surfaceShell("Remove Tag", ...)`:
+- A **"< Back"** chip (`closeTagSurface`).
+- The removable tags as rounded tappable chips. Tapping one **removes it
+  immediately** and **re-renders the surface in place** (`remountTagSurface` — sets
+  `dockTagMounted=false`, `refreshDock()`, keeps `dockTagMode` set) so several can
+  be dropped without leaving. `Back` returns.
+- **GOAL** chips = `removableTagsFor(g)` (tooltip `Remove label (Category)`,
+  removed by label via `api.removeTag`). **MULTI** chips = the merged
+  `api.getRemovableTagsForSelection(ids)` set (tooltip `Remove label (count)`,
+  removed across the selection via `api.bulkRemoveTagFromGoals(ids, tagId)`).
+
+### New-tag category handling (FLAG)
+The compact Add surface has **no category picker**, so a brand-new free-text label
+goes to the **OTHER (user/custom) category** via `api.addTag` (the public add
+forces OTHER — same as the old bulk path noted "api.addTag would force OTHER").
+This is a deliberate simplification: `TagPickerDialog`'s category dropdown
+(which defaulted to the first enum, BOSS, and let the user pick) is **not**
+mirrored inline. Tapping an **existing** chip still preserves that tag's real
+category. If a category picker is wanted for new tags later, add it to this
+surface; for now new = OTHER.
+
+### Transient nav target (mirror of the color nav)
+- **`TagMode` enum** `{ ADD, REMOVE }` + **`dockTagMode`** — null means the tag
+  overlay is inactive (the analog of `dockColorReturn != null`).
+- **`TagReturn` enum** `{ GOAL, MULTI }` (**`dockTagReturn`**) — which surface Back
+  / apply returns to.
+- **`dockTagTarget`** holds the goal id (GOAL) or the **`TAG_TARGET_MULTI`** marker
+  (MULTI; the selection is read live from `api.getSelectedGoalIds()`).
+- **`dockTagMounted`** guards the `setExpandedComponent` remount.
+- **`refreshDock`** mounts the overlay right after the color block and **returns
+  early** while `dockTagMode != null`, leaving the underlying selection intact.
+  `tagTargetValid()` drops a **stale** overlay (deleted goal, or an emptied MULTI
+  selection).
+- **`closeTagSurface`** clears the overlay and forces `dockEditMounted` /
+  `dockSectionMounted` false so the replaced surface remounts (MULTI rebuilds its
+  strips every refresh). **`remountTagSurface`** re-renders the SAME tag surface
+  after a removal (does not clear `dockTagMode`).
+- **MULTI** add/remove each apply across the selection as **one compound** (one
+  undo) — `beginCompound`/`endCompound` over `api.getSelectedGoalIds()`.
+
+### Rerouted entry points (4)
+- **Goal button-strip "Add tag" / "Drop tags"** (`buildGoalDock`) →
+  `openTagAddSurfaceForGoal(gid)` / `openTagRemoveSurfaceForGoal(gid)`.
+- **Goal edit "Add tag" / "Drop tags" chips** (`buildDataChips`) → same openers
+  (the old `refreshEditForm` follow-up is gone; `closeTagSurface` remounts the edit
+  form).
+- **MULTI bulk "Add tag" / "Drop tags"** (`buildMultiDock`) →
+  `openTagAddSurfaceForMulti()` / `openTagRemoveSurfaceForMulti()`.
+
+### Deferred (intact, swept later)
+`TagPickerDialog`, `MultiSelectDialog`, and `GoalDialogFactory.showBulkAddTagDialog`
+/ `showBulkRemoveTagDialog` stay **INTACT** — still used by
+`GoalContextMenuBuilder` right-click menus. The now-dead `GoalPanel.dockAddTag` /
+`dockRemoveTags` wrappers (which called those dialogs) are left dead and come out
+in the final dialog sweep.
+
+### NEEDS-SCREENSHOT (inline tag pass) — in-client loop
+Verify each at font scale **1.0 AND 1.3**; chips must read as smoothly rounded:
+- **Goal add — existing chip**: select a goal → **Add tag** → existing-tag chips
+  mount above the footer → tap one → it attaches to the goal AND the dock returns
+  to that goal's EDIT form.
+- **Goal add — new tag**: type a fresh label in **New tag** → **Add** (or Enter) →
+  the new tag attaches (OTHER category) and the dock returns.
+- **Goal remove — multi-drop**: a goal with several removable tags → **Drop tags**
+  → tap a chip → it drops and the surface **re-renders** with the rest → drop
+  another → **< Back** returns.
+- **MULTI add across selection**: select several goals → **Add tag** → one chip (or
+  a new label) tags **all** of them as a single undo → returns to the MULTI strips.
+- **MULTI remove across selection**: select several → **Drop tags** → chips show
+  `label (count)` → tap removes across the selection (single undo) and re-renders.
+- **Back is a no-op**: **< Back** on either surface returns without further change.
+- **Rounded chips**: the tag chips + the New-tag field/Add button read as tasteful
+  rounded controls at both font scales.
+- **Undo**: each add/remove (goal + MULTI compound) is a single undo step.
