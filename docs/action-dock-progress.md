@@ -1217,3 +1217,84 @@ toward the type's color.
   Item / Account / Custom / CA) is recognizably the SAME color as the goal cards it
   creates; near-black types (Boss) still show a visible swatch; labels stay legible
   at font 1.0 AND 1.3.
+
+## Glam pass — rounded, artistic corners across the dock (latest)
+
+User ask: "can the buttons and panel be less 90-degree square angles and have some
+artistic nice corners." Replaced the hard 90-degree corners on the dock's
+interactive elements and surface panels with tasteful antialiased ROUNDED corners,
+applied consistently from ONE shared utility. Visual only - no layout/size or
+behavior change. Four commits, each green on `compileJava` + `test` + `checkGlyphs`.
+
+### Shared utility + radius vocabulary
+`com.goalplanner.ui.RoundedPaint` is the single source of rounded corners:
+- **`RADIUS = 8`** - small interactive elements (buttons, tiles, chips, pills,
+  fields). **`SURFACE_RADIUS = 11`** - the larger surface cards + their indicator
+  bars. Two constants keep every corner visually consistent.
+- **`fill(g2, x, y, w, h, radius, color)`** - antialiased rounded-rect fill
+  (`KEY_ANTIALIASING` on). **`fillTop(...)`** - rounded TOP corners, square bottom
+  (for a full-bleed header capping a card).
+- **`RoundedBorder implements Border`** (via `RoundedPaint.border(color, thickness,
+  radius, insets)`) - antialiased rounded stroke that doubles as the component's
+  inner padding.
+- **`RoundedButton extends JButton`** - paints its rounded background from
+  `getBackground()` (so hover / disabled / selection background swaps still work);
+  `contentAreaFilled` + `opaque` are off in the ctor so no square corners bleed. An
+  optional `withTopAccent(color, height)` paints a top stripe clipped to the round
+  shape (the create tiles' type accent).
+- **`RoundedPanel extends JPanel`** - paints a rounded background from
+  `getBackground()`; used for the selectable picker rows.
+
+### What was rounded (RADIUS = 8)
+- **ActionDock**: footer Create Goal / Create Section (`styleCreateButton`), the
+  strip buttons (`makeButton`), the full-width lead button (MULTI "Deselect (N)").
+  The `GrabHandle` pill was already rounded (unchanged); `DockDivider` untouched.
+- **GoalPanel**: create type tiles (`buildTypeTile` - now a RoundedButton with the
+  color tint + a clipped rounded top accent replacing the square MatteBorder rule),
+  the flat chips + account preset quick-fills (`flatButton`), the segmented toggle
+  pills (`buildSegmentedToggle`, rounded selection outline), the Daily/Weekly/Monthly
+  period pills (create + edit), the tappable picker rows (`tappableRow` /
+  `buildPickRow` / `sectionPickRow`, RoundedPanel + rounded border), and text fields
+  (`styleField` - a rounded outline in the new `CREATE_FIELD_STROKE`; the field is
+  made non-opaque so its square fill can't poke square corners past the stroke).
+
+### Surface cards (SURFACE_RADIUS = 11)
+- `surfaceShell` / `plainSurface` now paint a subtle rounded `SURFACE_CARD_BG` card
+  behind the create, edit, and section surfaces (new `ScrollablePanel.asCard()`), so
+  each reads as a card. `buildSectionDock` (surfaceShell) and the edit surface get it
+  for free; the result columns stay transparent.
+- The full-width `indicatorBar` keeps its full-bleed top but rounds its TOP corners
+  (`fillTop`) to cap the card; its bottom stays square to meet the body flush.
+
+### Preserved (unchanged)
+All existing colors, the Boss near-black swatch fallback, hover / disabled /
+selection states, the tile color tint, and the `DockDivider`. Combos (Account /
+Quest / Diary / Boss / tier) are left square - their L&F arrow-button widget does
+not round cleanly; flagged as a deliberate skip.
+
+### NEEDS-SCREENSHOT (glam rounded-corners pass) — in-client loop
+Verify each at font scale **1.0 AND 1.3**; corners must be smooth (antialiased),
+labels must NOT be clipped, and hover / disabled / selection / tint states must be
+preserved:
+- **Footer buttons**: Create Goal / Create Section round smoothly; hover brighten
+  intact; full-width footer corners reveal the dock bg cleanly.
+- **Strip buttons** (`makeButton`) + the MULTI lead "Deselect (N)": rounded, hover
+  and disabled (greyed) states read correctly.
+- **Create type tiles**: rounded body with the color tint preserved and the top
+  accent now carrying the rounded top corners (no square rule poking out); Boss
+  near-black swatch still visible; labels not clipped.
+- **Chips / preset quick-fills** (`flatButton`) + **segmented pills** (One-time /
+  Repeatable, boss modes) + **period pills** (Daily/Weekly/Monthly): rounded; the
+  selected pill's outline is rounded and reads as selected.
+- **Text fields**: rounded outline, cursor/typing/selection unaffected, size
+  unchanged; the dark surface shows through the rounded box (non-opaque). Confirm
+  the outline contrast is acceptable or wants a tweak (`CREATE_FIELD_STROKE`).
+- **Picker rows** (skill/boss/item/CA results, section-pick rows): rounded rows,
+  hover + selected (green) states preserved, no square corners behind the stroke.
+- **Surface cards**: create / edit / section surfaces read as rounded cards; the
+  indicator bar caps the top with matching rounded top corners and meets the body
+  flush; confirm the subtle card fill (`SURFACE_CARD_BG`) is tasteful, not muddy.
+- **Divider intact**: the artistic `DockDivider` still heads the dock and the
+  `GrabHandle` pill is unchanged.
+- **Combos left square**: eyeball whether the square combos clash next to the
+  rounded fields, or are acceptable as-is (arrow-button widgets don't round cleanly).
