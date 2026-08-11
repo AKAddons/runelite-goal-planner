@@ -4089,10 +4089,12 @@ public class GoalPanel extends PluginPanel
 		return createFormScaffold(com.goalplanner.model.GoalType.BOSS, body, null);
 	}
 
-	/** BOSS step B (DETAILS): the target kill count + repeatable disclosure for the
-	 *  picked boss. Back returns to the picker. Boss keeps the existing
-	 *  "More options" repeat disclosure this pass (its repeatable-no-target
-	 *  semantics are not yet confirmed - see the skill segmented toggle, Task 2). */
+	/** BOSS step B (DETAILS): a 3-mode segmented toggle [Total | Relative |
+	 *  Repeatable] for the picked boss (Task 2), mirroring the skill One-time/
+	 *  Repeatable toggle. Total = an absolute kill target; Relative = "N kills beyond
+	 *  my current count" (target = live KC + N); Repeatable = a per-period chunk that
+	 *  lands standalone in the Repeatable section (no choose-section step). Exactly one
+	 *  input set shows at a time. Back returns to the picker. */
 	private JComponent buildBossDetails()
 	{
 		final CreateSeed seed = dockCreateSeed;
@@ -4103,18 +4105,75 @@ public class GoalPanel extends PluginPanel
 		JPanel body = formBody();
 		addFormRow(body, "Boss", pickedHeader(null, boss != null ? boss : "(none)"));
 
-		JTextField kcField = new JTextField(8);
+		// Total (absolute) pane: a single "Target kill count" field.
+		final JTextField kcField = new JTextField(8);
 		styleField(kcField);
 		if (seed != null && seed.targetCount != null)
 		{
 			kcField.setText(Integer.toString(seed.targetCount));
 		}
-		addFormRow(body, "Target kill count", kcField);
+		JPanel totalPane = formBody();
+		addFormRow(totalPane, "Target kill count", kcField);
 
-		// Boss goals support the same repeatable slice as skills; the derived
-		// activity is the selected boss (buildActivityChunk keys off its name). A
-		// seed opens the disclosure pre-checked.
-		RepeatControls repeat = addRepeatDisclosure(body, "Kills each period", seedRepeat);
+		// Relative pane: "N kills beyond my current count". Target is resolved on the
+		// client thread at add time (live KC + N).
+		final JTextField relField = new JTextField(8);
+		styleField(relField);
+		JPanel relativePane = formBody();
+		addFormRow(relativePane, "Kills beyond current", relField);
+		JLabel relNote = new JLabel("Target = your current kill count + this.");
+		relNote.setForeground(CREATE_FG_DIM);
+		relNote.setFont(relNote.getFont().deriveFont(10f));
+		relNote.setAlignmentX(Component.LEFT_ALIGNMENT);
+		relativePane.add(relNote);
+
+		// Repeatable pane: period pills + a per-period kill chunk (no target). Lands
+		// standalone in the Repeatable section.
+		final com.goalplanner.model.RepeatPeriod[] period =
+			{ com.goalplanner.model.RepeatPeriod.DAILY };
+		final JTextField chunkField = new JTextField(8);
+		styleField(chunkField);
+		JPanel repeatPane = formBody();
+		JComponent pills = buildPeriodPills(period);
+		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
+		JLabel periodLbl = new JLabel("Repeat every");
+		periodLbl.setForeground(CREATE_FG_DIM);
+		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
+		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		repeatPane.add(periodLbl);
+		repeatPane.add(Box.createVerticalStrut(2));
+		repeatPane.add(pills);
+		repeatPane.add(Box.createVerticalStrut(6));
+		addFormRow(repeatPane, "Kills each period", chunkField);
+		JLabel lock = new JLabel("Lands in the Repeatable section.");
+		lock.setForeground(CREATE_FG_DIM);
+		lock.setFont(lock.getFont().deriveFont(10f));
+		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
+		repeatPane.add(lock);
+
+		// 0 = Total (default), 1 = Relative, 2 = Repeatable. A repeat seed opens on
+		// the Repeatable segment (note 5).
+		final int[] mode = { seedRepeat ? 2 : 0 };
+		final JPanel[] panes = { totalPane, relativePane, repeatPane };
+		Runnable applyMode = () ->
+		{
+			for (int i = 0; i < panes.length; i++)
+			{
+				panes[i].setVisible(i == mode[0]);
+			}
+			remeasureDock();
+		};
+		JComponent segmented = buildSegmentedToggle(
+			new String[] { "Total", "Relative", "Repeatable" }, mode, applyMode);
+		body.add(segmented);
+		body.add(Box.createVerticalStrut(8));
+		body.add(totalPane);
+		body.add(relativePane);
+		body.add(repeatPane);
+		for (int i = 0; i < panes.length; i++)
+		{
+			panes[i].setVisible(i == mode[0]);
+		}
 
 		Runnable onAdd = () ->
 		{
@@ -4123,32 +4182,24 @@ public class GoalPanel extends PluginPanel
 				warnCreate("Pick a boss first.");
 				return;
 			}
-			final int kc = parsePositiveInt(kcField.getText());
-			if (kc <= 0)
+			if (mode[0] == 2)
 			{
-				warnCreate("Enter a target kill count above zero.");
-				return;
-			}
-			final boolean repeatOn = repeat.isOn();
-			final int chunk = repeatOn ? repeat.amount() : 0;
-			if (repeatOn && chunk <= 0)
-			{
-				warnCreate("Enter how many kills to add each period.");
-				return;
-			}
-			final com.goalplanner.model.RepeatPeriod period = repeat.period();
-			if (repeatOn)
-			{
-				// Standalone repeatable boss goal - lives entirely in the Repeatable
-				// section, no endless parent, no choose-section step (mirrors the skill
-				// repeatable path). Reads the live kill-count varp, so client thread;
-				// one compound for a clean single undo.
+				// Repeatable: standalone per-period chunk. No target, no choose-section
+				// step (mirrors the skill repeatable path). Reads the live kill-count
+				// varp, so client thread; one compound for a clean single undo.
+				final int chunk = parsePositiveInt(chunkField.getText());
+				if (chunk <= 0)
+				{
+					warnCreate("Enter how many kills to add each period.");
+					return;
+				}
+				final com.goalplanner.model.RepeatPeriod p = period[0];
 				runOnClientThread(() ->
 				{
 					api.beginCompound("Add repeatable boss goal");
 					try
 					{
-						api.createStandaloneRepeatActivityGoal(boss, period, chunk);
+						api.createStandaloneRepeatActivityGoal(boss, p, chunk);
 					}
 					finally
 					{
@@ -4157,11 +4208,54 @@ public class GoalPanel extends PluginPanel
 				});
 				navigateCreate(null);
 			}
+			else if (mode[0] == 1)
+			{
+				// Relative: target = live kill count + N. The KC read and the create
+				// share one client-thread compound so the read is never off-thread and
+				// undo reverses the whole gesture. An unknown/0 KC falls back to N.
+				final int delta = parsePositiveInt(relField.getText());
+				if (delta <= 0)
+				{
+					warnCreate("Enter how many kills beyond your current count.");
+					return;
+				}
+				goToSectionPick(sectionId ->
+					runOnClientThread(() ->
+					{
+						api.beginCompound("Add boss goal");
+						try
+						{
+							int currentKc = 0;
+							int varpId = com.goalplanner.data.BossKillData.getVarpId(boss);
+							if (client != null && varpId >= 0)
+							{
+								try { currentKc = client.getVarpValue(varpId); }
+								catch (RuntimeException ignored) { /* unknown -> 0 */ }
+							}
+							int target = com.goalplanner.ui.RelativeTargetResolver
+								.resolveKillCount(currentKc, delta);
+							if (target <= 0) { return; }
+							String id = api.addBossGoal(boss, target);
+							if (id != null) { api.moveGoalToSection(id, sectionId); }
+						}
+						finally
+						{
+							api.endCompound();
+						}
+					}));
+			}
 			else
 			{
-				// addBossGoal seeds boss prereqs, which resolve quest prereqs against
-				// the live Client (resolveQuestRequirements/q.getState), so create + move
-				// run on the client thread - same EDT-client-read latent bug as diary.
+				// Total (absolute): addBossGoal seeds boss prereqs, which resolve quest
+				// prereqs against the live Client (resolveQuestRequirements/q.getState),
+				// so create + move run on the client thread - same EDT-client-read latent
+				// bug as diary.
+				final int kc = parsePositiveInt(kcField.getText());
+				if (kc <= 0)
+				{
+					warnCreate("Enter a target kill count above zero.");
+					return;
+				}
 				goToSectionPick(sectionId ->
 					clientThreadCreateInSection("Add boss goal", sectionId,
 						() -> api.addBossGoal(boss, kc)));
@@ -4622,129 +4716,7 @@ public class GoalPanel extends PluginPanel
 			+ s.substring(1).toLowerCase(java.util.Locale.ROOT);
 	}
 
-	// ----- repeatable progressive-disclosure (ADR-0008) -----
-
-	/** State handle for the "More options -> Repeatable" disclosure, shared by
-	 *  the forms that support a repeating slice. When {@link #isOn()}, the form
-	 *  should create the long-term goal and derive a per-period chunk off it via
-	 *  {@code api.createDerivedRepeatGoal}, landing it in the Repeatable section. */
-	private static final class RepeatControls
-	{
-		private final javax.swing.JCheckBox toggle;
-		private final com.goalplanner.model.RepeatPeriod[] period;
-		private final JTextField amount;
-
-		RepeatControls(javax.swing.JCheckBox toggle,
-			com.goalplanner.model.RepeatPeriod[] period, JTextField amount)
-		{
-			this.toggle = toggle;
-			this.period = period;
-			this.amount = amount;
-		}
-
-		boolean isOn() { return toggle.isSelected(); }
-
-		com.goalplanner.model.RepeatPeriod period() { return period[0]; }
-
-		/** The per-period amount, or -1 when blank / not a positive number. */
-		int amount()
-		{
-			try
-			{
-				return Integer.parseInt(amount.getText().trim().replace(",", ""));
-			}
-			catch (NumberFormatException e)
-			{
-				return -1;
-			}
-		}
-	}
-
-	/** Append a "More options" disclosure to {@code body} that reveals a
-	 *  Repeatable toggle; checking it shows Daily/Weekly/Monthly pills and a
-	 *  per-period amount field. {@code amountLabel} names that field (e.g.
-	 *  "XP each period", "Kills each period"). Returns the state handle. */
-	private RepeatControls addRepeatDisclosure(JPanel body, String amountLabel)
-	{
-		return addRepeatDisclosure(body, amountLabel, false);
-	}
-
-	/** As above, but {@code startOpen} pre-expands the disclosure with Repeatable
-	 *  already checked - used when the create form is pre-seeded for a repeatable
-	 *  goal (note 5). */
-	private RepeatControls addRepeatDisclosure(JPanel body, String amountLabel, boolean startOpen)
-	{
-		final javax.swing.JCheckBox toggle = new javax.swing.JCheckBox("Repeatable");
-		toggle.setOpaque(false);
-		toggle.setForeground(CREATE_FG);
-		toggle.setFont(toggle.getFont().deriveFont(11f));
-		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
-
-		final com.goalplanner.model.RepeatPeriod[] period =
-			{ com.goalplanner.model.RepeatPeriod.DAILY };
-		final JTextField amount = new JTextField(8);
-		styleField(amount);
-
-		// The detail (pills + amount + section note) shows only when Repeatable
-		// is checked.
-		JPanel detail = new JPanel();
-		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
-		detail.setOpaque(false);
-		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
-		detail.setVisible(false);
-		detail.add(Box.createVerticalStrut(4));
-		JComponent pills = buildPeriodPills(period);
-		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
-		detail.add(pills);
-		detail.add(Box.createVerticalStrut(4));
-		addFormRow(detail, amountLabel, amount);
-		JLabel lock = new JLabel("Lands in the Repeatable section.");
-		lock.setForeground(CREATE_FG_DIM);
-		lock.setFont(lock.getFont().deriveFont(10f));
-		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
-		detail.add(lock);
-
-		toggle.addActionListener(e ->
-		{
-			detail.setVisible(toggle.isSelected());
-			remeasureDock();
-		});
-
-		// The revealed options block (toggle + its detail), hidden until the
-		// "More options" link is tapped.
-		JPanel opts = new JPanel();
-		opts.setLayout(new BoxLayout(opts, BoxLayout.Y_AXIS));
-		opts.setOpaque(false);
-		opts.setAlignmentX(Component.LEFT_ALIGNMENT);
-		opts.setVisible(false);
-		opts.add(toggle);
-		opts.add(detail);
-
-		JButton more = flatButton("More options", false);
-		more.setAlignmentX(Component.LEFT_ALIGNMENT);
-		more.addActionListener(e ->
-		{
-			opts.setVisible(!opts.isVisible());
-			more.setText(opts.isVisible() ? "Fewer options" : "More options");
-			remeasureDock();
-		});
-
-		body.add(Box.createVerticalStrut(2));
-		body.add(more);
-		body.add(Box.createVerticalStrut(4));
-		body.add(opts);
-
-		if (startOpen)
-		{
-			// Pre-seeded repeatable create (note 5): reveal the options block with
-			// Repeatable already checked so the pills + amount field are visible.
-			opts.setVisible(true);
-			more.setText("Fewer options");
-			toggle.setSelected(true);
-			detail.setVisible(true);
-		}
-		return new RepeatControls(toggle, period, amount);
-	}
+	// ----- repeatable segmented toggle (ADR-0008) -----
 
 	/** A 2-segment either/or toggle [One-time | Repeatable] in the period-pill
 	 *  visual style (Task 2). Writes the choice to {@code mode[0]} (false =
@@ -4752,28 +4724,44 @@ public class GoalPanel extends PluginPanel
 	 *  the form can swap which input set shows - never both. */
 	private JComponent buildModeToggle(boolean[] mode, Runnable onChange)
 	{
-		JPanel row = new JPanel(new GridLayout(1, 2, 4, 0));
+		final int[] sel = { mode[0] ? 1 : 0 };
+		return buildSegmentedToggle(new String[] { "One-time", "Repeatable" }, sel, () ->
+		{
+			mode[0] = sel[0] == 1;
+			if (onChange != null) onChange.run();
+		});
+	}
+
+	/** An N-segment either/or toggle in the period-pill visual (the general form of
+	 *  {@link #buildModeToggle}). Writes the chosen segment index to {@code sel[0]}
+	 *  and runs {@code onChange} after each switch so the form can swap which input
+	 *  set shows - never more than one. Used for the boss Total/Relative/Repeatable
+	 *  3-mode toggle (Task 2). */
+	private JComponent buildSegmentedToggle(String[] labels, int[] sel, Runnable onChange)
+	{
+		JPanel row = new JPanel(new GridLayout(1, labels.length, 4, 0));
 		row.setOpaque(false);
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-		final JButton[] segs = { new JButton("One-time"), new JButton("Repeatable") };
+		final JButton[] segs = new JButton[labels.length];
 		Runnable refresh = () ->
 		{
 			for (int i = 0; i < segs.length; i++)
 			{
-				boolean sel = (i == 1) == mode[0];
+				boolean on = i == sel[0];
 				JButton b = segs[i];
-				b.setBackground(sel ? CREATE_SEL_BG : CREATE_TILE_BG);
-				b.setForeground(sel ? CREATE_PRIMARY_FG : CREATE_FG);
+				b.setBackground(on ? CREATE_SEL_BG : CREATE_TILE_BG);
+				b.setForeground(on ? CREATE_PRIMARY_FG : CREATE_FG);
 				b.setBorder(BorderFactory.createCompoundBorder(
-					BorderFactory.createLineBorder(sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
+					BorderFactory.createLineBorder(on ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1),
 					new EmptyBorder(4, 10, 4, 10)));
 			}
 		};
-		for (int i = 0; i < segs.length; i++)
+		for (int i = 0; i < labels.length; i++)
 		{
-			final boolean repeatSeg = i == 1;
-			JButton b = segs[i];
+			final int idx = i;
+			JButton b = new JButton(labels[i]);
+			segs[i] = b;
 			b.setOpaque(true);
 			b.setFocusPainted(false);
 			b.setContentAreaFilled(true);
@@ -4781,7 +4769,7 @@ public class GoalPanel extends PluginPanel
 			b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			b.addActionListener(e ->
 			{
-				mode[0] = repeatSeg;
+				sel[0] = idx;
 				refresh.run();
 				if (onChange != null) onChange.run();
 			});

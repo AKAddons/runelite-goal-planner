@@ -965,3 +965,33 @@ compound (clean single undo), mirroring the standalone-repeatable wrap.
 
 **Regression test:** `AddDiaryGoalAllAreasTest` calls `addDiaryGoal` for every
 area x tier the dock offers and asserts a DIARY goal is created each time.
+
+### Task 2 - Boss goals: Total / Relative / Repeatable 3-mode toggle
+
+`buildBossDetails` now opens on a horizontal 3-segment toggle
+**[ Total | Relative | Repeatable ]** (Total active by default), mirroring the
+skill One-time/Repeatable toggle's period-pill visual. Exactly one input set shows
+at a time:
+- **Total** (absolute) - "Target kill count" -> `addBossGoal(boss, kc)` via the
+  client-thread section-pick wrap (Task 1).
+- **Relative** - "Kills beyond current" -> reads the live kill-count varp on the
+  client thread, `target = current + N` (`RelativeTargetResolver.resolveKillCount`),
+  then `addBossGoal(boss, target)`. The KC read + create share one client-thread
+  compound. Unknown/0 KC (never fought / logged out) falls back to `target = N`,
+  no crash.
+- **Repeatable** - period pills + "Kills each period" ->
+  `createStandaloneRepeatActivityGoal(boss, period, chunk)`, standalone in the
+  Repeatable section, **skips** choose-section (same as the skill repeatable path).
+
+Total/Relative go through `goToSectionPick`; Repeatable skips it.
+
+**Refactor:** `buildModeToggle` (2-seg) is now a thin wrapper over a new N-segment
+`buildSegmentedToggle(labels, sel[], onChange)` - single source for the segmented
+pill visual, reused by the boss 3-mode toggle. The old boss "More options ->
+Repeatable" progressive disclosure (`addRepeatDisclosure` + `RepeatControls`) is
+**removed** (dead after this change).
+
+**New API/helper + test:** `RelativeTargetResolver.resolveKillCount(currentKc,
+delta)` (pure), covered by `RelativeTargetResolverTest.KillCount` (add, zero/negative
+current floored to 0, non-positive delta -> -1). The in-game Add dialog
+(`GoalDialogFactory`) is left INTACT.

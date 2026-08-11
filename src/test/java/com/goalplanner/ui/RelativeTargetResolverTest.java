@@ -62,4 +62,44 @@ class RelativeTargetResolverTest
 		}
 	}
 
+	@Nested
+	@DisplayName("resolveKillCount")
+	class KillCount
+	{
+		@Test
+		@DisplayName("adds delta to current kill count")
+		void simpleAdd()
+		{
+			assertEquals(1947, RelativeTargetResolver.resolveKillCount(1847, 100));
+		}
+
+		@Test
+		@DisplayName("unknown current count (0) falls back to the raw delta")
+		void zeroCurrent()
+		{
+			assertEquals(50, RelativeTargetResolver.resolveKillCount(0, 50));
+		}
+
+		@Test
+		@DisplayName("negative current read is floored to 0")
+		void negativeCurrentFloored()
+		{
+			assertEquals(50, RelativeTargetResolver.resolveKillCount(-1, 50));
+		}
+
+		@Test
+		@DisplayName("zero delta returns -1 (invalid)")
+		void zeroDeltaInvalid()
+		{
+			assertEquals(-1, RelativeTargetResolver.resolveKillCount(100, 0));
+		}
+
+		@Test
+		@DisplayName("negative delta returns -1 (invalid)")
+		void negativeDeltaInvalid()
+		{
+			assertEquals(-1, RelativeTargetResolver.resolveKillCount(100, -5));
+		}
+	}
+
 }

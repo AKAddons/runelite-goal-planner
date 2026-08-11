@@ -33,4 +33,21 @@ public final class RelativeTargetResolver
 		return (int) Math.min((long) MAX_SKILL_XP, sum);
 	}
 
+	/**
+	 * Resolve a "get N more kills" delta against the player's current kill count for
+	 * a boss/activity. An unknown or unreadable current count is treated as 0, so the
+	 * target falls back to the raw delta rather than failing - the user still gets a
+	 * goal (used by the dock's boss Relative mode, Task 2).
+	 *
+	 * @param currentKc the player's current kill count (an unknown/negative read is floored to 0)
+	 * @param delta the extra kills the user wants (must be > 0)
+	 * @return resolved absolute kill target, or -1 if delta is non-positive
+	 */
+	public static int resolveKillCount(int currentKc, int delta)
+	{
+		if (delta <= 0) return -1;
+		long sum = (long) Math.max(0, currentKc) + (long) delta;
+		return (int) Math.min((long) Integer.MAX_VALUE, sum);
+	}
+
 }
