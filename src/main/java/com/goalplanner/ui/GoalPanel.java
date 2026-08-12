@@ -5521,6 +5521,7 @@ public class GoalPanel extends PluginPanel
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
 
 		// Complete / Reopen as a checkbox heading the form (ADR-0008).
+		JCheckBox done = null;
 		if (absolute)
 		{
 			// An absolute goal ALWAYS shows the checkbox but greyed + disabled: it
@@ -5530,7 +5531,7 @@ public class GoalPanel extends PluginPanel
 			// render regardless of enabled state and reuse the same ShapeIcons check the
 			// card selection UI uses, so the edit view agrees with g.isComplete(): a
 			// visible green tick when complete, a visible empty box when not.
-			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
+			done = new JCheckBox(complete ? "Completed" : "Complete");
 			done.setOpaque(false);
 			done.setForeground(CREATE_FG_DIM);
 			done.setFont(done.getFont().deriveFont(11f));
@@ -5539,24 +5540,23 @@ public class GoalPanel extends PluginPanel
 			done.setDisabledIcon(ShapeIcons.checkboxEmpty(14, ABSOLUTE_CHECK_EMPTY));
 			done.setDisabledSelectedIcon(ShapeIcons.checkboxChecked(14, ABSOLUTE_CHECK_DONE));
 			done.setToolTipText("Tracked by game progress - can't be set manually.");
-			inner.add(done, BorderLayout.NORTH);
 		}
 		// Toggling completion changes the goal's structure, so force the form to
 		// re-render. Omitted for an auto-tracked goal that is not yet complete (no
 		// manual completion).
 		else if (complete || manual)
 		{
-			JCheckBox done = new JCheckBox(complete ? "Completed" : "Complete");
-			done.setOpaque(false);
-			done.setForeground(CREATE_FG);
-			done.setFont(done.getFont().deriveFont(11f));
-			done.setSelected(complete);
-			done.setToolTipText(complete
+			final JCheckBox toggle = new JCheckBox(complete ? "Completed" : "Complete");
+			toggle.setOpaque(false);
+			toggle.setForeground(CREATE_FG);
+			toggle.setFont(toggle.getFont().deriveFont(11f));
+			toggle.setSelected(complete);
+			toggle.setToolTipText(complete
 				? "Mark incomplete and let tracking re-derive it"
 				: "Mark this goal complete");
-			done.addActionListener(e ->
+			toggle.addActionListener(e ->
 			{
-				if (done.isSelected())
+				if (toggle.isSelected())
 				{
 					api.markGoalComplete(gid);
 				}
@@ -5566,49 +5566,68 @@ public class GoalPanel extends PluginPanel
 				}
 				refreshEditForm();
 			});
-			inner.add(done, BorderLayout.NORTH);
+			done = toggle;
 		}
+
+		// Part 1: a full-width "Deselect" button pinned at the TOP of the edit
+		// surface (above the form), styled identically to the MULTI "Deselect (N)"
+		// lead bar so single + multi match. The completion checkbox, when present,
+		// sits just below it.
+		JButton deselect = com.goalplanner.ui.dock.ActionDock.leadButton(
+			"Deselect", "Clear the selection", () -> api.clearGoalSelection());
+		deselect.setAlignmentX(Component.LEFT_ALIGNMENT);
+		deselect.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			deselect.getPreferredSize().height));
+		JPanel north = new JPanel();
+		north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
+		north.setOpaque(false);
+		north.add(deselect);
+		if (done != null)
+		{
+			done.setAlignmentX(Component.LEFT_ALIGNMENT);
+			north.add(Box.createVerticalStrut(6));
+			north.add(done);
+		}
+		inner.add(north, BorderLayout.NORTH);
 
 		inner.add(body, BorderLayout.CENTER);
 
-		// "Added <date>" metadata + read-only relation lines (Task 7) sit just above
-		// the action chips. Added is hidden for goals created before the createdAt
-		// field existed (they deserialize as 0); relation lines are omitted when the
-		// goal has no requirements / dependents.
+		// Flattened selected view: "Added <date>", then the Data chips (flat, no
+		// drill-in), then the read-only relation lines, then the remaining drill-in
+		// groups - top to bottom. Added is hidden for goals created before the
+		// createdAt field existed (they deserialize as 0); relation lines are omitted
+		// when the goal has no requirements / dependents.
 		JComponent added = buildAddedLine(g);
 		JComponent relations = buildRelationsLines(g);
+
+		JPanel dataRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		dataRow.setOpaque(false);
+		dataRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		buildDataChips(g, dataRow);
+
 		JComponent chips = buildEditChips(g);
-		JComponent meta = null;
-		if (added != null || relations != null)
+
+		JPanel south = new JPanel();
+		south.setLayout(new BoxLayout(south, BoxLayout.Y_AXIS));
+		south.setOpaque(false);
+		south.setAlignmentX(Component.LEFT_ALIGNMENT);
+		if (added != null)
 		{
-			JPanel m = new JPanel();
-			m.setLayout(new BoxLayout(m, BoxLayout.Y_AXIS));
-			m.setOpaque(false);
-			m.setAlignmentX(Component.LEFT_ALIGNMENT);
-			if (added != null)
-			{
-				added.setAlignmentX(Component.LEFT_ALIGNMENT);
-				m.add(added);
-			}
-			if (relations != null)
-			{
-				relations.setAlignmentX(Component.LEFT_ALIGNMENT);
-				m.add(relations);
-			}
-			meta = m;
+			added.setAlignmentX(Component.LEFT_ALIGNMENT);
+			south.add(added);
+			south.add(Box.createVerticalStrut(4));
 		}
-		if (meta != null)
+		south.add(dataRow);
+		if (relations != null)
 		{
-			JPanel south = new JPanel(new BorderLayout(0, 4));
-			south.setOpaque(false);
-			south.add(meta, BorderLayout.NORTH);
-			south.add(chips, BorderLayout.CENTER);
-			inner.add(south, BorderLayout.SOUTH);
+			relations.setAlignmentX(Component.LEFT_ALIGNMENT);
+			south.add(Box.createVerticalStrut(4));
+			south.add(relations);
 		}
-		else
-		{
-			inner.add(chips, BorderLayout.SOUTH);
-		}
+		chips.setAlignmentX(Component.LEFT_ALIGNMENT);
+		south.add(Box.createVerticalStrut(4));
+		south.add(chips);
+		inner.add(south, BorderLayout.SOUTH);
 		return surfaceShell("Selected", false, inner);
 	}
 
@@ -7325,7 +7344,9 @@ public class GoalPanel extends PluginPanel
 		return wrap;
 	}
 
-	/** Top level: [Make repeatable?] [Data] [Relations] [Actions] [Deselect]. */
+	/** Top level: [Relations] [Actions]. Data is now a flat chip row rendered
+	 *  directly in the main edit view (no drill-in), and Deselect moved to a full-
+	 *  width button pinned at the TOP of the edit surface. */
 	private void buildEditChipsTop(Goal g, JPanel wrap)
 	{
 		// "Make repeatable" was removed from the goal card (user, 2026-08-10): now
@@ -7333,13 +7354,10 @@ public class GoalPanel extends PluginPanel
 		// Repeatable / Relative toggles), the per-card derive tunnel is redundant.
 		// makeRepeatableFromSkill/Boss + CreateSeed are now dead - swept in the diet.
 
-		wrap.add(chip("Data", "Optional, color, tags",
-			() -> { dockEditGroup = EditGroup.DATA; refreshEditForm(); }));
 		wrap.add(chip("Relations", "Requirements and dependents",
 			() -> { dockEditGroup = EditGroup.RELATIONS; refreshEditForm(); }));
 		wrap.add(chip("Actions", "Move, copy, share, remove",
 			() -> { dockEditGroup = EditGroup.ACTIONS; refreshEditForm(); }));
-		wrap.add(chip("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
 	}
 
 	/** Data group: optional/required, color, tags, restore defaults. */

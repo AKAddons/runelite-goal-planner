@@ -251,8 +251,20 @@ public class ActionDock extends JPanel
 			leadHost.setVisible(false);
 			return;
 		}
-		JButton b = new RoundedPaint.RoundedButton(lead.label);
-		b.setToolTipText(lead.tooltip);
+		JButton b = leadButton(lead.label, lead.tooltip, lead.action);
+		leadHost.add(b, BorderLayout.CENTER);
+		leadHost.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+			b.getPreferredSize().height + 4));
+		leadHost.setVisible(true);
+	}
+
+	/** Build a full-width "lead" button styled like the MULTI "Deselect (N)" bar
+	 *  pinned above the strips. Shared so the single-goal edit surface can pin an
+	 *  identical Deselect at its top (single + multi match). */
+	public static JButton leadButton(String label, String tooltip, Runnable action)
+	{
+		final JButton b = new RoundedPaint.RoundedButton(label);
+		b.setToolTipText(tooltip);
 		b.setBackground(BTN_BG);
 		b.setForeground(BTN_FG);
 		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 11f));
@@ -263,11 +275,11 @@ public class ActionDock extends JPanel
 			@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(BTN_HOVER); }
 			@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(BTN_BG); }
 		});
-		b.addActionListener(e -> lead.action.run());
-		leadHost.add(b, BorderLayout.CENTER);
-		leadHost.setMaximumSize(new Dimension(Integer.MAX_VALUE,
-			b.getPreferredSize().height + 4));
-		leadHost.setVisible(true);
+		if (action != null)
+		{
+			b.addActionListener(e -> action.run());
+		}
+		return b;
 	}
 
 	/**
