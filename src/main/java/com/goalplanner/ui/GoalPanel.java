@@ -5593,12 +5593,11 @@ public class GoalPanel extends PluginPanel
 		inner.add(body, BorderLayout.CENTER);
 
 		// Flattened selected view: "Added <date>", then the Data chips (flat, no
-		// drill-in), then the read-only relation lines, then the remaining drill-in
-		// groups - top to bottom. Added is hidden for goals created before the
-		// createdAt field existed (they deserialize as 0); relation lines are omitted
-		// when the goal has no requirements / dependents.
+		// drill-in), then the itemized Relations block (list + Add relation), then
+		// the remaining Actions drill-in group - top to bottom. Added is hidden for
+		// goals created before the createdAt field existed (they deserialize as 0).
 		JComponent added = buildAddedLine(g);
-		JComponent relations = buildRelationsLines(g);
+		JComponent relations = buildRelationsBlock(g);
 
 		JPanel dataRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
 		dataRow.setOpaque(false);
@@ -5654,38 +5653,105 @@ public class GoalPanel extends PluginPanel
 		return l;
 	}
 
-	/** Task 7: read-only muted "Requires: A, B" / "Required by: C" lines for the
-	 *  Selected view, resolving relation ids to goal names. Returns null when the
-	 *  goal has neither requirements nor dependents; a single line is omitted when
-	 *  that relation set is empty. Display-only - the Relations chip group still
-	 *  does the editing. */
-	private JComponent buildRelationsLines(Goal g)
+	/** Part 3: the itemized Relations block for the flattened Selected view. Each
+	 *  relation renders as its own row - a direction arrow (up = Requires, down =
+	 *  Required by), the related goal's name, and a small X that removes THAT single
+	 *  edge (one undo, then re-render). Below the list sits a "+ Add relation"
+	 *  button that reveals two direction buttons (Requires... / Required by...),
+	 *  each entering relation-pick mode. Returns null only for a completed goal with
+	 *  no relations (nothing to show and none can be added); an incomplete goal with
+	 *  none still shows just "+ Add relation". */
+	private JComponent buildRelationsBlock(Goal g)
 	{
-		String requires = relationSummary(api.getRequirements(g.getId()));
-		String requiredBy = relationSummary(api.getDependents(g.getId()));
-		if (requires == null && requiredBy == null)
+		final String gid = g.getId();
+		final boolean complete = g.isComplete();
+		java.util.List<String> reqs = api.getRequirements(gid);
+		java.util.List<String> deps = api.getDependents(gid);
+		boolean hasAny = (reqs != null && !reqs.isEmpty()) || (deps != null && !deps.isEmpty());
+		// Relations can only be added while the goal is incomplete (mirrors the old
+		// Requires / Required-by chips, which were gated on !complete).
+		final boolean canAdd = !complete;
+		if (!hasAny && !canAdd)
 		{
 			return null;
 		}
+
 		JPanel p = new JPanel();
 		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
 		p.setOpaque(false);
 		p.setAlignmentX(Component.LEFT_ALIGNMENT);
-		if (requires != null)
+
+		// Requires edges: up arrow (this goal sits ON TOP of what it needs). The X
+		// drops the requirement this goal holds: removeRequirement(thisGoal, reqId).
+		if (reqs != null)
 		{
-			// Requires -> an up arrow (this goal sits ON TOP of what it needs).
-			p.add(relationRow(ShapeIcons.upTriangle(9, RELATION_REQ_COLOR),
-				"Requires: " + requires));
-		}
-		if (requiredBy != null)
-		{
-			if (requires != null)
+			for (final String reqId : reqs)
 			{
-				p.add(Box.createVerticalStrut(3));
+				String name = relationName(reqId);
+				if (name == null)
+				{
+					continue;
+				}
+				p.add(relationEdgeRow(ShapeIcons.upTriangle(9, RELATION_REQ_COLOR), name,
+					"Remove this requirement",
+					() -> { api.removeRequirement(gid, reqId); refreshEditForm(); }));
 			}
-			// Required by -> a down arrow (things below depend on this goal).
-			p.add(relationRow(ShapeIcons.downTriangle(9, RELATION_DEP_COLOR),
-				"Required by: " + requiredBy));
+		}
+		// Required-by edges: down arrow (things below depend on this goal). The
+		// dependent is the one that HOLDS the requirement, so the X drops it from the
+		// dependent's side: removeRequirement(dependentId, thisGoal).
+		if (deps != null)
+		{
+			for (final String depId : deps)
+			{
+				String name = relationName(depId);
+				if (name == null)
+				{
+					continue;
+				}
+				p.add(relationEdgeRow(ShapeIcons.downTriangle(9, RELATION_DEP_COLOR), name,
+					"Remove this dependent",
+					() -> { api.removeRequirement(depId, gid); refreshEditForm(); }));
+			}
+		}
+
+		if (canAdd)
+		{
+			// "+ Add relation" reveals two direction buttons IN PLACE via a local
+			// swap. Picking a direction enters relation-pick mode (which rebuilds the
+			// whole surface), so the reveal never needs to survive a refresh.
+			final JPanel addHost = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+			addHost.setOpaque(false);
+			addHost.setAlignmentX(Component.LEFT_ALIGNMENT);
+			final Runnable[] showCollapsed = new Runnable[1];
+			final Runnable showExpanded = () ->
+			{
+				addHost.removeAll();
+				addHost.add(chip("Requires...", "Then click a goal to require it",
+					() -> enterRelationMode(gid, true)));
+				addHost.add(chip("Required by...", "Then click a goal that should require this",
+					() -> enterRelationMode(gid, false)));
+				addHost.add(chip("Cancel", "Keep relations as they are",
+					() -> showCollapsed[0].run()));
+				addHost.revalidate();
+				addHost.repaint();
+			};
+			showCollapsed[0] = () ->
+			{
+				addHost.removeAll();
+				addHost.add(chip("+ Add relation", "Add a requirement or dependent",
+					showExpanded));
+				addHost.revalidate();
+				addHost.repaint();
+			};
+			showCollapsed[0].run();
+			addHost.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+				addHost.getPreferredSize().height));
+			if (hasAny)
+			{
+				p.add(Box.createVerticalStrut(4));
+			}
+			p.add(addHost);
 		}
 		return p;
 	}
@@ -5693,46 +5759,35 @@ public class GoalPanel extends PluginPanel
 	private static final Color RELATION_REQ_COLOR = new Color(0x8F, 0xBF, 0x8F);
 	private static final Color RELATION_DEP_COLOR = new Color(0xD0, 0xA8, 0x5A);
 
-	/** A relation line: a direction arrow + full-strength label at readable size
-	 *  (larger than the footnote tips, per user feedback). */
-	private JComponent relationRow(javax.swing.Icon icon, String text)
+	/** One relation edge: a direction arrow + the related goal's name on the left,
+	 *  and a small X on the right that removes just that edge. */
+	private JComponent relationEdgeRow(javax.swing.Icon icon, String name,
+		String removeTip, Runnable onRemove)
 	{
-		JLabel l = new JLabel(text, icon, SwingConstants.LEFT);
+		JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setOpaque(false);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		JLabel l = new JLabel(name, icon, SwingConstants.LEFT);
 		l.setForeground(CREATE_FG);
 		l.setFont(l.getFont().deriveFont(12f));
 		l.setIconTextGap(6);
-		l.setAlignmentX(Component.LEFT_ALIGNMENT);
-		return l;
+		row.add(l, BorderLayout.CENTER);
+		JButton x = flatButton("X", false);
+		x.setToolTipText(removeTip);
+		x.setFont(x.getFont().deriveFont(Font.BOLD, 10f));
+		x.setBorder(new EmptyBorder(1, 7, 1, 7));
+		x.addActionListener(e -> onRemove.run());
+		row.add(x, BorderLayout.EAST);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+		return row;
 	}
 
-	/** Resolve relation ids to a compact, name-based summary; null when empty.
-	 *  Caps the list at 3 names then appends "+N more" so a long relation set stays
-	 *  compact. Ids with no live goal (a dangling relation) are skipped. */
-	private String relationSummary(java.util.List<String> ids)
+	/** Resolve a relation id to its goal name; null when the id has no live goal
+	 *  (a dangling relation), so it is skipped from the list. */
+	private String relationName(String id)
 	{
-		if (ids == null || ids.isEmpty())
-		{
-			return null;
-		}
-		java.util.List<String> names = new ArrayList<>();
-		for (String id : ids)
-		{
-			Goal r = goalStore.findGoalById(id);
-			if (r != null && r.getName() != null)
-			{
-				names.add(r.getName());
-			}
-		}
-		if (names.isEmpty())
-		{
-			return null;
-		}
-		final int max = 3;
-		if (names.size() <= max)
-		{
-			return String.join(", ", names);
-		}
-		return String.join(", ", names.subList(0, max)) + ", +" + (names.size() - max) + " more";
+		Goal r = goalStore.findGoalById(id);
+		return (r != null && r.getName() != null) ? r.getName() : null;
 	}
 
 	/** Re-render the mounted edit form (after a structural change) by dropping
@@ -7307,20 +7362,21 @@ public class GoalPanel extends PluginPanel
 
 	// ----- edit-mode lifecycle action chips -----
 
-	/** The drill-in groups the edit chips tree into (note 6). */
-	private enum EditGroup { DATA, RELATIONS, ACTIONS }
+	/** The drill-in groups the edit chips tree into. After the flatten pass (Data
+	 *  is now a direct chip row and Relations an itemized inline list), ACTIONS is
+	 *  the single remaining group - "only go deeper when necessary". */
+	private enum EditGroup { ACTIONS }
 
 	/** The drill-in groups the SECTION dock chips tree into. EDIT = rename/color/
 	 *  delete; LAYOUT = nesting + archive override; SHARE = copy/save codes. */
 	private enum SectionGroup { EDIT, LAYOUT, SHARE }
 
-	/** The lifecycle + relations chips for the edit form, grouped into a drill-in
-	 *  tree (note 6): the top level shows an optional Make-repeatable chip, three
-	 *  group chips (Data / Relations / Actions), and Deselect. Tapping a group
-	 *  swaps the row for that group's member chips plus a "< Back". Membership and
-	 *  gating are unchanged from the old flat list; every chip REUSES its existing
-	 *  handler. Group navigation is held in {@link #dockEditGroup} and re-rendered
-	 *  via {@link #refreshEditForm()}. */
+	/** The remaining drill-in group for the flattened edit form: at the top level
+	 *  it is a single [Actions] chip; tapping it swaps the row for the action member
+	 *  chips plus a "< Back". Data now renders as a direct chip row and Relations as
+	 *  an itemized inline list (both above this), so only Actions still drills in.
+	 *  Group navigation is held in {@link #dockEditGroup} and re-rendered via
+	 *  {@link #refreshEditForm()}. */
 	private JComponent buildEditChips(Goal g)
 	{
 		JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
@@ -7328,36 +7384,19 @@ public class GoalPanel extends PluginPanel
 
 		if (dockEditGroup == null)
 		{
-			buildEditChipsTop(g, wrap);
+			wrap.add(chip("Actions", "Move, copy, share, remove",
+				() -> { dockEditGroup = EditGroup.ACTIONS; refreshEditForm(); }));
 			return wrap;
 		}
 
-		wrap.add(chip("< Back", "Back to groups",
+		wrap.add(chip("< Back", "Back to the goal",
 			() -> { dockEditGroup = null; refreshEditForm(); }));
 		switch (dockEditGroup)
 		{
-			case DATA:      buildDataChips(g, wrap); break;
-			case RELATIONS: buildRelationsChips(g, wrap); break;
 			case ACTIONS:   buildActionsChips(g, wrap); break;
 			default:        break;
 		}
 		return wrap;
-	}
-
-	/** Top level: [Relations] [Actions]. Data is now a flat chip row rendered
-	 *  directly in the main edit view (no drill-in), and Deselect moved to a full-
-	 *  width button pinned at the TOP of the edit surface. */
-	private void buildEditChipsTop(Goal g, JPanel wrap)
-	{
-		// "Make repeatable" was removed from the goal card (user, 2026-08-10): now
-		// that a repeatable goal is a first-class create-flow choice (the One-time /
-		// Repeatable / Relative toggles), the per-card derive tunnel is redundant.
-		// makeRepeatableFromSkill/Boss + CreateSeed are now dead - swept in the diet.
-
-		wrap.add(chip("Relations", "Requirements and dependents",
-			() -> { dockEditGroup = EditGroup.RELATIONS; refreshEditForm(); }));
-		wrap.add(chip("Actions", "Move, copy, share, remove",
-			() -> { dockEditGroup = EditGroup.ACTIONS; refreshEditForm(); }));
 	}
 
 	/** Data group: optional/required, color, tags, restore defaults. */
@@ -7389,37 +7428,11 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	/** Relations group: requires, required by, drop reqs/dependents, seed reqs. */
-	private void buildRelationsChips(Goal g, JPanel wrap)
-	{
-		final String gid = g.getId();
-		final boolean complete = g.isComplete();
-
-		if (!complete)
-		{
-			wrap.add(chip("Requires", "Then click another goal to require it",
-				() -> enterRelationMode(gid, true)));
-			wrap.add(chip("Required by", "Then click another goal that should require this",
-				() -> enterRelationMode(gid, false)));
-			if (!api.getRequirements(gid).isEmpty())
-			{
-				wrap.add(chip("Drop reqs", "Remove requirements of this goal",
-					() -> { dockRemoveRequirements(g); refreshEditForm(); }));
-			}
-			if (!api.getDependents(gid).isEmpty())
-			{
-				wrap.add(chip("Drop dependents", "Remove dependents of this goal",
-					() -> { dockRemoveDependents(g); refreshEditForm(); }));
-			}
-		}
-		if (goalHasSeedableReqs(g))
-		{
-			wrap.add(chip("Add reqs to section",
-				"Add this goal's requirements into its section", () -> dockSeedReqs(g)));
-		}
-	}
-
-	/** Actions group: move/copy to section, Loadout Lab, share codes, remove. */
+	/** Actions group: move/copy to section, seed reqs, Loadout Lab, share, remove.
+	 *  The Requires / Required-by / Drop-reqs / Drop-dependents chips moved out of a
+	 *  drill-in group: relations are now edited inline on the itemized list (per-row
+	 *  X + "+ Add relation"). "Add reqs to section" (the seed action) landed here as
+	 *  the one relation-adjacent action with no inline-list home. */
 	private void buildActionsChips(Goal g, JPanel wrap)
 	{
 		final String gid = g.getId();
@@ -7429,6 +7442,12 @@ public class GoalPanel extends PluginPanel
 			() -> dockMoveToSection(g)));
 		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
 			() -> dockDuplicateToSection(g)));
+
+		if (goalHasSeedableReqs(g))
+		{
+			wrap.add(chip("Add reqs to section",
+				"Add this goal's requirements into its section", () -> dockSeedReqs(g)));
+		}
 
 		if (type == GoalType.BOSS && g.getBossName() != null && !g.getBossName().isEmpty())
 		{
