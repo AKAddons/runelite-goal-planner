@@ -195,6 +195,19 @@ public class GoalPanel extends PluginPanel
 	 *  grid (also still on the header Options popup). */
 	private boolean dockSavedActive = false;
 	private boolean dockSavedMounted = false;
+	/** Which flavour of the inline "pick a section" overlay (inline-move pass) is
+	 *  mounted: MOVE / COPY act on one goal (the GOAL edit surface), BULK_MOVE /
+	 *  BULK_COPY on the captured multi-selection. Null = the overlay is not active
+	 *  (mirrors {@link #dockColorReturn}). */
+	private enum MoveMode { MOVE, COPY, BULK_MOVE, BULK_COPY }
+	/** Transient inline move/copy-to-section overlay (inline-move pass). It replaces
+	 *  the old {@code dockChooser} JOptionPane popups: when {@link #dockMoveMode} is
+	 *  non-null the dock mounts {@link #buildMoveSurface} above the permanent footer,
+	 *  leaving the underlying selection intact so picking (or Back) returns to it.
+	 *  {@link #dockMoveGoalIds} is captured at open time. */
+	private MoveMode dockMoveMode = null;
+	private java.util.LinkedHashSet<String> dockMoveGoalIds = null;
+	private boolean dockMoveMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -2142,6 +2155,31 @@ public class GoalPanel extends PluginPanel
 			return;
 		}
 
+		// Inline move / copy-to-section overlay (inline-move pass): the section
+		// picker that replaced the JOptionPane chooser. Same overlay pattern as the
+		// color / tag / share surfaces - the selection stays put underneath, and
+		// picking (or Back) remounts it. A target that vanished (its goals deleted,
+		// or the multi-selection cleared) drops the overlay.
+		if (dockMoveMode != null)
+		{
+			if (!moveTargetValid())
+			{
+				dockMoveMode = null;
+				dockMoveGoalIds = null;
+				dockMoveMounted = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockMoveMounted)
+				{
+					actionDock.setExpandedComponent(buildMoveSurface());
+					dockMoveMounted = true;
+				}
+				return;
+			}
+		}
+
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
 		// type grid, forget the mounted create view, and rest the create surface
@@ -2490,9 +2528,9 @@ public class GoalPanel extends PluginPanel
 		// Move / duplicate / restore.
 		bottom.add(sep("organize"));
 		bottom.add(item("Move to section", "Move this goal to another section",
-			() -> dockMoveToSection(g)));
+			() -> openMoveSurface(MoveMode.MOVE, java.util.Collections.singletonList(gid))));
 		bottom.add(item("Copy to section", "Duplicate this goal into another section",
-			() -> dockDuplicateToSection(g)));
+			() -> openMoveSurface(MoveMode.COPY, java.util.Collections.singletonList(gid))));
 		if (api.isGoalOverridden(gid))
 		{
 			bottom.add(item("Restore defaults", "Reset tags and color to their defaults",
@@ -2636,9 +2674,9 @@ public class GoalPanel extends PluginPanel
 		// Move / duplicate / restore.
 		bottom.add(sep("organize"));
 		bottom.add(item("Move to section", "Move the selected goals to another section",
-			() -> dockBulkMoveToSection(goals, sel)));
+			() -> openMoveSurface(MoveMode.BULK_MOVE, sel)));
 		bottom.add(item("Copy to section", "Duplicate the selected goals into another section",
-			() -> dockBulkDuplicateToSection(goals, sel)));
+			() -> openMoveSurface(MoveMode.BULK_COPY, sel)));
 		boolean anyOverridden = false;
 		for (String id : sel)
 		{
@@ -3424,6 +3462,166 @@ public class GoalPanel extends PluginPanel
 		dockChooser("Duplicate " + goals.size() + " to section", labels, actions);
 	}
 
+	// --- Inline move / copy-to-section overlay (inline-move pass) --------------
+	// Move / Copy to section used to open the dockChooser JOptionPane above (kept
+	// intact but dead, like the menus). They now open an IN-DOCK section picker -
+	// the SAME surface the create flow's landing step uses (sectionPickSurface) -
+	// mounted above the permanent footer. The underlying selection stays put, so
+	// picking a section (or Back) returns to the goal / multi surface.
+
+	/** Open the inline section picker for the given mode over the captured ids. */
+	private void openMoveSurface(MoveMode mode, java.util.Collection<String> goalIds)
+	{
+		dockMoveMode = mode;
+		dockMoveGoalIds = new java.util.LinkedHashSet<>(goalIds);
+		dockMoveMounted = false;
+		refreshDock();
+	}
+
+	/** Close the move overlay and return to the surface it belongs to (also the
+	 *  path after a section is picked). Mirrors {@link #closeColorSurface}: the
+	 *  overlay replaced the expanded component, so force the edit surface to
+	 *  remount; MULTI rebuilds its strips every refresh and needs no guard drop. */
+	private void closeMoveSurface()
+	{
+		dockMoveMode = null;
+		dockMoveGoalIds = null;
+		dockMoveMounted = false;
+		dockEditMounted = false;
+		refreshDock();
+	}
+
+	/** Whether the move overlay still has at least one live goal to act on, so
+	 *  refreshDock can drop a stale overlay instead of mounting an empty surface. */
+	private boolean moveTargetValid()
+	{
+		if (dockMoveMode == null || dockMoveGoalIds == null)
+		{
+			return false;
+		}
+		for (String id : dockMoveGoalIds)
+		{
+			if (goalStore.findGoalById(id) != null)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** Build the inline move/copy section picker for {@link #dockMoveMode}. The
+	 *  destination list mirrors the old dialogs exactly: user sections where EVERY
+	 *  target already lives are skipped, and the "Default (Incomplete / Completed)"
+	 *  row is offered only when at least one target lives outside the built-ins. */
+	private JComponent buildMoveSurface()
+	{
+		final MoveMode mode = dockMoveMode;
+		final boolean copy = mode == MoveMode.COPY || mode == MoveMode.BULK_COPY;
+		final boolean bulk = mode == MoveMode.BULK_MOVE || mode == MoveMode.BULK_COPY;
+		final java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+		final java.util.List<Goal> goals = new ArrayList<>();
+		for (String id : dockMoveGoalIds)
+		{
+			Goal g = goalStore.findGoalById(id);
+			if (g != null)
+			{
+				ids.add(id);
+				goals.add(g);
+			}
+		}
+
+		String incompleteId = null;
+		String completedId = null;
+		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if ("INCOMPLETE".equals(sv.kind))
+			{
+				incompleteId = sv.id;
+			}
+			if ("COMPLETED".equals(sv.kind))
+			{
+				completedId = sv.id;
+			}
+		}
+
+		// Skip any user section that ALL targets already live in.
+		java.util.Set<String> exclude = new java.util.HashSet<>();
+		for (com.goalplanner.api.SectionView sv : allSections)
+		{
+			if (sv.builtIn)
+			{
+				continue;
+			}
+			boolean allAlreadyHere = !goals.isEmpty();
+			for (Goal g : goals)
+			{
+				if (!sv.id.equals(g.getSectionId()))
+				{
+					allAlreadyHere = false;
+					break;
+				}
+			}
+			if (allAlreadyHere)
+			{
+				exclude.add(sv.id);
+			}
+		}
+
+		boolean allInDefault = !goals.isEmpty();
+		for (Goal g : goals)
+		{
+			String sid = g.getSectionId();
+			if (sid == null || (!sid.equals(incompleteId) && !sid.equals(completedId)))
+			{
+				allInDefault = false;
+				break;
+			}
+		}
+
+		final java.util.function.Consumer<String> onPick = destId ->
+		{
+			if (copy)
+			{
+				api.duplicateGoalsToSection(ids, destId);
+			}
+			else if (bulk)
+			{
+				api.bulkMoveGoalsToSection(ids, destId);
+			}
+			else
+			{
+				api.moveGoalToSection(ids.iterator().next(), destId);
+			}
+			closeMoveSurface();
+		};
+		final java.util.function.Consumer<String> onDefault = allInDefault ? null : incId ->
+		{
+			if (copy)
+			{
+				api.duplicateGoalsToSection(ids, incId);
+			}
+			else
+			{
+				api.moveGoalsToDefault(ids);
+			}
+			closeMoveSurface();
+		};
+
+		final String verb = copy ? "Copy" : "Move";
+		final String title = bulk
+			? verb + " " + goals.size() + " to section"
+			: verb + " to section";
+		final String prompt = bulk
+			? (copy ? "Copy these " + goals.size() + " goals into:"
+				: "Move these " + goals.size() + " goals to:")
+			: (copy ? "Copy this goal into:" : "Move this goal to:");
+		return sectionPickSurface(title, prompt,
+			copy ? "Back without copying" : "Back without moving",
+			"Default (Incomplete / Completed)", onDefault, exclude, onPick,
+			verb + " to new section", this::closeMoveSurface);
+	}
+
 	private void promptAddSectionFromDock()
 	{
 		String input = javax.swing.JOptionPane.showInputDialog(this,
@@ -3812,13 +4010,47 @@ public class GoalPanel extends PluginPanel
 	 *  are NOT preserved across Back - forward flow is the norm; known limitation). */
 	private JComponent buildSectionPickForm()
 	{
+		return sectionPickSurface("Choose section", "Choose a section for this goal",
+			"Back to the goal types (this goal is not created yet)",
+			"Incomplete (default)", this::chooseSection,
+			java.util.Collections.emptySet(), this::chooseSection,
+			null, () -> navigateCreate(null));
+	}
+
+	/**
+	 * The shared "pick a section" surface: a prompt line, a highlighted default row
+	 * (the built-in Incomplete section), a tappable row per user section, and a
+	 * "+ New section" row that reveals an inline name field creating-and-picking in
+	 * one go. Headed by a title and a "< Back".
+	 *
+	 * <p>Backs both the create flow's landing-section step
+	 * ({@link #buildSectionPickForm}) and the inline move/copy overlay
+	 * ({@link #buildMoveSurface}), so the two look and behave identically.
+	 *
+	 * @param title        header title
+	 * @param prompt       dim one-liner above the rows
+	 * @param backTip      tooltip on "< Back"
+	 * @param defaultLabel label for the built-in Incomplete row
+	 * @param onDefault    handed the built-in Incomplete section's id; null omits
+	 *                     the default row entirely (e.g. everything is already there)
+	 * @param exclude      section ids to leave out of the list (e.g. the goal's own)
+	 * @param onPick       handed a user section's id, or a freshly created section's
+	 * @param newSectionCompound undo description wrapping "create section + onPick"
+	 *                     so the pair is one undo; null leaves them separate
+	 * @param onBack       run when "< Back" is pressed
+	 */
+	private JComponent sectionPickSurface(String title, String prompt, String backTip,
+		String defaultLabel, java.util.function.Consumer<String> onDefault,
+		java.util.Set<String> exclude, java.util.function.Consumer<String> onPick,
+		String newSectionCompound, Runnable onBack)
+	{
 		JPanel body = formBody();
 
-		JLabel prompt = new JLabel("Choose a section for this goal");
-		prompt.setForeground(CREATE_FG_DIM);
-		prompt.setFont(prompt.getFont().deriveFont(10f));
-		prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
-		body.add(prompt);
+		JLabel promptLabel = new JLabel(prompt);
+		promptLabel.setForeground(CREATE_FG_DIM);
+		promptLabel.setFont(promptLabel.getFont().deriveFont(10f));
+		promptLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(promptLabel);
 		body.add(Box.createVerticalStrut(4));
 
 		String incompleteId = null;
@@ -3829,23 +4061,23 @@ public class GoalPanel extends PluginPanel
 			{
 				incompleteId = sv.id;
 			}
-			else if (!sv.builtIn)
+			else if (!sv.builtIn && !exclude.contains(sv.id))
 			{
 				userSections.add(sv);
 			}
 		}
 
 		// Default: the built-in Incomplete section, offered first + highlighted.
-		if (incompleteId != null)
+		if (incompleteId != null && onDefault != null)
 		{
 			final String defId = incompleteId;
-			body.add(sectionPickRow("Incomplete (default)", true, () -> chooseSection(defId)));
+			body.add(sectionPickRow(defaultLabel, true, () -> onDefault.accept(defId)));
 			body.add(Box.createVerticalStrut(3));
 		}
 		for (com.goalplanner.api.SectionView sv : userSections)
 		{
 			final String destId = sv.id;
-			body.add(sectionPickRow(sv.name, false, () -> chooseSection(destId)));
+			body.add(sectionPickRow(sv.name, false, () -> onPick.accept(destId)));
 			body.add(Box.createVerticalStrut(3));
 		}
 
@@ -3864,10 +4096,27 @@ public class GoalPanel extends PluginPanel
 			{
 				return;
 			}
-			String newId = api.createSection(name);
-			if (newId != null)
+			// The move/copy overlay folds "create the section" and "move into it"
+			// into ONE undo entry; the create flow passes null and keeps its own
+			// (the goal-create path compounds itself downstream).
+			if (newSectionCompound != null)
 			{
-				chooseSection(newId);
+				api.beginCompound(newSectionCompound);
+			}
+			try
+			{
+				String newId = api.createSection(name);
+				if (newId != null)
+				{
+					onPick.accept(newId);
+				}
+			}
+			finally
+			{
+				if (newSectionCompound != null)
+				{
+					api.endCompound();
+				}
 			}
 		};
 		newName.addActionListener(e -> createUse.run());
@@ -3899,13 +4148,13 @@ public class GoalPanel extends PluginPanel
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
 		JButton back = flatButton("< Back", false);
-		back.setToolTipText("Back to the goal types (this goal is not created yet)");
-		back.addActionListener(e -> navigateCreate(null));
-		JLabel title = new JLabel("Choose section");
-		title.setForeground(CREATE_FG);
-		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
+		back.setToolTipText(backTip);
+		back.addActionListener(e -> onBack.run());
+		JLabel titleLabel = new JLabel(title);
+		titleLabel.setForeground(CREATE_FG);
+		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 12f));
 		header.add(back, BorderLayout.WEST);
-		header.add(title, BorderLayout.CENTER);
+		header.add(titleLabel, BorderLayout.CENTER);
 		inner.add(header, BorderLayout.NORTH);
 		inner.add(body, BorderLayout.CENTER);
 
@@ -7927,9 +8176,9 @@ public class GoalPanel extends PluginPanel
 		final GoalType type = g.getType();
 
 		wrap.add(chip("Move to section", "Move this goal to another section",
-			() -> dockMoveToSection(g)));
+			() -> openMoveSurface(MoveMode.MOVE, java.util.Collections.singletonList(gid))));
 		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
-			() -> dockDuplicateToSection(g)));
+			() -> openMoveSurface(MoveMode.COPY, java.util.Collections.singletonList(gid))));
 
 		if (goalHasSeedableReqs(g))
 		{

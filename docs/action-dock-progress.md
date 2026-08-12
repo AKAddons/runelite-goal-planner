@@ -1833,3 +1833,70 @@ Verify each at font scale **1.0 AND 1.3**; rounded controls must read cleanly.
   saved goals yet."
 - **Gating**: with share unavailable, neither button shows; with share but no
   library, only **Import** shows.
+
+---
+
+## Inline "Move / Copy to section" — the chooser moves INTO the dock (Task 4)
+
+`dockMoveToSection` / `dockDuplicateToSection` / `dockBulkMoveToSection` /
+`dockBulkDuplicateToSection` opened a `dockChooser` **JOptionPane**, and
+`promptNewSectionThen` opened a second `showInputDialog` on top of it. Both are now
+an **inline section picker** mounted above the permanent footer — the SAME surface
+the create flow's landing step uses.
+
+### Shared component: `sectionPickSurface(...)`
+
+`buildSectionPickForm`'s body was extracted into
+
+```
+sectionPickSurface(title, prompt, backTip,
+                   defaultLabel, Consumer<String> onDefault,   // null = no default row
+                   Set<String> exclude,
+                   Consumer<String> onPick,
+                   String newSectionCompound,                  // null = no wrapping
+                   Runnable onBack)
+```
+
+which renders: dim prompt line, a highlighted **default row** (the built-in
+Incomplete section id is handed to `onDefault`), one `sectionPickRow` per user
+section (minus `exclude`), then the **"+ New section"** disclosure with its inline
+name field + **Create & use**. `buildSectionPickForm` is now a 6-line call into it
+(`onDefault`/`onPick` = `chooseSection`, `newSectionCompound` = null so the create
+flow's own compounding is untouched), so the create step and the move overlay can
+never drift apart.
+
+`newSectionCompound` is the one behavioural addition: the move overlay passes
+`"Move to new section"` / `"Copy to new section"`, so **create section + move** is a
+single undo entry (the old `promptNewSectionThen` left two).
+
+### Transient nav target (mirror of the color/tag/share overlays)
+
+- `MoveMode { MOVE, COPY, BULK_MOVE, BULK_COPY }` + `dockMoveMode`,
+  `dockMoveGoalIds` (captured `LinkedHashSet` at open time), `dockMoveMounted`.
+- `refreshDock` mounts `buildMoveSurface()` above the footer and **returns early**
+  while `dockMoveMode != null`, after the saved-plans block. `moveTargetValid()`
+  (at least one captured goal still exists) drops a stale overlay.
+- `openMoveSurface(mode, ids)` / `closeMoveSurface()` — close also clears
+  `dockEditMounted` so the GOAL surface remounts (MULTI rebuilds every refresh).
+
+### Destination list — parity with the old dialogs
+
+`buildMoveSurface` reproduces the old filters in ONE code path for all four modes:
+
+- a user section where **every** target already lives is excluded;
+- the **"Default (Incomplete / Completed)"** row is offered only when at least one
+  target lives outside the two built-ins (`onDefault == null` otherwise);
+- picking runs the existing API — `moveGoalToSection` (MOVE),
+  `bulkMoveGoalsToSection` (BULK_MOVE), `duplicateGoalsToSection` (COPY /
+  BULK_COPY) — each already one command = one undo — then `closeMoveSurface()`;
+- Default row → `moveGoalsToDefault(ids)` for a move, `duplicateGoalsToSection(ids,
+  incompleteId)` for a copy (exactly what the dialogs did).
+
+### Rerouted entry points (3 sites, 6 chips)
+
+- GOAL action strip "Move to section" / "Copy to section" → `MoveMode.MOVE/COPY`
+- MULTI strip "Move to section" / "Copy to section" → `MoveMode.BULK_MOVE/BULK_COPY`
+- `buildActionsChips` (Selected-view Actions chips) "Move / Copy to section"
+
+The four `dock*ToSection` dialog methods and `promptNewSectionThen` are **left
+intact but dead**, for the final dialog sweep.
