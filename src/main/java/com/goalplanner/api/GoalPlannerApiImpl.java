@@ -256,6 +256,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public String createStandaloneRepeatSkillGoal(Skill skill, com.goalplanner.model.RepeatPeriod period, int chunk) { String id = creationService.createStandaloneRepeatSkillGoal(skill, period, chunk); selectAfterCreate(id); return id; }
 	@Override public String createStandaloneRepeatActivityGoal(String bossName, com.goalplanner.model.RepeatPeriod period, int chunk) { String id = creationService.createStandaloneRepeatActivityGoal(bossName, period, chunk); selectAfterCreate(id); return id; }
 	@Override public boolean setGoalRepeatChunk(String goalId, int newChunk) { return mutationService.setGoalRepeatChunk(goalId, newChunk); }
+	@Override public boolean convertGoalToRepeatable(String goalId, com.goalplanner.model.RepeatPeriod period, int chunk) { return mutationService.convertGoalToRepeatable(goalId, period, chunk); }
+	@Override public boolean convertGoalToOneTime(String goalId, int targetValue) { return mutationService.convertGoalToOneTime(goalId, targetValue); }
 	/** Plugin-internal: re-import protection (per-character import history). */
 	public boolean wasCodeImported(String canonicalCode) { return goalStore.wasCodeImported(canonicalCode); }
 	public void rememberImportedCode(String canonicalCode) { goalStore.rememberImportedCode(canonicalCode); }

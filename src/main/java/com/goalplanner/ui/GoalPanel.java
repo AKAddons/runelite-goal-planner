@@ -4866,11 +4866,17 @@ public class GoalPanel extends PluginPanel
 		relativePane.add(relNote);
 
 		// Repeatable pane: period pills + a per-period kill chunk (no target). Lands
-		// standalone in the Repeatable section.
+		// standalone in the Repeatable section. In update mode it doubles as the
+		// repeat EDITOR (pre-filled with the goal's own period + chunk), which is why
+		// this form needs no separate addUpdateRepeatBlock.
 		final com.goalplanner.model.RepeatPeriod[] period =
-			{ com.goalplanner.model.RepeatPeriod.DAILY };
+			{ initialPeriod(editing) };
 		final JTextField chunkField = new JTextField(8);
 		styleField(chunkField);
+		if (derived)
+		{
+			chunkField.setText(Integer.toString(editing.getRepeatChunk()));
+		}
 		JPanel repeatPane = formBody();
 		JComponent pills = buildPeriodPills(period);
 		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -4897,8 +4903,11 @@ public class GoalPanel extends PluginPanel
 		addPrereqs.setToolTipText("Also add unmet requirements (skills/quests/items) as linked goals");
 
 		// 0 = Total (default), 1 = Relative, 2 = Repeatable. A repeat seed opens on
-		// the Repeatable segment (note 5).
-		final int[] mode = { seedRepeat ? 2 : 0 };
+		// the Repeatable segment (note 5); update mode opens on the goal's CURRENT
+		// mode - a per-period chunk is Repeatable, anything else is Total ("Relative"
+		// is an input convenience that resolves to an absolute target on save, so a
+		// plain goal always opens on Total).
+		final int[] mode = { seedRepeat || derived ? 2 : 0 };
 		final JPanel[] panes = { totalPane, relativePane, repeatPane };
 		Runnable applyMode = () ->
 		{
@@ -4906,20 +4915,19 @@ public class GoalPanel extends PluginPanel
 			{
 				panes[i].setVisible(i == mode[0]);
 			}
-			addPrereqs.setVisible(mode[0] != 2);
+			// Prerequisite seeding is a CREATE-only choice (an existing goal already
+			// made it), and it never applies to a per-period chunk.
+			addPrereqs.setVisible(editing == null && mode[0] != 2);
 			remeasureDock();
 		};
-		// Total / Relative / Repeatable are CREATE choices (Relative resolves against
-		// the live kill count at add time; Repeatable derives a standalone slice), so
-		// update mode drops the segment bar, the create repeat pane and the
-		// prerequisite-seeding option, and edits the goal as it is.
-		if (editing == null)
-		{
-			JComponent segmented = buildSegmentedToggle(
-				new String[] { "Total", "Relative", "Repeatable" }, mode, applyMode);
-			body.add(segmented);
-			body.add(Box.createVerticalStrut(8));
-		}
+		// The segment bar shows in BOTH modes: update mode CONVERTS the goal between
+		// Total / Relative / Repeatable on save (convertGoalToOneTime /
+		// convertGoalToRepeatable), so a goal is no longer stuck in the mode it was
+		// created in.
+		JComponent segmented = buildSegmentedToggle(
+			new String[] { "Total", "Relative", "Repeatable" }, mode, applyMode);
+		body.add(segmented);
+		body.add(Box.createVerticalStrut(8));
 		body.add(totalPane);
 		body.add(relativePane);
 		body.add(repeatPane);
@@ -4927,13 +4935,9 @@ public class GoalPanel extends PluginPanel
 		body.add(addPrereqs);
 		for (int i = 0; i < panes.length; i++)
 		{
-			panes[i].setVisible(editing == null ? i == mode[0] : (i == 0 && !derived));
+			panes[i].setVisible(i == mode[0]);
 		}
 		addPrereqs.setVisible(editing == null && mode[0] != 2);
-		// Update mode: the shared repeat editor replaces the create Repeatable pane.
-		final java.util.function.BooleanSupplier repeatApply = editing == null
-			? () -> true
-			: addUpdateRepeatBlock(body, editing, "Kills each period");
 
 		Runnable onAdd = () ->
 		{
@@ -4944,22 +4948,72 @@ public class GoalPanel extends PluginPanel
 			}
 			if (editing != null)
 			{
-				final int newKc = derived ? 0 : parsePositiveInt(kcField.getText());
-				if (!derived && newKc <= 0)
+				final String editId = editing.getId();
+				if (mode[0] == 2)
+				{
+					// -> Repeatable: set the period + per-period chunk. One API call
+					// does both writes plus the live re-base (convertGoalToRepeatable);
+					// setGoalRepeat alone would be REFUSED on a chunk-less boss goal.
+					final int chunk = parsePositiveInt(chunkField.getText());
+					if (chunk <= 0)
+					{
+						warnCreate("Enter how many kills to add each period.");
+						return;
+					}
+					final com.goalplanner.model.RepeatPeriod p = period[0];
+					if (derived && editing.getRepeatEvery() == p
+						&& editing.getRepeatChunk() == chunk)
+					{
+						closeEditGoalForm();
+						return;
+					}
+					// Re-bases against the live kill count -> client thread.
+					saveGoalEditOnClientThread(() -> api.convertGoalToRepeatable(editId, p, chunk),
+						"Could not read your kill count - try again once you are logged in.");
+					return;
+				}
+				if (mode[0] == 1)
+				{
+					// -> Relative: resolve live KC + N into an absolute target, then
+					// apply it the same way Total does (converting out of Repeatable
+					// first when the goal was one).
+					final int delta = parsePositiveInt(relField.getText());
+					if (delta <= 0)
+					{
+						warnCreate("Enter how many kills beyond your current count.");
+						return;
+					}
+					saveGoalEditOnClientThread(() ->
+					{
+						int currentKc = 0;
+						int varpId = com.goalplanner.data.BossKillData.getVarpId(boss);
+						if (client != null && varpId >= 0)
+						{
+							try { currentKc = client.getVarpValue(varpId); }
+							catch (RuntimeException ignored) { /* unknown -> 0 */ }
+						}
+						int target = com.goalplanner.ui.RelativeTargetResolver
+							.resolveKillCount(currentKc, delta);
+						if (target <= 0)
+						{
+							return false;
+						}
+						applyEditedTarget(editId, target, derived);
+						return true;
+					}, "Could not read your kill count - try again once you are logged in.");
+					return;
+				}
+				// -> Total: an absolute kill target. A repeatable goal is converted
+				// back (period AND chunk cleared) rather than just retargeted.
+				final int newKc = parsePositiveInt(kcField.getText());
+				if (newKc <= 0)
 				{
 					warnCreate("Enter a target kill count above zero.");
 					return;
 				}
 				saveGoalEdit(() ->
 				{
-					if (!repeatApply.getAsBoolean())
-					{
-						return false;
-					}
-					if (!derived)
-					{
-						api.changeTarget(editing.getId(), newKc);
-					}
+					applyEditedTarget(editId, newKc, derived);
 					return true;
 				});
 				return;
@@ -6461,6 +6515,64 @@ public class GoalPanel extends PluginPanel
 		if (ok)
 		{
 			closeEditGoalForm();
+		}
+	}
+
+	/**
+	 * Client-thread variant of {@link #saveGoalEdit}: a save whose mode conversion
+	 * reads live client state (a repeatable re-bases off the live counter, Relative
+	 * resolves live + N) must not run on the EDT - an EDT client read trips
+	 * RuneLite's {@code -ea} client-thread assert and silently does nothing.
+	 *
+	 * <p>Input is validated on the EDT first; this runs the compound on the client
+	 * thread and comes back to the EDT to close the form. {@code apply} returning
+	 * false means the live read failed - the form stays open with {@code warning}
+	 * shown, so a conversion is never a silent no-op. Callers short-circuit the
+	 * "nothing actually changed" case themselves, so false always means failure.
+	 */
+	private void saveGoalEditOnClientThread(java.util.function.BooleanSupplier apply,
+		String warning)
+	{
+		runOnClientThread(() ->
+		{
+			boolean ok = false;
+			api.beginCompound("Edit goal");
+			try
+			{
+				ok = apply.getAsBoolean();
+			}
+			finally
+			{
+				api.endCompound();
+			}
+			final boolean done = ok;
+			javax.swing.SwingUtilities.invokeLater(() ->
+			{
+				if (done)
+				{
+					closeEditGoalForm();
+				}
+				else
+				{
+					warnCreate(warning);
+				}
+			});
+		});
+	}
+
+	/** Point an edited goal at an absolute target. A goal that is CURRENTLY a
+	 *  per-period chunk is converted back to one-time first (clearing the period AND
+	 *  the chunk, and letting reconcile return it to its home section);
+	 *  {@code changeTarget} alone would leave it repeating with a hand-set target. */
+	private void applyEditedTarget(String goalId, int target, boolean wasRepeating)
+	{
+		if (wasRepeating)
+		{
+			api.convertGoalToOneTime(goalId, target);
+		}
+		else
+		{
+			api.changeTarget(goalId, target);
 		}
 	}
 

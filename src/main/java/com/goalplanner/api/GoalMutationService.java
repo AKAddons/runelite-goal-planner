@@ -329,6 +329,241 @@ class GoalMutationService
 		});
 	}
 
+	/**
+	 * Convert a plain auto-tracked goal INTO a repeatable per-period chunk, in
+	 * place - the "Edit goal" form's mode switch (Total/One-time -> Repeatable).
+	 *
+	 * <p>Neither existing setter can do this on its own: {@link #setGoalRepeat}
+	 * refuses a non-CUSTOM type unless it already carries a chunk, and
+	 * {@link #setGoalRepeatChunk} refuses a goal that has no chunk yet - so a plain
+	 * SKILL/BOSS goal could only ever be re-created as a repeatable, never
+	 * converted. This does both writes plus the re-base as ONE undoable command.
+	 *
+	 * <p>The result is exactly the shape {@code createStandaloneRepeat*Goal}
+	 * produces: target = {@code live + chunk} (an auto-tracked goal reads a
+	 * cumulative counter, so a bare chunk would complete on the next tick), the
+	 * matching chunk name/description, {@code lastPeriodKey = 0} so the next reset
+	 * check adopts the current period, and a reconcile that pulls it into the
+	 * Repeatable section.
+	 *
+	 * <p><b>Reads live client state</b> (skill XP / kill-count varp), so callers
+	 * MUST be on the client thread. Returns false if that read fails rather than
+	 * writing a bogus target.
+	 *
+	 * @return true if the goal was converted
+	 */
+	boolean convertGoalToRepeatable(String goalId, com.goalplanner.model.RepeatPeriod period,
+		int chunk)
+	{
+		log.debug("API.public convertGoalToRepeatable(goalId={}, period={}, chunk={})",
+			goalId, period, chunk);
+		if (goalId == null || period == null || !period.isRepeating() || chunk <= 0) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		// Only the auto-tracked types with a live counter to re-base against. CUSTOM
+		// repeats through setGoalRepeat (no chunk, nothing to re-base).
+		if (g.getType() != GoalType.SKILL && g.getType() != GoalType.BOSS) return false;
+		if (g.getRepeatEvery() == period && g.getRepeatChunk() == chunk) return false; // no-op
+
+		Integer live = readLiveCounter(g);
+		if (live == null) return false;
+
+		final int liveValue = live;
+		final com.goalplanner.model.RepeatPeriod prevPeriod = g.getRepeatEvery();
+		final int prevChunk = g.getRepeatChunk();
+		final int prevTarget = g.getTargetValue();
+		final int prevCurrent = g.getCurrentValue();
+		final long prevKey = g.getLastPeriodKey();
+		final String prevName = g.getName();
+		final String prevDescription = g.getDescription();
+		final long prevCompletedAt = g.getCompletedAt();
+		final com.goalplanner.model.GoalStatus prevStatus = g.getStatus();
+		final String prevSectionId = g.getSectionId();
+		final String prevArchivedFrom = g.getArchivedFromSectionId();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(chunk);
+				goal.setRepeatEvery(period);
+				goal.setLastPeriodKey(0L);
+				goal.setCurrentValue(liveValue);
+				goal.setTargetValue(liveValue + chunk);
+				renameChunkGoal(goal, chunk);
+				if (goal.getType() == GoalType.SKILL)
+				{
+					goal.setDescription(period.getLabel());
+				}
+				reevaluateCompletion(goal);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public boolean revert()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(prevChunk);
+				goal.setRepeatEvery(prevPeriod);
+				goal.setLastPeriodKey(prevKey);
+				goal.setCurrentValue(prevCurrent);
+				goal.setTargetValue(prevTarget);
+				goal.setName(prevName);
+				goal.setDescription(prevDescription);
+				goal.setCompletedAt(prevCompletedAt);
+				goal.setStatus(prevStatus);
+				goal.setSectionId(prevSectionId);
+				goal.setArchivedFromSectionId(prevArchivedFrom);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public String getDescription()
+			{
+				return "Repeat " + period.getLabel().toLowerCase(java.util.Locale.ROOT) + ": "
+					+ prevName;
+			}
+		});
+	}
+
+	/**
+	 * Convert a repeatable goal back into a ONE-TIME goal with an absolute target -
+	 * the "Edit goal" form's mode switch (Repeatable -> Total/One-time).
+	 *
+	 * <p>The mirror of {@link #convertGoalToRepeatable}, and equally impossible with
+	 * the existing setters: {@code setGoalRepeat(id, NONE)} clears the period but
+	 * leaves {@code repeatChunk} behind (the goal still reads as a derived slice and
+	 * keeps its re-based target), and {@code setGoalRepeatChunk} rejects a chunk of
+	 * zero. This clears BOTH, restores the plain name/description, sets the absolute
+	 * target and reconciles - the reconcile returns the goal to the section it was
+	 * pulled out of - as one undoable command. Reads no client state.
+	 *
+	 * @return true if the goal was converted
+	 */
+	boolean convertGoalToOneTime(String goalId, int targetValue)
+	{
+		log.debug("API.public convertGoalToOneTime(goalId={}, targetValue={})",
+			goalId, targetValue);
+		if (goalId == null || targetValue <= 0) return false;
+		Goal g = api.findGoal(goalId);
+		if (g == null) return false;
+		// Nothing to convert: already a plain goal. Changing only the target is
+		// changeTarget's job, so this is a no-op rather than a silent retarget.
+		if (!g.isRepeating() && g.getRepeatChunk() <= 0) return false;
+
+		final com.goalplanner.model.RepeatPeriod prevPeriod = g.getRepeatEvery();
+		final int prevChunk = g.getRepeatChunk();
+		final int prevTarget = g.getTargetValue();
+		final long prevKey = g.getLastPeriodKey();
+		final String prevName = g.getName();
+		final String prevDescription = g.getDescription();
+		final long prevCompletedAt = g.getCompletedAt();
+		final com.goalplanner.model.GoalStatus prevStatus = g.getStatus();
+		final String prevSectionId = g.getSectionId();
+		final String prevArchivedFrom = g.getArchivedFromSectionId();
+		return api.executeCommand(new com.goalplanner.command.Command()
+		{
+			@Override public boolean apply()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(0);
+				goal.setRepeatEvery(com.goalplanner.model.RepeatPeriod.NONE);
+				goal.setLastPeriodKey(0L);
+				goal.setTargetValue(targetValue);
+				renamePlainGoal(goal, targetValue);
+				reevaluateCompletion(goal);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public boolean revert()
+			{
+				Goal goal = api.findGoal(goalId);
+				if (goal == null) return false;
+				goal.setRepeatChunk(prevChunk);
+				goal.setRepeatEvery(prevPeriod);
+				goal.setLastPeriodKey(prevKey);
+				goal.setTargetValue(prevTarget);
+				goal.setName(prevName);
+				goal.setDescription(prevDescription);
+				goal.setCompletedAt(prevCompletedAt);
+				goal.setStatus(prevStatus);
+				goal.setSectionId(prevSectionId);
+				goal.setArchivedFromSectionId(prevArchivedFrom);
+				api.goalStore.updateGoal(goal);
+				api.goalStore.reconcileDerivedSections();
+				return true;
+			}
+			@Override public String getDescription() { return "Stop repeating: " + prevName; }
+		});
+	}
+
+	/** The live cumulative counter a repeatable chunk re-bases against: skill XP for
+	 *  a SKILL goal, the kill-count varp for a BOSS goal. Null when it cannot be
+	 *  read (no client, unknown skill/boss, or a failed read) - the caller then
+	 *  refuses rather than writing a target the tracker would instantly satisfy.
+	 *  MUST be called on the client thread. */
+	private Integer readLiveCounter(Goal g)
+	{
+		try
+		{
+			if (api.client == null) return null;
+			if (g.getType() == GoalType.SKILL)
+			{
+				if (g.getSkillName() == null) return null;
+				net.runelite.api.Skill skill = net.runelite.api.Skill.valueOf(g.getSkillName());
+				int xp = api.client.getSkillExperience(skill);
+				return xp < 0 ? null : xp;
+			}
+			if (g.getType() == GoalType.BOSS)
+			{
+				if (g.getBossName() == null) return null;
+				int varpId = com.goalplanner.data.BossKillData.getVarpId(g.getBossName());
+				if (varpId < 0) return null;
+				int kc = api.client.getVarpValue(varpId);
+				return kc < 0 ? null : kc;
+			}
+			return null;
+		}
+		catch (IllegalArgumentException e)
+		{
+			return null;
+		}
+		catch (RuntimeException e)
+		{
+			log.warn("convert: could not read the live counter for {}: {}",
+				g.getId(), e.toString());
+			return null;
+		}
+	}
+
+	/** The inverse of {@link #renameChunkGoal}: put a converted-back goal's plain
+	 *  title on it ("Woodcutting - Level 92", "Zulrah") so the card stops reading
+	 *  like a per-period slice. */
+	private void renamePlainGoal(Goal g, int targetValue)
+	{
+		if (g.getType() == GoalType.SKILL && g.getSkillName() != null)
+		{
+			try
+			{
+				net.runelite.api.Skill skill = net.runelite.api.Skill.valueOf(g.getSkillName());
+				g.setName(skill.getName() + " - Level "
+					+ net.runelite.api.Experience.getLevelForXp(
+						Math.min(targetValue, MAX_XP)));
+				g.setDescription("");
+			}
+			catch (IllegalArgumentException ignored) {}
+		}
+		else if (g.getType() == GoalType.BOSS && g.getBossName() != null)
+		{
+			g.setName(g.getBossName());
+			g.setDescription(targetValue + " kills");
+		}
+	}
+
 	/** Keep the card title honest when the amount changes ("Prayer +50K XP"). */
 	private void renameChunkGoal(Goal g, int chunk)
 	{

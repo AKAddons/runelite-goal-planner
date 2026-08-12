@@ -1953,3 +1953,90 @@ explanation. Two shared tooltip constants: `COMPLETE_RELATION_TIP`,
 Tests (`GoalPlannerApiImplTest`): `removeRequirement` refuses an OR-only edge while
 `getDependents` still lists it, and the AND-edge happy path drops + restores on one
 undo.
+
+---
+
+## Edit mode can CHANGE a goal's mode (Tasks 1 + 2)
+
+Update mode used to HIDE the create-only mode toggles, so a goal was stuck in the
+mode it was created in: a plain boss goal could never become repeatable, and a
+repeatable one could never be turned back. The toggles now render in update mode
+too, pre-selected to the goal's current mode, and saving CONVERTS the goal in place
+as one compound (one undo).
+
+### New API: the conversion pair (and why it had to be new)
+
+Neither existing setter could change an auto-tracked goal's mode:
+
+- `setGoalRepeat` **refuses** a non-CUSTOM goal unless `repeatChunk > 0`
+  (`GoalMutationService:252`) — an auto-tracked type reads a cumulative counter, so
+  repeating it needs a per-period baseline;
+- `setGoalRepeatChunk` **refuses** a goal whose `repeatChunk <= 0` ("not a derived
+  goal") and cannot take `0` either.
+
+That is a genuine chicken-and-egg, so faking it in the UI was impossible. Two
+minimal methods were added to `GoalPlannerApi` / `GoalMutationService`:
+
+| method | what it does |
+| --- | --- |
+| `convertGoalToRepeatable(goalId, period, chunk)` | SKILL/BOSS only. Sets chunk + period + `lastPeriodKey = 0`, re-bases `target = live + chunk` (a bare chunk would complete on the next tick), renames to the chunk title, reconciles into **Repeatable**. Reads live client state -> **client thread**; returns false rather than writing a bogus target. Also the RE-TUNE path (new period and/or chunk on an already-repeatable goal). |
+| `convertGoalToOneTime(goalId, targetValue)` | Clears **both** `repeatEvery` and `repeatChunk` (`setGoalRepeat(NONE)` alone leaves the chunk, so the goal stays a derived slice with a re-based target), sets the absolute target, restores the plain title, reconciles **out** of Repeatable into the section it was pulled from. No client read. |
+
+Both capture the full previous state (period, chunk, target, current, name,
+description, status/completedAt, sectionId + archivedFrom) so **one undo restores
+the goal exactly**, section included.
+
+### Conversion matrix — which path each direction uses
+
+| from | to | path |
+| --- | --- | --- |
+| Total / Relative | Total | `api.changeTarget(id, kc)` |
+| Total / Relative | Relative | live KC read on the client thread -> `RelativeTargetResolver.resolveKillCount(live, N)` -> `changeTarget(id, resolved)` |
+| Total / Relative | Repeatable | `convertGoalToRepeatable(id, period, chunk)` (client thread) |
+| Repeatable | Total | `convertGoalToOneTime(id, kc)` |
+| Repeatable | Relative | live KC read -> `convertGoalToOneTime(id, resolved)` |
+| Repeatable | Repeatable | `convertGoalToRepeatable(id, period, chunk)` — same call re-tunes; an unchanged period+chunk short-circuits to a plain close (no empty compound, no warning) |
+
+`applyEditedTarget(goalId, target, wasRepeating)` is the shared "point it at an
+absolute target" helper that picks `convertGoalToOneTime` vs `changeTarget`.
+"Relative" is an input convenience only — it resolves to an absolute target on
+save, so a plain goal always OPENS on Total.
+
+### Threading + failure
+
+`saveGoalEditOnClientThread(apply, warning)` is the client-thread sibling of
+`saveGoalEdit`: input is validated on the EDT, the compound runs on the client
+thread (an EDT client read trips RuneLite's `-ea` assert and silently does
+nothing), and the form closes back on the EDT. `apply` returning false means the
+live read FAILED — the form stays open and shows `warning`, so a conversion is
+never a silent no-op. The "nothing actually changed" case is short-circuited by the
+caller, so false always means failure.
+
+### BOSS (Task 1)
+
+The `Total | Relative | Repeatable` segment bar now renders in update mode,
+pre-selected from the goal (`repeatChunk > 0` -> Repeatable, else Total). The
+create **Repeatable pane doubles as the repeat editor** — pre-filled with the
+goal's own period pills + "Kills each period" — so the boss form no longer calls
+`addUpdateRepeatBlock` at all (it stays in use for ITEM / CUSTOM). "Add
+prerequisites" stays create-only (`editing == null`).
+
+### SKILL (Task 2)
+
+Same treatment for `One-time | Repeatable`, pre-filled the same way, `addUpdateRepeatBlock`
+likewise dropped from the skill form.
+
+**FLAG — no "Relative" segment for skill.** The skill CREATE form has no Relative
+segment either, and an edit-only third segment would break the create/edit symmetry
+the whole update mode is built on (same builder, pre-filled). `SkillTargetForm`'s
+level-or-XP field also makes "+N" ambiguous against a level entry. Boss keeps
+Relative only because CREATE offers it. If Relative is wanted for skill, it should
+be added to the CREATE form first and inherited by edit — a separate change.
+
+### Tests
+
+`ConvertGoalModeTest` (12 tests): the old setters' refusals (documenting why the API
+exists), skill + boss conversion both ways (target re-base, rename, Repeatable
+section in/out), one-undo restoration in both directions, refusals (bad period /
+chunk / type / no client), a Repeatable -> One-time -> Repeatable round trip and a
+period+chunk re-tune.

@@ -246,6 +246,34 @@ public interface GoalPlannerApi
 	boolean setGoalRepeatChunk(String goalId, int newChunk);
 
 	/**
+	 * Convert a plain auto-tracked SKILL/BOSS goal INTO a repeatable per-period
+	 * chunk, in place. Neither {@link #setGoalRepeat} (refuses a non-CUSTOM type
+	 * with no chunk) nor {@link #setGoalRepeatChunk} (refuses a goal with no chunk
+	 * yet) can do this alone, so this is the only path that changes an existing
+	 * goal's mode without re-creating it. Target re-bases to {@code live + chunk},
+	 * the goal is renamed to its chunk title and reconciled into the Repeatable
+	 * section - all as ONE undoable command.
+	 *
+	 * <p>Reads live client state, so it MUST run on the client thread; returns
+	 * false if that read fails rather than writing a bogus target.
+	 *
+	 * @return true if the goal was converted
+	 */
+	boolean convertGoalToRepeatable(String goalId, com.goalplanner.model.RepeatPeriod period,
+		int chunk);
+
+	/**
+	 * Convert a repeatable goal back into a one-time goal with an absolute target -
+	 * the mirror of {@link #convertGoalToRepeatable}. Clears BOTH the period and the
+	 * chunk (setGoalRepeat(NONE) alone leaves the chunk, and setGoalRepeatChunk
+	 * rejects zero), restores the plain title, and lets reconcile return the goal to
+	 * the section it came from. One undoable command; reads no client state.
+	 *
+	 * @return true if the goal was converted
+	 */
+	boolean convertGoalToOneTime(String goalId, int targetValue);
+
+	/**
 	 * Restore a goal's tags to its default snapshot from creation. Returns false
 	 * if the goal has no defaults or doesn't exist.
 	 */
