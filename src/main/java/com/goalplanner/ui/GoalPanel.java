@@ -176,6 +176,16 @@ public class GoalPanel extends PluginPanel
 	private java.util.List<String> dockShareGoalIds = null;
 	private String dockShareSectionId = null;
 	private boolean dockShareMounted = false;
+	/** Inline Import overlay (import-inline pass): a paste-a-code surface mounted
+	 *  above the footer, reached from the create grid (also still on the header
+	 *  Options popup). No target to go stale. */
+	private boolean dockImportActive = false;
+	private boolean dockImportMounted = false;
+	/** Inline Saved Plans overlay (saved-goals-inline pass): the saved-plans list
+	 *  (Load / Delete per row) mounted above the footer, reached from the create
+	 *  grid (also still on the header Options popup). */
+	private boolean dockSavedActive = false;
+	private boolean dockSavedMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -2059,6 +2069,33 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		// Inline Import overlay (import-inline pass): a paste surface above the
+		// footer, reached from the create grid. Same overlay pattern as the color /
+		// tag / share surfaces; no target to go stale.
+		if (dockImportActive)
+		{
+			actionDock.setExpanded(true);
+			if (!dockImportMounted)
+			{
+				actionDock.setExpandedComponent(buildImportSurface());
+				dockImportMounted = true;
+			}
+			return;
+		}
+
+		// Inline Saved Plans overlay (saved-goals-inline pass): the saved-plans list
+		// above the footer, reached from the create grid.
+		if (dockSavedActive)
+		{
+			actionDock.setExpanded(true);
+			if (!dockSavedMounted)
+			{
+				actionDock.setExpandedComponent(buildSavedPlansSurface());
+				dockSavedMounted = true;
+			}
+			return;
+		}
+
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
 		// type grid, forget the mounted create view, and rest the create surface
@@ -3544,6 +3581,29 @@ public class GoalPanel extends PluginPanel
 		// Create Section button in the dock header, beside Create Goal, which
 		// mounts the in-dock new-section form (buildSectionNewForm). Adding a goal
 		// is about goals; the grid stays clean.
+
+		// Import + Saved goals below the tiles (previously only on the header Options
+		// popup). Gated exactly like that popup: Import needs share support; Saved
+		// goals needs the Saved Plans library too. Each opens its inline surface.
+		if (isShareAvailable())
+		{
+			boolean saved = isSavedPlansAvailable();
+			JPanel extra = new JPanel(new GridLayout(1, saved ? 2 : 1, 5, 0));
+			extra.setOpaque(false);
+			extra.setBorder(new EmptyBorder(6, 0, 0, 0));
+			JButton importBtn = flatButton("Import", false);
+			importBtn.setToolTipText("Paste and import a share code");
+			importBtn.addActionListener(e -> openImportSurface());
+			extra.add(importBtn);
+			if (saved)
+			{
+				JButton savedBtn = flatButton("Saved goals", false);
+				savedBtn.setToolTipText("Load or delete your saved goals");
+				savedBtn.addActionListener(e -> openSavedPlansSurface());
+				extra.add(savedBtn);
+			}
+			inner.add(extra, BorderLayout.SOUTH);
+		}
 		return plainSurface(inner);
 	}
 
@@ -6616,6 +6676,263 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 		return "Shared plan";
+	}
+
+	// ------------------------------------------------------------
+	// Inline Import + Saved Plans surfaces (import-inline / saved-goals-inline
+	// pass): reached from the Import / Saved goals buttons under the create tiles
+	// (and still from the header Options popup). Both mount above the footer via
+	// the overlay pattern and return to the create grid on Back. Import reuses
+	// ShareDialogs.doImport for the per-character re-import warning + the success
+	// confirmation (the paste itself is inline). Saved goals is a genuine inline
+	// list (name + Load + Delete); the heavier Edit / Copy / section-name-override
+	// management still lives in the intact SavedPlansDialog.
+	// ------------------------------------------------------------
+
+	/** Open the inline Import surface (paste a share code). */
+	private void openImportSurface()
+	{
+		if (!isShareAvailable())
+		{
+			return;
+		}
+		dockImportActive = true;
+		dockImportMounted = false;
+		refreshDock();
+	}
+
+	/** Close the Import surface and return to the create grid. */
+	private void closeImportSurface()
+	{
+		dockImportActive = false;
+		dockImportMounted = false;
+		dockCreateMounted = false;
+		refreshDock();
+	}
+
+	/** Open the inline Saved Plans surface (Load / Delete). */
+	private void openSavedPlansSurface()
+	{
+		if (!isSavedPlansAvailable())
+		{
+			return;
+		}
+		dockSavedActive = true;
+		dockSavedMounted = false;
+		refreshDock();
+	}
+
+	/** Close the Saved Plans surface and return to the create grid. */
+	private void closeSavedPlansSurface()
+	{
+		dockSavedActive = false;
+		dockSavedMounted = false;
+		dockCreateMounted = false;
+		refreshDock();
+	}
+
+	/** Re-render the Saved Plans surface in place (after a Delete) without leaving. */
+	private void remountSavedPlansSurface()
+	{
+		dockSavedMounted = false;
+		refreshDock();
+	}
+
+	/** Build the inline Import surface: a wrapping, scrollable paste area + an
+	 *  Import button. Blank / undecodable input shows a brief inline hint (no
+	 *  dialog); a valid code is handed to {@link ShareDialogs#doImport} so the
+	 *  per-character re-import warning and the "imported N goals" confirmation are
+	 *  preserved exactly. On completion the surface returns to the create grid. */
+	private JComponent buildImportSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without importing", this::closeImportSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		JLabel prompt = new JLabel("Paste a share code");
+		prompt.setForeground(CREATE_FG);
+		prompt.setFont(prompt.getFont().deriveFont(11f));
+		prompt.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		body.add(prompt);
+		body.add(Box.createVerticalStrut(2));
+
+		final JTextArea codeArea = new JTextArea(4, 20);
+		codeArea.setLineWrap(true);
+		codeArea.setWrapStyleWord(false);
+		codeArea.setFont(codeArea.getFont().deriveFont(11f));
+		codeArea.setForeground(CREATE_FG);
+		codeArea.setBackground(CREATE_FIELD_BG);
+		JScrollPane codeScroll = new JScrollPane(codeArea);
+		codeScroll.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
+			RoundedPaint.RADIUS, new java.awt.Insets(2, 2, 2, 2)));
+		codeScroll.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		codeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
+		body.add(codeScroll);
+		body.add(Box.createVerticalStrut(4));
+
+		final JLabel hint = new JLabel(" ");
+		hint.setForeground(CREATE_FG);
+		hint.setFont(hint.getFont().deriveFont(10f));
+		hint.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+
+		JButton importBtn = flatButton("Import", true);
+		importBtn.setToolTipText("Import the pasted share code");
+		importBtn.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		importBtn.addActionListener(e -> {
+			String text = codeArea.getText();
+			if (text == null || text.trim().isEmpty())
+			{
+				hint.setText("Paste a share code first.");
+				return;
+			}
+			com.goalplanner.share.ShareBundle bundle;
+			try
+			{
+				bundle = shareCodec.decode(text);
+			}
+			catch (com.goalplanner.share.ShareFormatException ex)
+			{
+				hint.setText("That does not look like a valid share code.");
+				return;
+			}
+			// Clear the overlay BEFORE doImport so its onDone rebuild lands on the
+			// create grid, not this surface; then a final refresh settles the dock
+			// whether or not the re-import warning was accepted.
+			dockImportActive = false;
+			dockImportMounted = false;
+			dockCreateMounted = false;
+			ShareDialogs.doImport(GoalPanel.this, api, bundle, shareCodec.encode(bundle), this::rebuild);
+			refreshDock();
+		});
+		body.add(hint);
+		body.add(importBtn);
+
+		inner.add(body, BorderLayout.CENTER);
+		return surfaceShell("Import", false, inner);
+	}
+
+	/** Build the inline Saved Plans surface: each saved plan as a row (name +
+	 *  decoded preview) with Load (import) and Delete actions. Empty shows a hint.
+	 *  Load reuses {@link ShareDialogs#doImport} (re-import warning + confirmation);
+	 *  Delete removes and re-renders in place. */
+	private JComponent buildSavedPlansSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back to create", this::closeSavedPlansSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		java.util.List<com.goalplanner.persistence.SavedPlan> plans = savedPlanStore.getPlans();
+		if (plans.isEmpty())
+		{
+			JLabel none = new JLabel("No saved goals yet.");
+			none.setForeground(CREATE_FG);
+			none.setFont(none.getFont().deriveFont(11f));
+			none.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			body.add(none);
+		}
+		else
+		{
+			for (com.goalplanner.persistence.SavedPlan plan : plans)
+			{
+				body.add(buildSavedPlanRow(plan));
+				body.add(Box.createVerticalStrut(4));
+			}
+		}
+
+		inner.add(body, BorderLayout.CENTER);
+		return surfaceShell("Saved goals", false, inner);
+	}
+
+	/** One saved-plan row for {@link #buildSavedPlansSurface}: name + preview on the
+	 *  left, Load / Delete chips on the right. */
+	private JComponent buildSavedPlanRow(com.goalplanner.persistence.SavedPlan plan)
+	{
+		JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setOpaque(false);
+		row.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+
+		JPanel text = new JPanel();
+		text.setOpaque(false);
+		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		JLabel name = new JLabel(plan.getName() == null ? "(unnamed)" : plan.getName());
+		name.setForeground(CREATE_FG);
+		name.setFont(name.getFont().deriveFont(Font.BOLD, 11f));
+		JLabel sub = new JLabel(savedPlanPreview(plan));
+		sub.setForeground(CREATE_FG_DIM);
+		sub.setFont(sub.getFont().deriveFont(10f));
+		text.add(name);
+		text.add(sub);
+		row.add(text, BorderLayout.CENTER);
+
+		JPanel actions = new JPanel(new WrapLayout(FlowLayout.RIGHT, 4, 0));
+		actions.setOpaque(false);
+		actions.add(chip("Load", "Import this saved plan", () -> loadSavedPlan(plan)));
+		actions.add(chip("Delete", "Delete this saved plan", () -> {
+			savedPlanStore.remove(plan.getId());
+			remountSavedPlansSurface();
+		}));
+		row.add(actions, BorderLayout.EAST);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+		return row;
+	}
+
+	/** "3 goals - 2 sections", or "unreadable code" (mirrors SavedPlansDialog.preview). */
+	private String savedPlanPreview(com.goalplanner.persistence.SavedPlan plan)
+	{
+		try
+		{
+			com.goalplanner.share.ShareBundle b = shareCodec.decode(plan.getCode());
+			int n = b.totalGoalCount();
+			int secs = b.effectiveSections().size();
+			String s = n + (n == 1 ? " goal" : " goals");
+			return secs > 1 ? s + " - " + secs + " sections" : s;
+		}
+		catch (RuntimeException e)
+		{
+			return "unreadable code";
+		}
+	}
+
+	/** Import a saved plan (mirrors SavedPlansDialog.importPlan): decode, apply its
+	 *  saved section-name overrides, then hand to {@link ShareDialogs#doImport}. An
+	 *  unreadable code shows a brief inline notice instead. */
+	private void loadSavedPlan(com.goalplanner.persistence.SavedPlan plan)
+	{
+		com.goalplanner.share.ShareBundle bundle;
+		try
+		{
+			bundle = shareCodec.decode(plan.getCode());
+		}
+		catch (RuntimeException e)
+		{
+			showInfoNotice("That saved plan could not be read.");
+			return;
+		}
+		com.goalplanner.share.SavedPlanSections.applySectionNames(bundle, plan.getSectionNames());
+		// Clear the overlay first so doImport's rebuild lands on the grid.
+		dockSavedActive = false;
+		dockSavedMounted = false;
+		dockCreateMounted = false;
+		ShareDialogs.doImport(GoalPanel.this, api, bundle, shareCodec.encode(bundle), this::rebuild);
+		refreshDock();
 	}
 
 	/** The current {@link com.goalplanner.api.SectionView} for {@code id}, or null

@@ -1475,3 +1475,161 @@ Verify each at font scale **1.0 AND 1.3**; chips must read as smoothly rounded:
 - **Rounded chips**: the tag chips + the New-tag field/Add button read as tasteful
   rounded controls at both font scales.
 - **Undo**: each add/remove (goal + MULTI compound) is a single undo step.
+
+---
+
+## Inline color hex input (Task A)
+
+`buildColorSurface` grew a small **Hex** row beneath the 12 preset swatches +
+Default: a `JTextField` (accepts `#RRGGBB` or `RRGGBB`) + a **Set** button, Enter
+also commits. `parseHexRgb` parses it to a `0xRRGGBB` int and applies it through
+the **same** apply sink the swatches use (`api.setGoalColor` / `setSectionColor` /
+the MULTI bulk-recolor compound), then `closeColorSurface`. Invalid input shows a
+brief inline hint (`"Enter a hex color like #1F8B4C"`), **no dialog**. A full
+color WHEEL stays a dialog concern and is intentionally not mirrored — hex is the
+inline custom-color path.
+
+**FLAG (hex parsing):** `parseHexRgb` returns **-1 for invalid**, which doubles as
+the sentinel a real color can never be (valid RGB is always `>= 0`). Callers guard
+on `< 0`, so invalid input is never mistaken for the **Default** reset (which also
+uses `-1` when passed to the apply sink via the Default tile). Black (`#000000` =
+`0`) is valid. Six hex digits exactly; anything else is rejected.
+
+---
+
+## Inline Share surface (Task B)
+
+`buildShareSurface` mounts above the footer via the SAME overlay pattern as
+color/tag. It resolves the bundle for the captured target, shows the
+paste-anywhere **invite line** (`ShareText.invite(bundle, code)` — the same string
+the old copy dialogs put on the clipboard) in a **read-only, selectable, wrapping,
+scrollable** `JTextArea`, a **Copy** button (system clipboard + a brief
+`showInfoNotice` confirm, no dialog), and — only when `isSavedPlansAvailable()` —
+a plan-name field + **Save** button that banks the **raw canonical code**
+(`shareCodec.encode(bundle)`) via `savedPlanStore.add(name, code, sectionNames)`,
+the same path the save dialogs use. Empty target shows `"Nothing to share here."`
+with just Back. **< Back** returns without changing anything.
+
+### Transient nav target (mirror of color/tag)
+- **`ShareScope` enum** `{ GOALS, SECTION, ALL }` + **`dockShareScope`** — null =
+  overlay inactive.
+- **`dockShareGoalIds`** (captured copy of the goal-id list for GOALS — single-goal
+  edit share OR the multi selection) / **`dockShareSectionId`** (SECTION). The
+  target is captured at **open** time, so the surface has **no live-selection
+  dependency** (unlike color/tag MULTI which read the selection live).
+- **`dockShareMounted`** guards the remount.
+- **`refreshDock`** mounts it after the tag block and **returns early** while
+  active. **`shareTargetValid()`** drops a stale overlay (all captured goals gone,
+  or the section deleted; ALL is always valid).
+- **`closeShareSurface`** clears the overlay and forces `dockEditMounted` /
+  `dockSectionMounted` false so the origin surface remounts.
+- Openers: **`openShareForGoals(List)`**, **`openShareForSection(String)`**,
+  **`openShareForAllSections()`**. `sharePlayerName()` mirrors ShareDialogs'
+  `safeName`; `defaultSharePlanName(bundle)` mirrors its `defaultPlanName`.
+
+### Rerouted entry points (4 sites, was 6 copy/save chips)
+- **Goal button-strip Copy/Save code** (`buildGoalDock`) → single **Share** →
+  `openShareForGoals([gid])`.
+- **Goal edit Copy/Save code chips** (`buildActionsChips`) → single **Share** →
+  `openShareForGoals([gid])`.
+- **MULTI Copy/Save code** (`buildMultiDock`) → single **Share** →
+  `openShareForGoals(sel)`.
+- **Section Share group** (`buildSectionShareChips`) → **Share section**
+  (`openShareForSection(sid)`) + **Share all** (`openShareForAllSections()`); the
+  old Copy code / Copy all / Save code / Save all four-chip group collapses to two
+  (Save now lives inside the surface, gated by availability there).
+
+**Design note:** Copy uses the friendly invite line (parity with the old copy
+dialogs); Save banks the raw canonical code (parity with the old save dialogs /
+`SavedPlansDialog` copy). `ShareDialogs` stays INTACT for the still-live
+right-click menus; the now-unused `GoalPanel.copyGoalsShareCode` / `saveGoalsPlan`
+/ `copySectionShareCode` / `saveSectionPlan` / `copyAllSectionsShareCode` /
+`saveAllSectionsPlan` public wrappers are left in place (called by
+`GoalContextMenuBuilder`) and come out in the final sweep.
+
+---
+
+## Inline Import + Saved goals (Task C)
+
+`buildCreateGrid` grew a row **below** the 8 type tiles with **Import** + **Saved
+goals** buttons (previously only on the header Options popup). Gated exactly like
+that popup: **Import** shows when `isShareAvailable()`; **Saved goals** shows when
+`isSavedPlansAvailable()` too (the row lays out 1- or 2-up accordingly, and is
+absent entirely when share is unavailable).
+
+### Import surface (`buildImportSurface`) — INLINE (delegates the warning)
+Paste area (wrapping, scrollable `JTextArea`) + **Import** button. Blank input →
+inline hint; undecodable input (`ShareFormatException`) → inline hint, **no
+dialog**. A valid code is handed to **`ShareDialogs.doImport`** so the
+**per-character re-import warning** and the **"imported N goals"** confirmation are
+preserved exactly. The overlay flags are cleared BEFORE `doImport` so its `onDone`
+rebuild lands on the create grid.
+
+**FLAG (import inline-vs-dialog):** the **paste is inline**, but the re-import
+warning + success confirmation are the existing `doImport` **dialogs** (reused, not
+reproduced). This honors the "PREFER inline; acceptable to reuse the warning path"
+allowance — full-inline would mean re-implementing the per-character re-import
+protection, which is exactly the non-trivial bit the task said may stay a dialog.
+
+### Saved goals surface (`buildSavedPlansSurface`) — INLINE (list)
+A genuine inline list: each saved plan is a row (name + decoded preview via
+`savedPlanPreview`) with **Load** and **Delete** chips. Empty → `"No saved goals
+yet."`. **Load** (`loadSavedPlan`) mirrors `SavedPlansDialog.importPlan` — decode,
+`SavedPlanSections.applySectionNames`, then `ShareDialogs.doImport`; an unreadable
+code shows a brief `showInfoNotice`. **Delete** removes via `savedPlanStore.remove`
+and **`remountSavedPlansSurface`** re-renders in place. **< Back** returns to the
+create grid.
+
+**FLAG (saved-goals inline-vs-dialog):** **INLINE** was chosen (name + Load +
+Delete). The heavier management — **Edit** (rename + per-section import-name
+overrides) and per-row **Copy** — was deliberately **left in the intact
+`SavedPlansDialog`** (still reachable from the header Options popup). The inline
+list is not a half-built version of that dialog; it is the load/delete subset, and
+nothing there is broken.
+
+### Transient nav (booleans, no target)
+- **`dockImportActive`/`dockImportMounted`**, **`dockSavedActive`/
+  `dockSavedMounted`** — mounted after the share block in `refreshDock`, each
+  returns early while active. No target to go stale (guarded on availability at
+  open). `closeImportSurface` / `closeSavedPlansSurface` clear the flag + force
+  `dockCreateMounted` false so the create grid remounts on Back.
+
+---
+
+## NEEDS-SCREENSHOT (Tasks A/B/C) — in-client loop
+
+Verify each at font scale **1.0 AND 1.3**; rounded controls must read cleanly.
+
+### Color hex (A)
+- **Valid hex**: open a goal's Color surface → type `#1F8B4C` (or `1F8B4C`) → **Set**
+  (or Enter) → the goal recolors and the dock returns to its EDIT form.
+- **Invalid hex**: type `zzz` → **Set** → the inline hint appears, no dialog, color
+  unchanged.
+- **Section + MULTI hex**: same on a section's Color surface and on a MULTI recolor
+  (MULTI = one undo across the selection).
+
+### Share (B)
+- **Goal share**: select a goal → **Share** → the invite line fills the read-only
+  area → **Copy** shows the "Copied" notice and the clipboard holds a paste-ready
+  code → **< Back** returns to the goal EDIT form.
+- **Save from share**: with the library wired, edit the plan name → **Save** → the
+  "Saved ..." notice shows and the plan appears under **Saved goals**.
+- **MULTI / Section / All**: **Share** on a multi-selection, a section (**Share
+  section**), and **Share all** each show a valid code; a section with no goals /
+  no shareable content shows "Nothing to share here."
+- **Save hidden when unavailable**: with the Saved Plans library NOT wired, the
+  Share surface shows only Copy (no name field / Save).
+
+### Import + Saved goals (C)
+- **Row visible**: open Create Goal → the type grid shows **Import** (+ **Saved
+  goals** when the library is wired) below the tiles.
+- **Import happy path**: **Import** → paste a valid code → **Import** → the
+  "imported N goals" confirmation, goals appear, dock returns to the grid.
+- **Import bad code**: paste garbage → **Import** → inline hint, no import.
+- **Import re-import warning**: paste a code already imported on this character →
+  the "already imported" warning still fires (via `doImport`).
+- **Saved list**: **Saved goals** → rows show name + preview; **Load** imports (with
+  the confirmation) and returns; **Delete** drops the row in place; empty shows "No
+  saved goals yet."
+- **Gating**: with share unavailable, neither button shows; with share but no
+  library, only **Import** shows.
