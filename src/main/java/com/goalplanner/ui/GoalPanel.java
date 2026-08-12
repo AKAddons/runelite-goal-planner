@@ -108,6 +108,15 @@ public class GoalPanel extends PluginPanel
 	 *  Data/Relations/Actions group chips. Reset to null whenever a different goal
 	 *  mounts, so a new selection always starts at the top level. */
 	private EditGroup dockEditGroup = null;
+	/** Transient "edit goal" overlay (read-only-selected pass): the id of the goal
+	 *  whose CREATE-style form is mounted in UPDATE mode, or null when the Selected
+	 *  view shows its normal read-only summary. Mirrors the color / tag / share
+	 *  overlays - the goal stays selected underneath, and closing the overlay
+	 *  remounts the Selected view. The create builders read it through
+	 *  {@link #editingGoal()}: when non-null they pre-fill from the goal and their
+	 *  primary button UPDATES it instead of creating a second goal. */
+	private String dockEditFormGoalId = null;
+	private boolean dockEditFormMounted = false;
 	/** The currently selected SECTION's id (dock SECTION state), or null. Mutually
 	 *  exclusive with the goal selection: selecting a section clears the goal
 	 *  selection and vice-versa (enforced in {@link #refreshDock()}). */
@@ -2084,6 +2093,40 @@ public class GoalPanel extends PluginPanel
 				dockImportMounted = true;
 			}
 			return;
+		}
+
+		// "Edit goal" overlay (read-only-selected pass): the Selected view is
+		// read-only, and its Edit goal button mounts the goal's own CREATE form here
+		// in UPDATE mode - same builders, pre-filled, primary button saves. Same
+		// overlay pattern as color / tag / share: the goal stays selected underneath,
+		// so closing remounts the Selected view. A goal that vanished (deleted, or
+		// undone away) drops the overlay and falls through to normal routing.
+		if (dockEditFormGoalId != null)
+		{
+			// Valid only while its goal still exists AND is still the sole selection -
+			// selecting another card (or deselecting) leaves update mode rather than
+			// stranding a form over a goal the user has moved on from.
+			Goal editing =
+				ctx.getState() == com.goalplanner.ui.dock.DockContext.State.GOAL
+					&& dockEditFormGoalId.equals(ctx.getSoleGoalId())
+					? goalStore.findGoalById(dockEditFormGoalId) : null;
+			if (editing == null)
+			{
+				dockEditFormGoalId = null;
+				dockEditFormMounted = false;
+				dockCreateStep = CreateStep.PICKER;
+				resetCreatePicks();
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockEditFormMounted)
+				{
+					actionDock.setExpandedComponent(buildCreateForm(editing.getType()));
+					dockEditFormMounted = true;
+				}
+				return;
+			}
 		}
 
 		// Inline Saved Plans overlay (saved-goals-inline pass): the saved-plans list
@@ -4065,6 +4108,11 @@ public class GoalPanel extends PluginPanel
 		dockCreateSeed = null;
 		final boolean seedRepeat = seed != null && seed.repeatable;
 		final net.runelite.api.Skill skill = dockPickedSkill;
+		// Update mode: the same form, pre-filled from the goal. A derived per-period
+		// slice has no editable absolute target (it re-bases off its chunk), so it
+		// shows the repeat block only.
+		final Goal editing = editingGoal();
+		final boolean derived = editing != null && editing.getRepeatChunk() > 0;
 
 		JPanel body = formBody();
 		addFormRow(body, "Skill", pickedHeader(
@@ -4079,6 +4127,10 @@ public class GoalPanel extends PluginPanel
 		if (seed != null && seed.targetXp != null)
 		{
 			target.setTargetXp(seed.targetXp);
+		}
+		else if (editing != null && !derived)
+		{
+			target.setTargetXp(editing.getTargetValue());
 		}
 		JPanel oneTimePane = new JPanel();
 		oneTimePane.setLayout(new BoxLayout(oneTimePane, BoxLayout.Y_AXIS));
@@ -4112,24 +4164,64 @@ public class GoalPanel extends PluginPanel
 		repeatPane.add(lock);
 
 		final boolean[] repeatMode = { seedRepeat };
-		JComponent segmented = buildModeToggle(repeatMode, () ->
+		// One-time vs Repeatable is a CREATE choice: turning an existing grind into a
+		// repeatable one derives a new goal (the "Make repeatable" chip), so update
+		// mode drops the toggle, the create repeat pane and the section note, and
+		// edits the goal exactly as it is.
+		if (editing == null)
 		{
-			oneTimePane.setVisible(!repeatMode[0]);
-			repeatPane.setVisible(repeatMode[0]);
-			remeasureDock();
-		});
-		body.add(segmented);
-		body.add(Box.createVerticalStrut(8));
-		oneTimePane.setVisible(!repeatMode[0]);
+			JComponent segmented = buildModeToggle(repeatMode, () ->
+			{
+				oneTimePane.setVisible(!repeatMode[0]);
+				repeatPane.setVisible(repeatMode[0]);
+				remeasureDock();
+			});
+			body.add(segmented);
+			body.add(Box.createVerticalStrut(8));
+		}
+		else
+		{
+			repeatMode[0] = false;
+		}
+		oneTimePane.setVisible(!repeatMode[0] && !derived);
 		repeatPane.setVisible(repeatMode[0]);
 		body.add(oneTimePane);
 		body.add(repeatPane);
+		// Update mode: the shared repeat editor (period pills + per-period amount)
+		// replaces the create form's Repeatable pane.
+		final java.util.function.BooleanSupplier repeatApply = editing == null
+			? () -> true
+			: addUpdateRepeatBlock(body, editing, "XP each period");
 
 		Runnable onAdd = () ->
 		{
 			if (skill == null)
 			{
 				warnCreate("Pick a skill first.");
+				return;
+			}
+			if (editing != null)
+			{
+				final int newXp = derived ? 0 : target.getTargetXp();
+				if (!derived && newXp <= 0)
+				{
+					warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
+					return;
+				}
+				saveGoalEdit(() ->
+				{
+					// Repeat first: it is the only step that can reject input, so an
+					// abort leaves nothing applied.
+					if (!repeatApply.getAsBoolean())
+					{
+						return false;
+					}
+					if (!derived)
+					{
+						api.changeTarget(editing.getId(), newXp);
+					}
+					return true;
+				});
 				return;
 			}
 			if (repeatMode[0])
@@ -4231,6 +4323,7 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildAccountForm()
 	{
+		final Goal editing = editingGoal();
 		JPanel body = formBody();
 
 		// Leagues-scoped metrics (League Points/Tasks) only make sense on a
@@ -4245,10 +4338,27 @@ public class GoalPanel extends PluginPanel
 		metricCombo.setRenderer(textRenderer(
 			v -> ((com.goalplanner.model.AccountMetric) v).getDisplayName()));
 		styleField(metricCombo);
+		// Update mode: the metric is fixed (no API re-points an existing account
+		// goal), so it shows selected but locked; only the target is editable.
+		if (editing != null)
+		{
+			try
+			{
+				metricCombo.setSelectedItem(com.goalplanner.model.AccountMetric
+					.valueOf(editing.getAccountMetric()));
+			}
+			catch (RuntimeException ignored) { /* unknown/legacy metric: leave default */ }
+			metricCombo.setEnabled(false);
+			metricCombo.setToolTipText("An account goal's metric can't be changed.");
+		}
 		addFormRow(body, "Metric", metricCombo);
 
 		JTextField targetField = new JTextField(10);
 		styleField(targetField);
+		if (editing != null)
+		{
+			targetField.setText(Integer.toString(editing.getTargetValue()));
+		}
 		addFormRow(body, "Target", targetField);
 
 		// Quick-fill presets (Task 3): a Max button + a few nice-rounded fractions
@@ -4294,15 +4404,24 @@ public class GoalPanel extends PluginPanel
 
 		Runnable onAdd = () ->
 		{
-			final com.goalplanner.model.AccountMetric metric =
-				(com.goalplanner.model.AccountMetric) metricCombo.getSelectedItem();
-			if (metric == null) return;
 			final int target = parsePositiveInt(targetField.getText());
 			if (target <= 0)
 			{
 				warnCreate("Enter a numeric target above zero.");
 				return;
 			}
+			if (editing != null)
+			{
+				saveGoalEdit(() ->
+				{
+					api.changeTarget(editing.getId(), target);
+					return true;
+				});
+				return;
+			}
+			final com.goalplanner.model.AccountMetric metric =
+				(com.goalplanner.model.AccountMetric) metricCombo.getSelectedItem();
+			if (metric == null) return;
 			goToSectionPick(sectionId ->
 			{
 				String id = api.addAccountGoal(metric.name(), target);
@@ -4314,15 +4433,29 @@ public class GoalPanel extends PluginPanel
 
 	private JComponent buildCustomForm()
 	{
+		final Goal editing = editingGoal();
 		JPanel body = formBody();
 
 		JTextField nameField = new JTextField(16);
 		styleField(nameField);
+		if (editing != null && editing.getName() != null)
+		{
+			nameField.setText(editing.getName());
+		}
 		addFormRow(body, "Name", nameField);
 
 		JTextField descField = new JTextField(16);
 		styleField(descField);
+		if (editing != null && editing.getDescription() != null)
+		{
+			descField.setText(editing.getDescription());
+		}
 		addFormRow(body, "Description (optional)", descField);
+		// A custom goal owns its repeat state (it has no live tracker to derive
+		// from), so update mode offers the Repeatable toggle + schedule here.
+		final java.util.function.BooleanSupplier repeatApply = editing == null
+			? () -> true
+			: addUpdateRepeatBlock(body, editing, "Amount each period");
 
 		Runnable onAdd = () ->
 		{
@@ -4330,6 +4463,20 @@ public class GoalPanel extends PluginPanel
 			if (name.isEmpty())
 			{
 				warnCreate("Enter a name for the goal.");
+				return;
+			}
+			if (editing != null)
+			{
+				final String newDesc = descField.getText().trim();
+				saveGoalEdit(() ->
+				{
+					if (!repeatApply.getAsBoolean())
+					{
+						return false;
+					}
+					api.editCustomGoal(editing.getId(), name, newDesc);
+					return true;
+				});
 				return;
 			}
 			final String desc = descField.getText().trim();
@@ -4435,6 +4582,10 @@ public class GoalPanel extends PluginPanel
 		dockCreateSeed = null;
 		final boolean seedRepeat = seed != null && seed.repeatable;
 		final String boss = dockPickedBoss;
+		// Update mode (Selected view -> Edit goal): pre-filled, and a derived slice
+		// edits its chunk rather than an absolute kill target.
+		final Goal editing = editingGoal();
+		final boolean derived = editing != null && editing.getRepeatChunk() > 0;
 
 		JPanel body = formBody();
 		addFormRow(body, "Boss", pickedHeader(null, boss != null ? boss : "(none)"));
@@ -4445,6 +4596,10 @@ public class GoalPanel extends PluginPanel
 		if (seed != null && seed.targetCount != null)
 		{
 			kcField.setText(Integer.toString(seed.targetCount));
+		}
+		else if (editing != null && !derived)
+		{
+			kcField.setText(Integer.toString(editing.getTargetValue()));
 		}
 		JPanel totalPane = formBody();
 		addFormRow(totalPane, "Target kill count", kcField);
@@ -4505,10 +4660,17 @@ public class GoalPanel extends PluginPanel
 			addPrereqs.setVisible(mode[0] != 2);
 			remeasureDock();
 		};
-		JComponent segmented = buildSegmentedToggle(
-			new String[] { "Total", "Relative", "Repeatable" }, mode, applyMode);
-		body.add(segmented);
-		body.add(Box.createVerticalStrut(8));
+		// Total / Relative / Repeatable are CREATE choices (Relative resolves against
+		// the live kill count at add time; Repeatable derives a standalone slice), so
+		// update mode drops the segment bar, the create repeat pane and the
+		// prerequisite-seeding option, and edits the goal as it is.
+		if (editing == null)
+		{
+			JComponent segmented = buildSegmentedToggle(
+				new String[] { "Total", "Relative", "Repeatable" }, mode, applyMode);
+			body.add(segmented);
+			body.add(Box.createVerticalStrut(8));
+		}
 		body.add(totalPane);
 		body.add(relativePane);
 		body.add(repeatPane);
@@ -4516,15 +4678,41 @@ public class GoalPanel extends PluginPanel
 		body.add(addPrereqs);
 		for (int i = 0; i < panes.length; i++)
 		{
-			panes[i].setVisible(i == mode[0]);
+			panes[i].setVisible(editing == null ? i == mode[0] : (i == 0 && !derived));
 		}
-		addPrereqs.setVisible(mode[0] != 2);
+		addPrereqs.setVisible(editing == null && mode[0] != 2);
+		// Update mode: the shared repeat editor replaces the create Repeatable pane.
+		final java.util.function.BooleanSupplier repeatApply = editing == null
+			? () -> true
+			: addUpdateRepeatBlock(body, editing, "Kills each period");
 
 		Runnable onAdd = () ->
 		{
 			if (boss == null)
 			{
 				warnCreate("Pick a boss first.");
+				return;
+			}
+			if (editing != null)
+			{
+				final int newKc = derived ? 0 : parsePositiveInt(kcField.getText());
+				if (!derived && newKc <= 0)
+				{
+					warnCreate("Enter a target kill count above zero.");
+					return;
+				}
+				saveGoalEdit(() ->
+				{
+					if (!repeatApply.getAsBoolean())
+					{
+						return false;
+					}
+					if (!derived)
+					{
+						api.changeTarget(editing.getId(), newKc);
+					}
+					return true;
+				});
 				return;
 			}
 			if (mode[0] == 2)
@@ -4878,6 +5066,10 @@ public class GoalPanel extends PluginPanel
 	{
 		final int itemId = dockPickedItemId;
 		final String name = dockPickedItemName;
+		// Update mode: pre-filled quantity; a derived slice edits its per-period
+		// chunk (the repeat block) instead of an absolute quantity.
+		final Goal editing = editingGoal();
+		final boolean derived = editing != null && editing.getRepeatChunk() > 0;
 
 		JPanel body = formBody();
 		javax.swing.Icon icon = null;
@@ -4890,10 +5082,44 @@ public class GoalPanel extends PluginPanel
 
 		JTextField qtyField = new JTextField(8);
 		styleField(qtyField);
-		addFormRow(body, "Quantity", qtyField);
+		if (editing != null && !derived)
+		{
+			qtyField.setText(Integer.toString(editing.getTargetValue()));
+		}
+		if (!derived)
+		{
+			addFormRow(body, "Quantity", qtyField);
+		}
+		final java.util.function.BooleanSupplier repeatApply = editing == null
+			? () -> true
+			: addUpdateRepeatBlock(body, editing, "Amount each period");
 
 		Runnable onAdd = () ->
 		{
+			// Update mode first: an existing goal already HAS its item, so the
+			// pick-an-item guard (a create-only concern) must not gate the save.
+			if (editing != null)
+			{
+				final int newQty = derived ? 0 : parsePositiveInt(qtyField.getText());
+				if (!derived && newQty <= 0)
+				{
+					warnCreate("Enter a quantity above zero.");
+					return;
+				}
+				saveGoalEdit(() ->
+				{
+					if (!repeatApply.getAsBoolean())
+					{
+						return false;
+					}
+					if (!derived)
+					{
+						api.changeTarget(editing.getId(), newQty);
+					}
+					return true;
+				});
+				return;
+			}
 			if (itemId <= 0)
 			{
 				warnCreate("Pick an item first.");
@@ -5296,6 +5522,10 @@ public class GoalPanel extends PluginPanel
 	private JComponent createFormScaffold(com.goalplanner.model.GoalType type,
 		JComponent body, Runnable onAdd, Runnable onBack)
 	{
+		// Update mode (the Selected view's "Edit goal"): the same scaffold, but Back
+		// abandons the edit and returns to the Selected view, the title says Edit,
+		// and the primary button saves instead of advancing to the section chooser.
+		final boolean update = dockEditFormGoalId != null;
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
 		inner.setOpaque(false);
 		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
@@ -5303,8 +5533,10 @@ public class GoalPanel extends PluginPanel
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
 		JButton back = flatButton("Back", false);
-		back.addActionListener(e -> onBack.run());
-		JLabel title = new JLabel(tileLabel(type) + " goal");
+		back.addActionListener(e -> { if (update) closeEditGoalForm(); else onBack.run(); });
+		JLabel title = new JLabel(update
+			? "Edit " + tileLabel(type).toLowerCase(java.util.Locale.ROOT) + " goal"
+			: tileLabel(type) + " goal");
 		title.setForeground(CREATE_FG);
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
 		header.add(back, BorderLayout.WEST);
@@ -5317,7 +5549,9 @@ public class GoalPanel extends PluginPanel
 		{
 			// The primary button no longer creates directly (note 3): it validates
 			// and advances to the landing-section chooser, which performs the create.
-			JButton add = flatButton("Next: choose section", true);
+			// In update mode it validates and SAVES the existing goal instead - no
+			// section step, no second goal.
+			JButton add = flatButton(update ? "Save changes" : "Next: choose section", true);
 			add.addActionListener(e -> onAdd.run());
 			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
 			footer.setOpaque(false);
@@ -5450,7 +5684,8 @@ public class GoalPanel extends PluginPanel
 
 	private void warnCreate(String msg)
 	{
-		javax.swing.JOptionPane.showMessageDialog(this, msg, "Add goal",
+		javax.swing.JOptionPane.showMessageDialog(this, msg,
+			dockEditFormGoalId != null ? "Edit goal" : "Add goal",
 			javax.swing.JOptionPane.WARNING_MESSAGE);
 	}
 
@@ -5479,6 +5714,25 @@ public class GoalPanel extends PluginPanel
 			case QUEST:
 			case DIARY:
 			case COMBAT_ACHIEVEMENT:
+				return true;
+			default:
+				return false;
+		}
+	}
+
+	/** Whether the Selected view offers an "Edit goal" button for {@code type} - i.e.
+	 *  whether its create form has anything an existing goal can change. QUEST /
+	 *  DIARY / COMBAT_ACHIEVEMENT targets are immutable (they complete off game
+	 *  progress), so they stay a pure read-only summary. */
+	private static boolean hasEditableParams(GoalType type)
+	{
+		switch (type)
+		{
+			case SKILL:
+			case ITEM_GRIND:
+			case BOSS:
+			case CUSTOM:
+			case ACCOUNT:
 				return true;
 			default:
 				return false;
@@ -5613,6 +5867,24 @@ public class GoalPanel extends PluginPanel
 		south.setLayout(new BoxLayout(south, BoxLayout.Y_AXIS));
 		south.setOpaque(false);
 		south.setAlignmentX(Component.LEFT_ALIGNMENT);
+		// The Selected view is read-only; "Edit goal" opens this goal's own CREATE
+		// form pre-filled in update mode (see openEditGoalForm). Types whose target
+		// is immutable (QUEST / DIARY / COMBAT_ACHIEVEMENT) have nothing to edit, so
+		// they get no button.
+		if (hasEditableParams(g.getType()))
+		{
+			JButton editGoal = flatButton("Edit goal", false);
+			editGoal.setToolTipText("Open this goal in the create form to change it");
+			editGoal.addActionListener(e -> openEditGoalForm(g));
+			JPanel editRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+			editRow.setOpaque(false);
+			editRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+			editRow.add(editGoal);
+			editRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
+				editRow.getPreferredSize().height));
+			south.add(editRow);
+			south.add(Box.createVerticalStrut(4));
+		}
 		if (added != null)
 		{
 			added.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -5803,6 +6075,190 @@ public class GoalPanel extends PluginPanel
 		refreshDock();
 	}
 
+	// --- "Edit goal" overlay: the CREATE form in UPDATE mode --------------------
+	// The Selected view is read-only; its "Edit goal" button opens the goal's own
+	// create form, pre-filled, with the primary button switched from "Next: choose
+	// section" to "Save changes". There is NO second form: refreshDock mounts
+	// buildCreateForm(type) exactly as the create flow does, and every builder
+	// branches on editingGoal() for its pre-fill + save. Update mode never runs the
+	// section-pick step and never creates a goal.
+
+	/** The goal the mounted create form is UPDATING, or null in normal create mode.
+	 *  Every create builder calls this to decide pre-fill + primary action. */
+	private Goal editingGoal()
+	{
+		return dockEditFormGoalId == null ? null : goalStore.findGoalById(dockEditFormGoalId);
+	}
+
+	/** Open {@code g}'s create form in update mode. The picker step is skipped (no
+	 *  API changes a goal's skill / boss / item), so the pick is stashed exactly the
+	 *  way the picker screens stash theirs and the form opens on DETAILS. */
+	private void openEditGoalForm(Goal g)
+	{
+		if (g == null)
+		{
+			return;
+		}
+		dockEditFormGoalId = g.getId();
+		dockEditFormMounted = false;
+		dockCreateSeed = null;
+		dockCreateStep = CreateStep.DETAILS;
+		resetCreatePicks();
+		switch (g.getType())
+		{
+			case SKILL:      dockPickedSkill = skillOf(g); break;
+			case BOSS:       dockPickedBoss = g.getBossName(); break;
+			case ITEM_GRIND:
+				dockPickedItemId = g.getItemId();
+				dockPickedItemName = g.getName();
+				break;
+			default: break;
+		}
+		refreshDock();
+	}
+
+	/** Leave update mode and return to the goal's Selected view - the Back button
+	 *  (no changes) and every successful save. Drops the edit-surface mount guard so
+	 *  the summary re-renders off the freshly saved values. */
+	private void closeEditGoalForm()
+	{
+		dockEditFormGoalId = null;
+		dockEditFormMounted = false;
+		dockCreateStep = CreateStep.PICKER;
+		resetCreatePicks();
+		dockEditMounted = false;
+		refreshDock();
+	}
+
+	/** The period an update-mode form opens on: the goal's own when it repeats,
+	 *  else the create default (Daily). */
+	private static com.goalplanner.model.RepeatPeriod initialPeriod(Goal g)
+	{
+		return g != null && g.getRepeatEvery().isRepeating()
+			? g.getRepeatEvery() : com.goalplanner.model.RepeatPeriod.DAILY;
+	}
+
+	/** Run an update-mode save as ONE undo entry: each setter still no-ops when the
+	 *  value is unchanged, and an all-no-op compound records nothing at all
+	 *  (CommandHistory drops an empty buffer). {@code apply} returns false when it
+	 *  rejected the input (having warned) - the form then stays open, unsaved. */
+	private void saveGoalEdit(java.util.function.BooleanSupplier apply)
+	{
+		boolean ok = false;
+		api.beginCompound("Edit goal");
+		try
+		{
+			ok = apply.getAsBoolean();
+		}
+		finally
+		{
+			api.endCompound();
+		}
+		if (ok)
+		{
+			closeEditGoalForm();
+		}
+	}
+
+	/** Update-mode repeat editor for the types whose CREATE form has no repeat
+	 *  inputs (ITEM, CUSTOM) - and the shared editor for every type in update mode,
+	 *  so a repeating goal can always retune its schedule. Renders a "Repeatable"
+	 *  toggle (CUSTOM only: an auto-tracked slice's repeat is structural, it is
+	 *  dropped with "Stop repeating"), the create form's own Daily/Weekly/Monthly
+	 *  pills, and the per-period amount when the goal carries a chunk. Returns a
+	 *  validate-then-apply supplier: false means the input was rejected (already
+	 *  warned) and the save must abort. */
+	private java.util.function.BooleanSupplier addUpdateRepeatBlock(JPanel body, Goal g,
+		String amountLabel)
+	{
+		final String gid = g.getId();
+		final boolean hasChunk = g.getRepeatChunk() > 0;
+		final boolean toggleable = g.getType() == GoalType.CUSTOM;
+		if (!toggleable && !hasChunk && !g.getRepeatEvery().isRepeating())
+		{
+			return () -> true;
+		}
+
+		final com.goalplanner.model.RepeatPeriod[] period = { initialPeriod(g) };
+		final JCheckBox toggle = new JCheckBox("Repeatable");
+		toggle.setOpaque(false);
+		toggle.setForeground(CREATE_FG);
+		toggle.setFont(toggle.getFont().deriveFont(11f));
+		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+		toggle.setSelected(g.getRepeatEvery().isRepeating());
+		toggle.setVisible(toggleable);
+
+		final JTextField amount = new JTextField(8);
+		styleField(amount);
+		if (hasChunk)
+		{
+			amount.setText(Integer.toString(g.getRepeatChunk()));
+		}
+
+		JPanel detail = new JPanel();
+		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
+		detail.setOpaque(false);
+		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.setVisible(!toggleable || toggle.isSelected());
+		JLabel periodLbl = new JLabel("Repeat every");
+		periodLbl.setForeground(CREATE_FG_DIM);
+		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
+		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.add(periodLbl);
+		detail.add(Box.createVerticalStrut(2));
+		JComponent pills = buildPeriodPills(period);
+		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
+		detail.add(pills);
+		detail.add(Box.createVerticalStrut(6));
+		if (hasChunk)
+		{
+			addFormRow(detail, amountLabel, amount);
+		}
+
+		toggle.addActionListener(e ->
+		{
+			detail.setVisible(toggle.isSelected());
+			remeasureDock();
+		});
+
+		JLabel head = new JLabel("Repeat");
+		head.setForeground(CREATE_FG_DIM);
+		head.setFont(head.getFont().deriveFont(10f));
+		head.setAlignmentX(Component.LEFT_ALIGNMENT);
+		head.setVisible(toggleable);
+		body.add(Box.createVerticalStrut(2));
+		body.add(head);
+		body.add(Box.createVerticalStrut(2));
+		body.add(toggle);
+		body.add(detail);
+		body.add(Box.createVerticalStrut(6));
+
+		return () ->
+		{
+			if (toggleable && !toggle.isSelected())
+			{
+				api.setGoalRepeat(gid, com.goalplanner.model.RepeatPeriod.NONE);
+				return true;
+			}
+			int chunk = 0;
+			if (hasChunk)
+			{
+				chunk = parsePositiveInt(amount.getText());
+				if (chunk <= 0)
+				{
+					warnCreate("Enter how much to add each period.");
+					return false;
+				}
+			}
+			api.setGoalRepeat(gid, period[0]);
+			if (chunk > 0)
+			{
+				api.setGoalRepeatChunk(gid, chunk);
+			}
+			return true;
+		};
+	}
+
 	/** Select a section: the dock shows its actions. Mutually exclusive with the
 	 *  goal selection, so any selected goals are cleared. Mirrors clicking a goal
 	 *  card, but for a section header (the row body, not the chevron). */
@@ -5839,6 +6295,10 @@ public class GoalPanel extends PluginPanel
 	{
 		selectedSectionId = null;
 		dockSectionGroup = null;
+		// A dismiss from update mode ("Edit goal") leaves it unsaved, like any other
+		// overlay the grab handle drops.
+		dockEditFormGoalId = null;
+		dockEditFormMounted = false;
 		dockCreateOpen = false;
 		dockCreateNav = CreateNav.GRID;
 		dockCreateType = null;
