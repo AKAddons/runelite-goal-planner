@@ -5,7 +5,123 @@ Everything here is **render-path** work that has NOT been verified in-client
 (no client available while the designer was AFK). Treat every layout/spacing
 choice as provisional until screenshot-verified.
 
-## Flattened Selected view — Deselect up top, Data flat, Relations itemized (latest)
+## Read-only Selected view + "Edit goal" opens the create form (latest)
+
+User feedback: *"this doesn't need to appear as editable by default, there can be
+a [button] to edit the goal itself and that should open the UI of create goal."*
+A selected Skill goal used to render live `Level:` / `XP:` text fields
+(commit-on-blur), so the Selected view read as a form. It is now **information**,
+with one button that opens the **create form** to change it.
+
+### 1. Read-only parameter summary (per type)
+
+Each per-type edit body (`buildSkillEditBody` … `buildAccountEditBody`, still
+dispatched by `buildEditSurface` → `editFormScaffold`, single assembly point)
+renders text instead of fields:
+
+| Type | Summary |
+| --- | --- |
+| SKILL | icon + skill name, `Target: level 99 (13,034,431 XP)` |
+| BOSS | boss name, `Target: 1,000 kills` |
+| ITEM | `Target: 50` |
+| ACCOUNT | metric name, `Target: 341` |
+| CUSTOM | `Name` + `Description` as wrapped text |
+| QUEST / DIARY / CA | unchanged — `buildThinEditBody` was already read-only |
+
+A skill target that is not level-exact reads the other way round —
+`1,500,000 XP (level 74)`. Repeatable goals summarise their schedule instead of
+showing the live checkbox / pills / chunk field: `Repeats: Daily` plus the
+per-type amount line (`XP each period: 300,000`, `Kills each period: 20`,
+`Amount each period: 5`). A derived per-period slice shows its **chunk**, not its
+re-based raw target, exactly as before.
+
+New helpers next to the bodies: `addSummaryRow` (muted caption + value, reusing
+`addFormRow`'s caption styling), `addSummaryText` (wrapped name/description),
+`skillTargetText`, `addRepeatSummary`. `Added: <date>`, the Data chips, the
+Relations block, the Deselect lead button, the completion checkbox (including the
+disabled absolute one) and the Actions drill-in are all untouched.
+`commitOnBlurOrEnter`, `addEditRepeatControls` and `buildEditPeriodPills` are now
+unused and left in place — dead code is swept in the final pass.
+
+### 2. "Edit goal" — the create form in UPDATE mode
+
+`editFormScaffold` adds an **`Edit goal`** button at the top of the south stack
+(directly under the summary, above `Added:`), gated by `hasEditableParams` —
+SKILL / BOSS / ITEM / CUSTOM / ACCOUNT only, since QUEST / DIARY / CA targets are
+immutable.
+
+There is **no second form**. `dockEditFormGoalId` is a transient overlay target in
+the same shape as the color / tag / share overlays, and `refreshDock` mounts
+`buildCreateForm(goal.getType())` — the create builders themselves:
+
+- `openEditGoalForm(g)` stashes the goal's skill / boss / item into the **same
+  `dockPicked*` slots the picker screens use** and sets `dockCreateStep =
+  DETAILS`, so the form opens past the picker (no API re-points an existing
+  goal's skill / boss / item).
+- Each builder calls `editingGoal()` (null in create mode) and, when non-null:
+  pre-fills from the goal; hides the **create-only** choices — the skill
+  One-time/Repeatable toggle, the boss `Total | Relative | Repeatable` segments,
+  `Add prerequisites`, the "Lands in the Repeatable section" note — and locks the
+  ACCOUNT metric combo to the goal's own metric.
+- `createFormScaffold` reads the same flag: the title becomes `Edit <type> goal`,
+  **Back** returns to the Selected view unchanged (`closeEditGoalForm`), and the
+  primary button is **`Save changes`** instead of `Next: choose section`.
+- The primary action validates, then saves through the **existing** APIs —
+  `changeTarget` (skill/boss/item/account), `editCustomGoal` (custom),
+  `setGoalRepeat` / `setGoalRepeatChunk` (schedule) — inside one
+  `beginCompound("Edit goal")` / `endCompound`, so a save is **one undo**. Each
+  setter still no-ops on an unchanged value, and an all-no-op compound records
+  nothing at all (`CommandHistory.endCompound` drops an empty buffer). It then
+  returns to the Selected view, which re-renders off the new values.
+  **It never runs the section-pick step and never creates a second goal.**
+- Repeat editing is one shared `addUpdateRepeatBlock`: the create form's own
+  Daily/Weekly/Monthly pills (`buildPeriodPills`), the per-period amount when the
+  goal carries a chunk, and a `Repeatable` toggle for CUSTOM (the only type that
+  owns its repeat state — an auto-tracked slice is dropped with the existing
+  "Stop repeating" action). A derived slice hides the absolute-target field.
+- The overlay drops itself when its goal is deleted, when the selection moves to
+  another card, and on a grab-handle dismiss (`collapseDockToFooter`) — in every
+  case with nothing applied.
+
+Converting a one-time grind into a repeatable one stays a CREATE (the existing
+"Make repeatable" chip → `CreateSeed` handoff, untouched), because it derives a
+new goal rather than editing this one.
+
+### NEEDS-SCREENSHOT (read-only Selected view + Edit goal) — in-client loop
+- **Read-only summary reads cleanly, per type**: select a SKILL, BOSS, ITEM,
+  ACCOUNT and CUSTOM goal in turn — each shows its parameters as muted-caption
+  text lines, with no text fields anywhere in the Selected view.
+- **Skill target wording**: a level-exact goal reads `Target: level 99
+  (13,034,431 XP)`; a raw-XP goal reads `Target: 1,500,000 XP (level 74)`.
+- **Repeatable goals show period + amount**: a derived daily slice shows
+  `Repeats: Daily` + `XP each period: 300,000` (and the Kills / Amount variants),
+  and shows no absolute target line.
+- **Edit goal opens the pre-filled create form**: the button appears for SKILL /
+  BOSS / ITEM / ACCOUNT / CUSTOM; tapping it shows the create form for that type,
+  header `Edit <type> goal`, values pre-filled, picker step skipped, primary
+  button `Save changes`.
+- **Save updates the SAME goal**: change the target, tap `Save changes` — no
+  section chooser appears, no duplicate goal is created, the dock returns to the
+  Selected view and the summary shows the new value. One undo reverts the whole
+  save.
+- **Cancel/Back returns unchanged**: edit a field, tap `Back` — the Selected view
+  returns with the ORIGINAL values.
+- **Create-only controls are absent in edit mode**: no One-time/Repeatable
+  toggle (skill), no `Total | Relative | Repeatable` segments and no
+  `Add prerequisites` (boss), no "Lands in the Repeatable section" note; the
+  ACCOUNT metric combo is visible but locked.
+- **CUSTOM repeat toggle**: a custom goal's edit form shows `Repeatable` +
+  period pills; turning it off and saving clears the schedule (summary loses its
+  `Repeats:` line).
+- **QUEST / DIARY / CA unchanged**: still the thin read-only body, still the
+  greyed completion checkbox, and NO `Edit goal` button.
+- **Everything else still works from the Selected view**: Deselect at top,
+  completion checkbox, Data chips (Optional/Color/Add tag/Drop tags/Restore),
+  Relations list + `+ Add relation`, `[Actions]` drill-in.
+- Font scales **1.0 / 1.3**: summary lines, the `Edit goal` button and the edit
+  form stay legible and aligned; the dock grows to fit the form.
+
+## Flattened Selected view — Deselect up top, Data flat, Relations itemized
 
 The single-goal edit surface (`buildEditSurface` / `editFormScaffold`) was
 flattened per the guiding principle: surface the common controls directly and
