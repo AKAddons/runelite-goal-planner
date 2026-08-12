@@ -5,7 +5,91 @@ Everything here is **render-path** work that has NOT been verified in-client
 (no client available while the designer was AFK). Treat every layout/spacing
 choice as provisional until screenshot-verified.
 
-## Section-selected dock — the last 1.0.0 parity gap (latest)
+## Flattened Selected view — Deselect up top, Data flat, Relations itemized (latest)
+
+The single-goal edit surface (`buildEditSurface` / `editFormScaffold`) was
+flattened per the guiding principle: surface the common controls directly and
+only drill in for the less-common stuff. Assembly still lives ONLY in
+`GoalPanel.refreshDock` -> `buildEditSurface`; every handler + inline surface
+(color/tag) and `api.removeRequirement` / `enterRelationMode` is reused, not
+duplicated. The right-click menus + dialogs stay intact (still used by
+right-clicks / the header). Top -> bottom the Selected surface now reads:
+
+1. **Full-width Deselect at the TOP** (Part 1). The single-goal edit surface
+   pins a full-width `Deselect` button above the form, matching the MULTI
+   `Deselect (N)` lead bar. The shared styling was extracted into a new
+   `ActionDock.leadButton(label, tooltip, action)` static factory that both
+   `renderLead` (multi) and the edit surface (single) call, so the two match
+   exactly. The completion checkbox, when present, sits just under it. The old
+   trailing `Deselect` chip is gone. `ActionDockTest` covers the factory.
+2. Form fields (per-type body), unchanged.
+3. `Added: <date>` (kept), hidden for legacy goals with no `createdAt`.
+4. **Data chips, flat** (Part 2). The former `Data` drill-in group is gone;
+   its items — Optional/Required, Color, Add tag, Drop tags, Restore defaults —
+   render directly as a chip row via `buildDataChips` on a fresh `WrapLayout`
+   panel. Color/Add tag/Drop tags still open their inline surfaces; all gating
+   (hide Optional on complete, Drop tags only when removable, Restore only when
+   overridden) is unchanged. `EditGroup.DATA` dropped.
+5. **Relations, itemized inline + Add** (Part 3). `buildRelationsLines`
+   (comma summary) is replaced by `buildRelationsBlock`: EACH relation is its
+   own `relationEdgeRow` — a direction arrow (`ShapeIcons.upTriangle` = Requires,
+   `downTriangle` = Required by), the related goal's name (resolved via
+   `relationName` -> `goalStore`, dangling ids skipped), and a small **X** that
+   removes just THAT edge. A Requires-edge X calls
+   `api.removeRequirement(thisGoal, reqId)`; a Required-by-edge X calls
+   `api.removeRequirement(dependentId, thisGoal)` (the dependent HOLDS the
+   requirement). Each removal is one undo, then `refreshEditForm` re-renders.
+   Below the list a **`+ Add relation`** button reveals two direction buttons
+   (`Requires...` / `Required by...`) plus `Cancel` via a **local in-place swap**
+   (no persistent field — picking a direction enters relation-pick mode, which
+   rebuilds the whole surface anyway). Each direction calls
+   `enterRelationMode(gid, requiresTarget)` and the existing click-to-link pick
+   takes over; `enterRelationMode` / pick-mode / `exitRelationMode` are intact.
+   The block shows whenever the goal has relations OR can add them (incomplete);
+   a goal with none just shows `+ Add relation`; a completed goal with none
+   shows nothing. `EditGroup.RELATIONS`, `buildRelationsChips`, and the
+   Requires/Required-by/Drop-reqs/Drop-dependents chips are dropped.
+6. **Actions — the single remaining drill-in** (Part 4). The `[Actions]` chip
+   still drills into copy/move/remove/share/Loadout-Lab. `Add reqs to section`
+   (the one relation-adjacent action with no inline-list home) moved into
+   `buildActionsChips`. `EditGroup` is now just `{ ACTIONS }`; `buildEditChips`
+   renders a lone `[Actions]` chip at the top level and `< Back` + the action
+   chips when drilled in. Data + Relations stay visible while Actions is open
+   (they live above the chip row), so drilling never hides the common controls.
+
+Menus/dialogs (`GoalContextMenuBuilder`, the legacy `buildGoalDock` strip for
+COLLECTION_LOG which still uses `dockRemoveRequirements`/`dockRemoveDependents`)
+are untouched. MULTI + SECTION states are unchanged except for the now-shared
+lead-button styling.
+
+### NEEDS-SCREENSHOT (flattened Selected view) — in-client loop
+- **Deselect at top, single + multi consistent**: a selected single goal shows a
+  full-width `Deselect` pinned above the form; a multi-selection shows
+  `Deselect (N)` in the same spot/style. Confirm the two read identically.
+- **Data chips direct**: Optional/Required, Color, Add tag, Drop tags, Restore
+  defaults appear as a chip row in the main edit view (no `Data` group to open);
+  Color/Add tag/Drop tags open their inline surfaces; gating hides the right
+  ones (Optional absent on complete, Drop tags only with removable tags, Restore
+  only when overridden).
+- **Relations itemized, both directions**: each requirement shows an up-arrow +
+  name + X; each dependent shows a down-arrow + name + X. Clicking a Requires X
+  removes only that requirement; clicking a Required-by X removes only that
+  dependent (from the dependent's side). One undo restores each; the list
+  re-renders in place.
+- **+ Add relation flow**: `+ Add relation` reveals `Requires...` /
+  `Required by...` / `Cancel`; picking a direction enters pick-mode (orange
+  source border, banner) and clicking a target goal links it; Cancel collapses
+  back to `+ Add relation`.
+- **Empty relations**: an incomplete goal with no relations shows just
+  `+ Add relation` (no list, no arrows); a completed goal with none shows no
+  relations block at all.
+- **Actions still drills**: `[Actions]` opens copy/move/remove/share/Loadout-Lab/
+  Add-reqs-to-section with `< Back`; Data chips + Relations list stay visible
+  above while it's open.
+- Font scales **1.0 / 1.3** across all of the above (chips, edge rows, X
+  buttons, and the top Deselect stay legible and aligned).
+
+## Section-selected dock — the last 1.0.0 parity gap
 
 Sections are now selectable, so `DockContext.State.SECTION` is finally produced
 and the SECTION action surface is wired. This closes the last "Section selected"
