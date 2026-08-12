@@ -419,10 +419,13 @@ public class GoalPanel extends PluginPanel
 		// each panel rebuild via refreshUndoRedoButtons() (called from rebuild()).
 		undoButton = new JButton(ShapeIcons.undoArrow(12, new Color(180, 180, 220)));
 		undoButton.setMargin(new Insets(3, 6, 3, 6));
-		undoButton.addActionListener(e -> api.undo());
+		// refreshEditForm() drops the same-goal edit-surface remount guard so an
+		// undo that restores a relation/tag/etc. re-renders the mounted Selected
+		// view immediately (otherwise it stayed stale until reselect).
+		undoButton.addActionListener(e -> { api.undo(); refreshEditForm(); });
 		redoButton = new JButton(ShapeIcons.redoArrow(12, new Color(180, 180, 220)));
 		redoButton.setMargin(new Insets(3, 6, 3, 6));
-		redoButton.addActionListener(e -> api.redo());
+		redoButton.addActionListener(e -> { api.redo(); refreshEditForm(); });
 
 		headerButtons.add(optionsButton);
 		headerButtons.add(Box.createHorizontalStrut(6));
@@ -5627,7 +5630,9 @@ public class GoalPanel extends PluginPanel
 		south.add(Box.createVerticalStrut(4));
 		south.add(chips);
 		inner.add(south, BorderLayout.SOUTH);
-		return surfaceShell("Selected", false, inner);
+		// No "SELECTED" indicator bar: the full-width Deselect button now heads the
+		// edit surface, so the label was redundant (user feedback).
+		return plainSurface(inner);
 	}
 
 	private static final java.time.format.DateTimeFormatter ADDED_DATE_FMT =
