@@ -296,8 +296,13 @@ public class ActionDock extends JPanel
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		sp.setBorder(null);
-		sp.setOpaque(false);
-		sp.getViewport().setOpaque(false);
+		// Opaque (dock background) rather than transparent: the surface must fully
+		// cover whatever is behind the dock, or an optional goal's diagonal hatch
+		// shows through the rounded card's margins.
+		sp.setOpaque(true);
+		sp.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		sp.getViewport().setOpaque(true);
+		sp.getViewport().setBackground(ColorScheme.DARKER_GRAY_COLOR);
 		sp.getVerticalScrollBar().setUnitIncrement(16);
 		surfaceHost.add(sp, BorderLayout.CENTER);
 		revalidate();
@@ -512,7 +517,11 @@ public class ActionDock extends JPanel
 
 		GrabHandle()
 		{
-			setOpaque(false);
+			// Opaque: every pixel inside the dock must be painted by an opaque
+			// component this pass, so nothing behind (an optional goal's diagonal
+			// hatch) can survive in the handle band.
+			setOpaque(true);
+			setBackground(ColorScheme.DARKER_GRAY_COLOR);
 			Dimension d = new Dimension(0, HANDLE_H);
 			setPreferredSize(d);
 			setMinimumSize(d);
