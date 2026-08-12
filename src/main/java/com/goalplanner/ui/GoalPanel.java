@@ -7079,10 +7079,82 @@ public class GoalPanel extends PluginPanel
 	}
 
 	// ----- per-type edit bodies -----
+	//
+	// The Selected view is READ-ONLY (user feedback): a goal's parameters render as
+	// INFORMATION, not as live form fields. Changing them goes through the "Edit
+	// goal" button, which opens the create-style form pre-filled in update mode
+	// (see openEditGoalForm). Each body below is therefore a compact summary built
+	// from the shared summary helpers; QUEST/DIARY/CA keep their thin body.
+
+	/** A read-only "Label: value" line for the Selected view's parameter summary.
+	 *  The label reuses the muted {@link #addFormRow} caption styling so the summary
+	 *  reads as information rather than as a form. */
+	private void addSummaryRow(JPanel body, String label, String value)
+	{
+		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+		row.setOpaque(false);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		JLabel l = new JLabel(label + ":");
+		l.setForeground(CREATE_FG_DIM);
+		l.setFont(l.getFont().deriveFont(10f));
+		JLabel v = new JLabel(value);
+		v.setForeground(CREATE_FG);
+		v.setFont(v.getFont().deriveFont(11f));
+		row.add(l);
+		row.add(v);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
+		body.add(row);
+		body.add(Box.createVerticalStrut(2));
+	}
+
+	/** A wrapped read-only text block (name / description) under a muted caption. */
+	private void addSummaryText(JPanel body, String label, String text)
+	{
+		JLabel v = new JLabel("<html>" + escapeHtml(text) + "</html>");
+		v.setForeground(CREATE_FG);
+		v.setFont(v.getFont().deriveFont(11f));
+		addFormRow(body, label, v);
+	}
+
+	/** "level 99 (13,034,431 XP)" when the target lands exactly on a level, else
+	 *  "1,500,000 XP (level 74)". */
+	private static String skillTargetText(int xp)
+	{
+		int safe = Math.max(0, xp);
+		int level = net.runelite.api.Experience.getLevelForXp(safe);
+		String xpTxt = com.goalplanner.util.FormatUtil.formatXp(safe) + " XP";
+		if (level >= 1 && level <= 126
+			&& net.runelite.api.Experience.getXpForLevel(level) == safe)
+		{
+			return "level " + level + " (" + xpTxt + ")";
+		}
+		return xpTxt + " (level " + level + ")";
+	}
+
+	/** Read-only repeat summary: the period and, for a derived per-period slice,
+	 *  how much it re-bases by each period. Renders nothing for a goal that neither
+	 *  repeats nor carries a chunk. */
+	private void addRepeatSummary(JPanel body, Goal g, String amountLabel)
+	{
+		boolean repeating = g.getRepeatEvery().isRepeating();
+		int chunk = g.getRepeatChunk();
+		if (!repeating && chunk <= 0)
+		{
+			return;
+		}
+		if (repeating)
+		{
+			addSummaryRow(body, "Repeats", g.getRepeatEvery().getLabel());
+		}
+		if (chunk > 0)
+		{
+			addSummaryRow(body, amountLabel,
+				com.goalplanner.util.FormatUtil.formatXp(chunk));
+		}
+	}
 
 	private JComponent buildSkillEditBody(Goal g)
 	{
-		final String gid = g.getId();
 		final boolean derived = g.getRepeatChunk() > 0;
 		JPanel body = formBody();
 
@@ -7101,29 +7173,20 @@ public class GoalPanel extends PluginPanel
 			addFormRow(body, "Skill", skillRow);
 		}
 
-		// A derived per-period slice's target re-bases each period off its chunk,
-		// so its editable "amount" is the chunk (in the repeat block), not the raw
-		// target. A plain grind edits its absolute target here.
+		// A derived per-period slice's target re-bases each period off its chunk, so
+		// its meaningful amount is the chunk (shown by the repeat summary), not the
+		// raw target. A plain grind shows its absolute target.
 		if (!derived)
 		{
-			SkillTargetForm target = new SkillTargetForm(99);
-			target.setTargetXp(g.getTargetValue());
-			target.onCommit(() ->
-			{
-				int xp = target.getTargetXp();
-				if (xp <= 0) { target.setTargetXp(g.getTargetValue()); return; }
-				api.changeTarget(gid, xp);
-			});
-			addFormRow(body, "Target level or XP", target);
+			addSummaryRow(body, "Target", skillTargetText(g.getTargetValue()));
 		}
 
-		addEditRepeatControls(body, g, "XP each period");
+		addRepeatSummary(body, g, "XP each period");
 		return body;
 	}
 
 	private JComponent buildBossEditBody(Goal g)
 	{
-		final String gid = g.getId();
 		final boolean derived = g.getRepeatChunk() > 0;
 		JPanel body = formBody();
 
@@ -7137,96 +7200,56 @@ public class GoalPanel extends PluginPanel
 
 		if (!derived)
 		{
-			JTextField kcField = new JTextField(8);
-			styleField(kcField);
-			kcField.setText(Integer.toString(g.getTargetValue()));
-			commitOnBlurOrEnter(kcField, () ->
-			{
-				int kc = parsePositiveInt(kcField.getText());
-				if (kc <= 0) { kcField.setText(Integer.toString(g.getTargetValue())); return; }
-				api.changeTarget(gid, kc);
-			});
-			addFormRow(body, "Target kill count", kcField);
+			addSummaryRow(body, "Target",
+				com.goalplanner.util.FormatUtil.formatXp(g.getTargetValue()) + " kills");
 		}
 
-		addEditRepeatControls(body, g, "Kills each period");
+		addRepeatSummary(body, g, "Kills each period");
 		return body;
 	}
 
 	private JComponent buildItemEditBody(Goal g)
 	{
-		final String gid = g.getId();
 		final boolean derived = g.getRepeatChunk() > 0;
 		JPanel body = formBody();
 
-		// A derived slice's amount is its per-period chunk (in the repeat block),
-		// not the raw target - so only a plain item grind edits its quantity here.
 		if (!derived)
 		{
-			JTextField qtyField = new JTextField(8);
-			styleField(qtyField);
-			qtyField.setText(Integer.toString(g.getTargetValue()));
-			commitOnBlurOrEnter(qtyField, () ->
-			{
-				int qty = parsePositiveInt(qtyField.getText());
-				if (qty <= 0) { qtyField.setText(Integer.toString(g.getTargetValue())); return; }
-				api.changeTarget(gid, qty);
-			});
-			addFormRow(body, "Quantity", qtyField);
+			addSummaryRow(body, "Target",
+				com.goalplanner.util.FormatUtil.formatXp(g.getTargetValue()));
 		}
 
-		addEditRepeatControls(body, g, "Amount each period");
+		addRepeatSummary(body, g, "Amount each period");
 		return body;
 	}
 
 	private JComponent buildCustomEditBody(Goal g)
 	{
-		final String gid = g.getId();
 		JPanel body = formBody();
 
-		JTextField nameField = new JTextField(16);
-		styleField(nameField);
-		nameField.setText(g.getName() != null ? g.getName() : "");
-		commitOnBlurOrEnter(nameField, () ->
+		addSummaryText(body, "Name", g.getName() != null ? g.getName() : "");
+		if (g.getDescription() != null && !g.getDescription().trim().isEmpty())
 		{
-			String name = nameField.getText().trim();
-			if (name.isEmpty()) { nameField.setText(g.getName() != null ? g.getName() : ""); return; }
-			api.editCustomGoal(gid, name, null);
-		});
-		addFormRow(body, "Name", nameField);
+			addSummaryText(body, "Description", g.getDescription());
+		}
 
-		JTextField descField = new JTextField(16);
-		styleField(descField);
-		descField.setText(g.getDescription() != null ? g.getDescription() : "");
-		commitOnBlurOrEnter(descField, () -> api.editCustomGoal(gid, null, descField.getText().trim()));
-		addFormRow(body, "Description (optional)", descField);
-
-		addEditRepeatControls(body, g, "Amount each period");
+		addRepeatSummary(body, g, "Amount each period");
 		return body;
 	}
 
 	private JComponent buildAccountEditBody(Goal g)
 	{
-		final String gid = g.getId();
 		JPanel body = formBody();
 
-		// The metric is fixed for an existing account goal; show it read-only.
+		// The metric is fixed for an existing account goal (no API changes it).
 		String metricLabel = g.getName() != null ? g.getName() : "Account metric";
 		JLabel metric = new JLabel(metricLabel);
 		metric.setForeground(CREATE_FG);
 		metric.setFont(metric.getFont().deriveFont(12f));
 		addFormRow(body, "Metric", metric);
 
-		JTextField targetField = new JTextField(10);
-		styleField(targetField);
-		targetField.setText(Integer.toString(g.getTargetValue()));
-		commitOnBlurOrEnter(targetField, () ->
-		{
-			int t = parsePositiveInt(targetField.getText());
-			if (t <= 0) { targetField.setText(Integer.toString(g.getTargetValue())); return; }
-			api.changeTarget(gid, t);
-		});
-		addFormRow(body, "Target", targetField);
+		addSummaryRow(body, "Target",
+			com.goalplanner.util.FormatUtil.formatXp(g.getTargetValue()));
 		return body;
 	}
 
