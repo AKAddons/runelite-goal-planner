@@ -2040,3 +2040,61 @@ exists), skill + boss conversion both ways (target re-base, rename, Repeatable
 section in/out), one-undo restoration in both directions, refusals (bad period /
 chunk / type / no client), a Repeatable -> One-time -> Repeatable round trip and a
 period+chunk re-tune.
+
+---
+
+## NEEDS-SCREENSHOT (inline move, locked relations, mode conversion) — in-client loop
+
+Verify each at font scale **1.0 AND 1.3**; rounded rows must read cleanly and the
+dock must grow to fit without clipping the footer.
+
+### Inline move / copy to section (Task 4)
+- **Single move**: select a goal in a user section -> **Move to section** -> the
+  inline picker mounts above the footer with the same rows as the create flow's
+  "Choose section" step. The goal's OWN section is absent; **Default (Incomplete /
+  Completed)** is offered. Pick a section -> the goal moves, the dock returns to
+  the goal's Selected view, ONE undo puts it back.
+- **Move from Incomplete**: a goal already in the default -> the **Default** row is
+  NOT offered.
+- **New section from the picker**: **+ New section** reveals the name field ->
+  **Create & use** -> the section is created AND the goal moves, and **one undo
+  reverses both**.
+- **Copy**: **Copy to section** shows "Copy to section" / "Back without copying";
+  the original stays put and a duplicate appears in the target.
+- **Bulk**: select 3+ goals -> **Move to section** shows "Move 3 to section"; a
+  section where ALL 3 already live is absent. Same for **Copy to section**.
+- **Back**: nothing moves, the previous surface (goal Selected view / MULTI strips)
+  comes back.
+- **Stale target**: open the picker, then undo the goal away (or deselect in MULTI)
+  -> the overlay drops instead of showing an empty list.
+
+### Relations without an X (Task 3)
+- **OR-only dependent**: add a boss goal WITH prerequisites where one prereq is an
+  alternative (OR) unlock, select that prereq goal -> its "Required by" row shows a
+  muted `-` instead of an X, tooltip "Alternative (OR) prerequisite ...".
+- **Normal edges still removable**: an ordinary requirement / dependent still shows
+  the X and one click drops it (one undo restores).
+- **Completed goal**: complete a goal that has relations -> every relation row shows
+  the muted `-` (tooltip "Completed goals keep their relations as history") and
+  there is no "+ Add relation".
+
+### Mode conversion (Tasks 1 + 2)
+- **Boss Total -> Repeatable**: select a plain boss goal -> **Edit goal** -> the
+  segment bar shows with **Total** selected -> switch to **Repeatable**, pick
+  Weekly, enter 20 -> **Save changes** -> the card is renamed "<Boss> x20", lands in
+  the **Repeatable** section, and its target is your live KC + 20 (NOT 20). ONE undo
+  restores the original goal, name, target and section.
+- **Boss Repeatable -> Total**: **Edit goal** on that repeatable -> it opens on
+  **Repeatable** -> switch to **Total**, enter a kill target -> Save -> the card is
+  renamed back to the plain boss name, leaves the Repeatable section, and the
+  repeat chips are gone. One undo restores.
+- **Boss -> Relative**: switch to **Relative**, enter 50 -> Save -> the target is
+  your live KC + 50 and the goal is NOT repeating.
+- **Boss re-tune**: on a repeatable, change only the period (Daily -> Monthly) ->
+  Save -> the period chip updates. Saving with NOTHING changed just closes (no undo
+  entry, no warning).
+- **Skill One-time -> Repeatable** and back: same checks with "XP each period" and
+  the "<Skill> +300K XP" rename.
+- **Logged out**: attempt a conversion to Repeatable while logged out -> the form
+  STAYS OPEN with the "Could not read your XP / kill count" hint - it must never
+  close silently having changed nothing.

@@ -4387,10 +4387,16 @@ public class GoalPanel extends PluginPanel
 		oneTimePane.setAlignmentX(Component.LEFT_ALIGNMENT);
 		addFormRow(oneTimePane, "Target level or XP", target);
 
+		// In update mode this pane doubles as the repeat EDITOR (pre-filled with the
+		// goal's own period + chunk), so this form needs no addUpdateRepeatBlock.
 		final com.goalplanner.model.RepeatPeriod[] period =
-			{ com.goalplanner.model.RepeatPeriod.DAILY };
+			{ initialPeriod(editing) };
 		final JTextField amount = new JTextField(8);
 		styleField(amount);
+		if (derived)
+		{
+			amount.setText(Integer.toString(editing.getRepeatChunk()));
+		}
 		JPanel repeatPane = new JPanel();
 		repeatPane.setLayout(new BoxLayout(repeatPane, BoxLayout.Y_AXIS));
 		repeatPane.setOpaque(false);
@@ -4412,35 +4418,28 @@ public class GoalPanel extends PluginPanel
 		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
 		repeatPane.add(lock);
 
-		final boolean[] repeatMode = { seedRepeat };
-		// One-time vs Repeatable is a CREATE choice: turning an existing grind into a
-		// repeatable one derives a new goal (the "Make repeatable" chip), so update
-		// mode drops the toggle, the create repeat pane and the section note, and
-		// edits the goal exactly as it is.
-		if (editing == null)
+		// Update mode opens on the goal's CURRENT mode: a per-period chunk is
+		// Repeatable, anything else is One-time.
+		final boolean[] repeatMode = { seedRepeat || derived };
+		// The toggle shows in BOTH modes: update mode CONVERTS the goal between
+		// One-time and Repeatable on save (convertGoalToOneTime /
+		// convertGoalToRepeatable), so a goal is no longer stuck in the mode it was
+		// created in. (FLAG: no "Relative" segment here - the skill CREATE form has
+		// none either, and an edit-only third segment would break the create/edit
+		// symmetry this form is built on. A relative target is entered as an
+		// absolute one; the boss form keeps Relative because CREATE offers it.)
+		JComponent segmented = buildModeToggle(repeatMode, () ->
 		{
-			JComponent segmented = buildModeToggle(repeatMode, () ->
-			{
-				oneTimePane.setVisible(!repeatMode[0]);
-				repeatPane.setVisible(repeatMode[0]);
-				remeasureDock();
-			});
-			body.add(segmented);
-			body.add(Box.createVerticalStrut(8));
-		}
-		else
-		{
-			repeatMode[0] = false;
-		}
-		oneTimePane.setVisible(!repeatMode[0] && !derived);
+			oneTimePane.setVisible(!repeatMode[0]);
+			repeatPane.setVisible(repeatMode[0]);
+			remeasureDock();
+		});
+		body.add(segmented);
+		body.add(Box.createVerticalStrut(8));
+		oneTimePane.setVisible(!repeatMode[0]);
 		repeatPane.setVisible(repeatMode[0]);
 		body.add(oneTimePane);
 		body.add(repeatPane);
-		// Update mode: the shared repeat editor (period pills + per-period amount)
-		// replaces the create form's Repeatable pane.
-		final java.util.function.BooleanSupplier repeatApply = editing == null
-			? () -> true
-			: addUpdateRepeatBlock(body, editing, "XP each period");
 
 		Runnable onAdd = () ->
 		{
@@ -4451,24 +4450,41 @@ public class GoalPanel extends PluginPanel
 			}
 			if (editing != null)
 			{
-				final int newXp = derived ? 0 : target.getTargetXp();
-				if (!derived && newXp <= 0)
+				final String editId = editing.getId();
+				if (repeatMode[0])
+				{
+					// -> Repeatable: period + per-period XP in one call. setGoalRepeat
+					// alone would be REFUSED on a chunk-less skill goal, and
+					// setGoalRepeatChunk refuses a goal that has no chunk yet.
+					final int chunk = parsePositiveInt(amount.getText());
+					if (chunk <= 0)
+					{
+						warnCreate("Enter how much XP to gain each period.");
+						return;
+					}
+					final com.goalplanner.model.RepeatPeriod p = period[0];
+					if (derived && editing.getRepeatEvery() == p
+						&& editing.getRepeatChunk() == chunk)
+					{
+						closeEditGoalForm();
+						return;
+					}
+					// Re-bases against live XP -> client thread.
+					saveGoalEditOnClientThread(() -> api.convertGoalToRepeatable(editId, p, chunk),
+						"Could not read your XP - try again once you are logged in.");
+					return;
+				}
+				// -> One-time: an absolute XP target. A repeatable goal is converted
+				// back (period AND chunk cleared) rather than just retargeted.
+				final int newXp = target.getTargetXp();
+				if (newXp <= 0)
 				{
 					warnCreate("Enter a valid target level (2-99) or XP (1-200,000,000).");
 					return;
 				}
 				saveGoalEdit(() ->
 				{
-					// Repeat first: it is the only step that can reject input, so an
-					// abort leaves nothing applied.
-					if (!repeatApply.getAsBoolean())
-					{
-						return false;
-					}
-					if (!derived)
-					{
-						api.changeTarget(editing.getId(), newXp);
-					}
+					applyEditedTarget(editId, newXp, derived);
 					return true;
 				});
 				return;
