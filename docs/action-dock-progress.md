@@ -1900,3 +1900,56 @@ single undo entry (the old `promptNewSectionThen` left two).
 
 The four `dock*ToSection` dialog methods and `promptNewSectionThen` are **left
 intact but dead**, for the final dialog sweep.
+
+---
+
+## Relations list — no X on edges that cannot be removed (Task 3)
+
+The itemized relations list gave EVERY edge an X. Two classes of edge could not
+actually be dropped, so the X was a silent no-op (or a parity break):
+
+### 1. OR-only dependents — genuinely non-removable (the finding)
+
+`api.getDependents(id)` is served by `GoalStore.dependentIndex`, which — by design,
+see its javadoc — **"includes both AND and OR edges"**. But `api.removeRequirement`
+only unlinks AND edges: it prechecks `from.getRequiredGoalIds().contains(to)` and
+returns `false` otherwise. And there is **no `removeOrRequirement` on the API at
+all** — `GoalStore.removeOrRequirement` exists, but the only callers are
+`RelationService.addOrRequirement`'s `revert()` and the share-import rollback.
+
+So a goal that is an **alternative (OR) prerequisite** — the shape
+`GoalCreationService` seeds for boss alternative requirements and quest unlocks
+(`addOrRequirement(bossGoalId, skillGoalId)` etc.), and that share-import
+reproduces — shows up in the prereq's **"Required by"** list, and its X did
+nothing at all. Those rows now render **without an X** (muted `-` in the same slot)
+and carry the tooltip *"Alternative (OR) prerequisite - seeded with the goal, cannot
+be removed here"*. `GoalPanel.isAndRequirementOf(fromId, toId)` is the gate.
+
+Note the asymmetry (pre-existing, unchanged): from the OTHER side the edge is not
+listed at all, because `getRequirements` reads `requiredGoalIds` only.
+
+**Everything else is removable.** `removeRequirement` has no auto-seed guard, no
+`autoSeeded` flag exists on relations, and nothing re-seeds a dropped edge — the old
+`Remove Requirements...` / `Remove Dependents...` `MultiSelectDialog`s
+(`GoalContextMenuBuilder` and `dockRemoveRequirements`) listed **every** edge with
+no filter at all, so there is no dialog-side filter to mirror beyond the OR case.
+
+### 2. Completed goals — read-only history (parity)
+
+The old right-click **Relations** submenu was hidden wholesale on completed goals
+("completed items are reference history, not active tracking"), and the dock's
+`Drop reqs` / `Drop dependents` chips were behind the same `!complete` gate — but
+the inline list happily offered an X. Completed goals now render their relations
+**without X's** (matching the block's existing `canAdd = !complete` rule), tooltip
+*"Completed goals keep their relations as history"*.
+
+### Mechanics
+
+`relationEdgeRow(icon, name, tip, onRemove)` treats a **null `onRemove` as locked**:
+it renders a dim `-` in the X's slot (keeps the list aligned) with `tip` as the
+explanation. Two shared tooltip constants: `COMPLETE_RELATION_TIP`,
+`OR_RELATION_TIP`.
+
+Tests (`GoalPlannerApiImplTest`): `removeRequirement` refuses an OR-only edge while
+`getDependents` still lists it, and the AND-edge happy path drops + restores on one
+undo.

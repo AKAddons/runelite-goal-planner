@@ -2849,6 +2849,50 @@ class GoalPlannerApiImplTest
 		}
 
 		@Test
+		@DisplayName("removeRequirement refuses an OR-only edge, which getDependents still lists")
+		void removeRequirementRefusesOrOnlyEdge()
+		{
+			// A boss whose skill prereq is an ALTERNATIVE (OR) unlock, the shape the
+			// boss/quest seeders produce. The dock's relations list renders this edge
+			// from the SKILL side ("Required by: Boss"), because the reverse index
+			// carries OR edges too - but no API can drop it, so the row must render
+			// WITHOUT an X (see GoalPanel.isAndRequirementOf).
+			Goal boss = Goal.builder().type(GoalType.BOSS).name("Boss")
+				.bossName("Zulrah").targetValue(1).build();
+			Goal skill = Goal.builder().type(GoalType.SKILL).name("Skill")
+				.skillName("SLAYER").targetValue(1000).build();
+			store.addGoal(boss); store.addGoal(skill);
+			assertTrue(api.addOrRequirement(boss.getId(), skill.getId()));
+
+			assertTrue(api.getDependents(skill.getId()).contains(boss.getId()),
+				"the reverse index lists OR-edge dependents, so the row is rendered");
+			assertFalse(api.getRequirements(boss.getId()).contains(skill.getId()),
+				"an OR edge is not an AND requirement");
+
+			assertFalse(api.removeRequirement(boss.getId(), skill.getId()),
+				"removeRequirement only drops AND edges - the X would be a silent no-op");
+			assertTrue(api.getDependents(skill.getId()).contains(boss.getId()),
+				"the OR edge survives the refused removal");
+		}
+
+		@Test
+		@DisplayName("removeRequirement drops an AND edge, and one undo restores it")
+		void removeRequirementDropsAndEdge()
+		{
+			Goal parent = Goal.builder().type(GoalType.CUSTOM).name("Parent").build();
+			Goal prereq = Goal.builder().type(GoalType.CUSTOM).name("Prereq").build();
+			store.addGoal(parent); store.addGoal(prereq);
+			assertTrue(api.addRequirement(parent.getId(), prereq.getId()));
+
+			assertTrue(api.removeRequirement(parent.getId(), prereq.getId()));
+			assertFalse(api.getDependents(prereq.getId()).contains(parent.getId()));
+
+			api.undo();
+			assertTrue(api.getRequirements(parent.getId()).contains(prereq.getId()),
+				"one undo restores the removed AND edge");
+		}
+
+		@Test
 		@DisplayName("a plain AND-only parent never auto-completes from its prereqs")
 		void andOnlyParentUntouched()
 		{

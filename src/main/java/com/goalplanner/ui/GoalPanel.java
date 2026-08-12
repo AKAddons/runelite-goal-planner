@@ -6218,9 +6218,13 @@ public class GoalPanel extends PluginPanel
 				{
 					continue;
 				}
+				// Completed goals are reference history: their graph is read-only
+				// (the old Relations menu and the Drop-reqs chip were both hidden
+				// on complete), so the row renders with no X.
 				p.add(relationEdgeRow(ShapeIcons.upTriangle(9, RELATION_REQ_COLOR), name,
-					"Remove this requirement",
-					() -> { api.removeRequirement(gid, reqId); refreshEditForm(); }));
+					complete ? COMPLETE_RELATION_TIP : "Remove this requirement",
+					complete ? null
+						: () -> { api.removeRequirement(gid, reqId); refreshEditForm(); }));
 			}
 		}
 		// Required-by edges: down arrow (things below depend on this goal). The
@@ -6235,9 +6239,27 @@ public class GoalPanel extends PluginPanel
 				{
 					continue;
 				}
-				p.add(relationEdgeRow(ShapeIcons.downTriangle(9, RELATION_DEP_COLOR), name,
-					"Remove this dependent",
-					() -> { api.removeRequirement(depId, gid); refreshEditForm(); }));
+				// getDependents() is the reverse index, which carries BOTH AND and
+				// OR edges - but removeRequirement only unlinks AND edges, and no
+				// API removes an OR edge at all. An OR-only dependent therefore has
+				// nothing its X could do, so it renders locked (see relationEdgeRow).
+				final boolean removable = !complete && isAndRequirementOf(depId, gid);
+				String tip;
+				if (complete)
+				{
+					tip = COMPLETE_RELATION_TIP;
+				}
+				else if (!removable)
+				{
+					tip = OR_RELATION_TIP;
+				}
+				else
+				{
+					tip = "Remove this dependent";
+				}
+				p.add(relationEdgeRow(ShapeIcons.downTriangle(9, RELATION_DEP_COLOR), name, tip,
+					removable ? () -> { api.removeRequirement(depId, gid); refreshEditForm(); }
+						: null));
 			}
 		}
 
@@ -6298,14 +6320,47 @@ public class GoalPanel extends PluginPanel
 		l.setFont(l.getFont().deriveFont(12f));
 		l.setIconTextGap(6);
 		row.add(l, BorderLayout.CENTER);
-		JButton x = flatButton("X", false);
-		x.setToolTipText(removeTip);
-		x.setFont(x.getFont().deriveFont(Font.BOLD, 10f));
-		x.setBorder(new EmptyBorder(1, 7, 1, 7));
-		x.addActionListener(e -> onRemove.run());
-		row.add(x, BorderLayout.EAST);
+		if (onRemove == null)
+		{
+			// Locked edge: no X to press (nothing it could do). A muted dash holds
+			// the same slot so the list stays aligned, and its tooltip says why.
+			JLabel lock = new JLabel("-");
+			lock.setForeground(CREATE_FG_DIM);
+			lock.setFont(lock.getFont().deriveFont(Font.BOLD, 10f));
+			lock.setBorder(new EmptyBorder(1, 7, 1, 7));
+			lock.setToolTipText(removeTip);
+			row.add(lock, BorderLayout.EAST);
+		}
+		else
+		{
+			JButton x = flatButton("X", false);
+			x.setToolTipText(removeTip);
+			x.setFont(x.getFont().deriveFont(Font.BOLD, 10f));
+			x.setBorder(new EmptyBorder(1, 7, 1, 7));
+			x.addActionListener(e -> onRemove.run());
+			row.add(x, BorderLayout.EAST);
+		}
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
 		return row;
+	}
+
+	/** Tooltip on a relation row that cannot be dropped because the goal is done. */
+	private static final String COMPLETE_RELATION_TIP =
+		"Completed goals keep their relations as history";
+	/** Tooltip on an OR-only dependent: the link is an alternative prerequisite
+	 *  seeded with the goal (boss / quest unlock data), and no API removes it. */
+	private static final String OR_RELATION_TIP =
+		"Alternative (OR) prerequisite - seeded with the goal, cannot be removed here";
+
+	/** Whether {@code fromId} holds {@code toId} as a hard (AND) requirement - the
+	 *  only edge kind {@code api.removeRequirement} can drop. A dependent listed by
+	 *  {@code api.getDependents} that fails this test is linked by an OR edge only
+	 *  (the reverse index carries both kinds), and removing it is a silent no-op. */
+	private boolean isAndRequirementOf(String fromId, String toId)
+	{
+		Goal from = goalStore.findGoalById(fromId);
+		return from != null && from.getRequiredGoalIds() != null
+			&& from.getRequiredGoalIds().contains(toId);
 	}
 
 	/** Resolve a relation id to its goal name; null when the id has no live goal
