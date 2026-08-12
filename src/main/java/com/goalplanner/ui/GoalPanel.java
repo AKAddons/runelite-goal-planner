@@ -165,6 +165,17 @@ public class GoalPanel extends PluginPanel
 	private TagReturn dockTagReturn = null;
 	private String dockTagTarget = null;
 	private boolean dockTagMounted = false;
+	/** Which target the inline Share surface (share-inline pass) encodes: GOALS =
+	 *  a captured goal-id list (the single-goal edit share OR the multi selection),
+	 *  SECTION = one section, ALL = every user section. Null = the Share overlay is
+	 *  not active (mirrors {@link #dockColorReturn}). The ids/section are captured at
+	 *  open time so the surface has no live-selection dependency; closing remounts
+	 *  whichever surface it was opened from. */
+	private enum ShareScope { GOALS, SECTION, ALL }
+	private ShareScope dockShareScope = null;
+	private java.util.List<String> dockShareGoalIds = null;
+	private String dockShareSectionId = null;
+	private boolean dockShareMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
 	private final ItemManager itemManager;
@@ -2022,6 +2033,32 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		// Inline Share surface (share-inline pass): the same overlay pattern as the
+		// color / tag surfaces. When active it mounts the share-code view (read-only
+		// code + Copy + optional Save) above the footer. The target was captured at
+		// open time; if it went stale (its goals / section vanished) drop the overlay
+		// and fall through to normal routing.
+		if (dockShareScope != null)
+		{
+			if (!shareTargetValid())
+			{
+				dockShareScope = null;
+				dockShareGoalIds = null;
+				dockShareSectionId = null;
+				dockShareMounted = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockShareMounted)
+				{
+					actionDock.setExpandedComponent(buildShareSurface());
+					dockShareMounted = true;
+				}
+				return;
+			}
+		}
+
 		// A selection means the dock leaves the create surface for the edit/multi
 		// surface; reset the create navigation so returning to EMPTY starts at the
 		// type grid, forget the mounted create view, and rest the create surface
@@ -2398,18 +2435,13 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
-		// Share this single goal as a paste-anywhere code.
+		// Share this single goal as a paste-anywhere code (inline Share surface).
 		if (isShareAvailable())
 		{
 			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
 			bottom.add(sep("share"));
-			bottom.add(item("Copy code", "Copy a share code for this goal",
-				() -> copyGoalsShareCode(shareIds)));
-			if (isSavedPlansAvailable())
-			{
-				bottom.add(item("Save code", "Save a share code for this goal",
-					() -> saveGoalsPlan(shareIds)));
-			}
+			bottom.add(item("Share", "Copy or save a share code for this goal",
+				() -> openShareForGoals(shareIds)));
 		}
 
 		// Deselect / Remove close out the strip.
@@ -2540,18 +2572,13 @@ public class GoalPanel extends PluginPanel
 				() -> api.bulkRestoreDefaults(sel)));
 		}
 
-		// Share the selection as one code.
+		// Share the selection as one code (inline Share surface).
 		if (isShareAvailable())
 		{
 			final java.util.List<String> shareIds = new ArrayList<>(sel);
 			bottom.add(sep("share"));
-			bottom.add(item("Copy code", "Copy one share code for the selected goals",
-				() -> copyGoalsShareCode(shareIds)));
-			if (isSavedPlansAvailable())
-			{
-				bottom.add(item("Save code", "Save one share code for the selected goals",
-					() -> saveGoalsPlan(shareIds)));
-			}
+			bottom.add(item("Share", "Copy or save one share code for the selected goals",
+				() -> openShareForGoals(shareIds)));
 		}
 
 		// Deselect is no longer a trailing chip: it is a full-width "Deselect (N)"
@@ -6342,6 +6369,255 @@ public class GoalPanel extends PluginPanel
 		return surfaceShell("Remove Tag", false, inner);
 	}
 
+	// ------------------------------------------------------------
+	// Inline Share surface (share-inline pass): the copy/save share flows moved
+	// into the dock, mirroring the inline color / tag surfaces exactly. Openers
+	// capture the target (goal ids / section id) and refresh; refreshDock mounts
+	// buildShareSurface above the footer and returns early. Back routes through
+	// closeShareSurface, which remounts whichever surface it was opened from. The
+	// old ShareDialogs copy/save dialogs stay intact but are no longer reached
+	// from the dock.
+	// ------------------------------------------------------------
+
+	/** Open the Share surface for a captured goal-id list (single-goal edit share
+	 *  or the multi selection). The list is copied so a later selection change does
+	 *  not mutate it. */
+	private void openShareForGoals(java.util.List<String> goalIds)
+	{
+		if (!isShareAvailable())
+		{
+			return;
+		}
+		dockShareScope = ShareScope.GOALS;
+		dockShareGoalIds = new java.util.ArrayList<>(goalIds);
+		dockShareSectionId = null;
+		dockShareMounted = false;
+		refreshDock();
+	}
+
+	/** Open the Share surface for a single section. */
+	private void openShareForSection(String sectionId)
+	{
+		if (!isShareAvailable())
+		{
+			return;
+		}
+		dockShareScope = ShareScope.SECTION;
+		dockShareGoalIds = null;
+		dockShareSectionId = sectionId;
+		dockShareMounted = false;
+		refreshDock();
+	}
+
+	/** Open the Share surface for every user section (one v2 multi-section code). */
+	private void openShareForAllSections()
+	{
+		if (!isShareAvailable())
+		{
+			return;
+		}
+		dockShareScope = ShareScope.ALL;
+		dockShareGoalIds = null;
+		dockShareSectionId = null;
+		dockShareMounted = false;
+		refreshDock();
+	}
+
+	/** Close the Share overlay and return to the surface it was opened from WITHOUT
+	 *  changing anything. Like {@link #closeColorSurface} it forces the edit /
+	 *  section surfaces to remount (they were replaced by the overlay); MULTI
+	 *  rebuilds its strips every refresh and needs no guard drop. */
+	private void closeShareSurface()
+	{
+		dockShareScope = null;
+		dockShareGoalIds = null;
+		dockShareSectionId = null;
+		dockShareMounted = false;
+		dockEditMounted = false;
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** Whether the Share overlay's captured target still has something to encode, so
+	 *  refreshDock can drop a stale overlay instead of mounting an empty surface. */
+	private boolean shareTargetValid()
+	{
+		if (dockShareScope == null)
+		{
+			return false;
+		}
+		switch (dockShareScope)
+		{
+			case GOALS:
+				if (dockShareGoalIds == null)
+				{
+					return false;
+				}
+				for (String id : dockShareGoalIds)
+				{
+					if (goalStore.findGoalById(id) != null)
+					{
+						return true;
+					}
+				}
+				return false;
+			case SECTION: return findSectionView(dockShareSectionId) != null;
+			case ALL:     return true;
+			default:      return false;
+		}
+	}
+
+	/** The player name for a share export, mirroring ShareDialogs' safeName: the
+	 *  supplier's value, or "Someone" when it is empty / absent / throws. */
+	private String sharePlayerName()
+	{
+		try
+		{
+			String n = playerNameSupplier != null ? playerNameSupplier.get() : null;
+			return n != null && !n.isEmpty() ? n : "Someone";
+		}
+		catch (RuntimeException e)
+		{
+			return "Someone";
+		}
+	}
+
+	/** Build the in-dock Share surface for the captured target: a read-only,
+	 *  selectable, wrapping, scrollable code area (the paste-anywhere invite line the
+	 *  copy dialogs produce), a Copy button (clipboard + inline confirm), and - when
+	 *  the Saved Plans library is wired - a name field + Save button that banks the
+	 *  raw canonical code via the same {@code savedPlanStore.add} path the save
+	 *  dialogs use. Back returns without changing anything. */
+	private JComponent buildShareSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		// Back returns to the prior surface WITHOUT changing anything.
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without sharing", this::closeShareSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		// Resolve the bundle for the captured target.
+		com.goalplanner.share.ShareBundle bundle;
+		switch (dockShareScope)
+		{
+			case SECTION:
+				bundle = api.exportSectionBundle(dockShareSectionId, sharePlayerName());
+				break;
+			case ALL:
+				bundle = api.exportAllSectionsBundle(sharePlayerName());
+				break;
+			case GOALS:
+			default:
+				bundle = api.exportGoalsBundle(dockShareGoalIds, sharePlayerName());
+				break;
+		}
+
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		if (bundle == null || bundle.totalGoalCount() == 0)
+		{
+			JLabel none = new JLabel("Nothing to share here.");
+			none.setForeground(CREATE_FG);
+			none.setFont(none.getFont().deriveFont(11f));
+			none.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			body.add(none);
+			inner.add(body, BorderLayout.CENTER);
+			return surfaceShell("Share", false, inner);
+		}
+
+		final String code = shareCodec.encode(bundle);
+		final String invite = com.goalplanner.share.ShareText.invite(bundle, code);
+
+		// Read-only, selectable, wrapping code area (codes are long gzip+base64).
+		final JTextArea codeArea = new JTextArea(invite, 4, 20);
+		codeArea.setEditable(false);
+		codeArea.setLineWrap(true);
+		codeArea.setWrapStyleWord(false);
+		codeArea.setFont(codeArea.getFont().deriveFont(11f));
+		codeArea.setForeground(CREATE_FG);
+		codeArea.setBackground(CREATE_FIELD_BG);
+		codeArea.setCaretPosition(0);
+		JScrollPane codeScroll = new JScrollPane(codeArea);
+		codeScroll.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
+			RoundedPaint.RADIUS, new java.awt.Insets(2, 2, 2, 2)));
+		codeScroll.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		codeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
+		body.add(codeScroll);
+		body.add(Box.createVerticalStrut(6));
+
+		// Copy the invite line to the system clipboard, with a brief inline confirm.
+		JButton copyBtn = flatButton("Copy", true);
+		copyBtn.setToolTipText("Copy the share code to your clipboard");
+		copyBtn.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		copyBtn.addActionListener(e -> {
+			java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+				.setContents(new java.awt.datatransfer.StringSelection(invite), null);
+			showInfoNotice("Copied share code to your clipboard.");
+		});
+		body.add(copyBtn);
+
+		// Save the raw canonical code into the Saved Plans library (when wired).
+		if (isSavedPlansAvailable())
+		{
+			body.add(Box.createVerticalStrut(8));
+			JLabel saveLbl = new JLabel("Save to your plans");
+			saveLbl.setForeground(CREATE_FG);
+			saveLbl.setFont(saveLbl.getFont().deriveFont(11f));
+			saveLbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			body.add(saveLbl);
+			body.add(Box.createVerticalStrut(2));
+
+			JPanel saveRow = new JPanel(new BorderLayout(4, 0));
+			saveRow.setOpaque(false);
+			saveRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			final JTextField nameField = new JTextField(defaultSharePlanName(bundle));
+			styleField(nameField);
+			nameField.setToolTipText("Name this saved plan");
+			JButton saveBtn = flatButton("Save", false);
+			saveBtn.setToolTipText("Save this share code to your plans");
+			Runnable commitSave = () -> {
+				String name = nameField.getText() == null ? "" : nameField.getText().trim();
+				if (name.isEmpty())
+				{
+					name = defaultSharePlanName(bundle);
+				}
+				savedPlanStore.add(name, code,
+					com.goalplanner.share.SavedPlanSections.sectionNamesOf(bundle));
+				showInfoNotice("Saved \"" + name + "\" to your plans.");
+				closeShareSurface();
+			};
+			saveBtn.addActionListener(e -> commitSave.run());
+			nameField.addActionListener(e -> commitSave.run());
+			saveRow.add(nameField, BorderLayout.CENTER);
+			saveRow.add(saveBtn, BorderLayout.EAST);
+			saveRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, saveRow.getPreferredSize().height));
+			body.add(saveRow);
+		}
+
+		inner.add(body, BorderLayout.CENTER);
+		return surfaceShell("Share", false, inner);
+	}
+
+	/** The default saved-plan name for a bundle (mirrors ShareDialogs.defaultPlanName):
+	 *  the first non-empty section name, else "Shared plan". */
+	private static String defaultSharePlanName(com.goalplanner.share.ShareBundle bundle)
+	{
+		for (com.goalplanner.share.SectionShareDto s : bundle.effectiveSections())
+		{
+			if (s.getName() != null && !s.getName().trim().isEmpty())
+			{
+				return s.getName().trim();
+			}
+		}
+		return "Shared plan";
+	}
+
 	/** The current {@link com.goalplanner.api.SectionView} for {@code id}, or null
 	 *  if no such section exists (e.g. it was deleted while selected). */
 	private com.goalplanner.api.SectionView findSectionView(String id)
@@ -6840,13 +7116,8 @@ public class GoalPanel extends PluginPanel
 		if (isShareAvailable())
 		{
 			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
-			wrap.add(chip("Copy code", "Copy a share code for this goal",
-				() -> copyGoalsShareCode(shareIds)));
-			if (isSavedPlansAvailable())
-			{
-				wrap.add(chip("Save code", "Save a share code for this goal",
-					() -> saveGoalsPlan(shareIds)));
-			}
+			wrap.add(chip("Share", "Copy or save a share code for this goal",
+				() -> openShareForGoals(shareIds)));
 		}
 
 		wrap.add(chip("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
@@ -7021,21 +7292,15 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	/** Share group: copy/save a code for this section or for all sections. */
+	/** Share group: open the inline Share surface for this section or for all
+	 *  sections (the surface carries both Copy and, when wired, Save). */
 	private void buildSectionShareChips(com.goalplanner.api.SectionView sv, JPanel wrap)
 	{
 		final String sid = sv.id;
-		wrap.add(chip("Copy code", "Copy a share code for this section",
-			() -> copySectionShareCode(sid)));
-		wrap.add(chip("Copy all", "Copy a share code for all sections",
-			this::copyAllSectionsShareCode));
-		if (isSavedPlansAvailable())
-		{
-			wrap.add(chip("Save code", "Save a share code for this section",
-				() -> saveSectionPlan(sid)));
-			wrap.add(chip("Save all", "Save a share code for all sections",
-				this::saveAllSectionsPlan));
-		}
+		wrap.add(chip("Share section", "Copy or save a share code for this section",
+			() -> openShareForSection(sid)));
+		wrap.add(chip("Share all", "Copy or save a share code for all sections",
+			this::openShareForAllSections));
 	}
 
 	/** The section delete confirm, reusing the menu's move-instead prompt verbatim.
