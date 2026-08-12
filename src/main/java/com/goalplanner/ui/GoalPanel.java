@@ -3671,6 +3671,11 @@ public class GoalPanel extends PluginPanel
 	private static final Color CREATE_PRIMARY_BG = new Color(0x2E, 0x4D, 0x32);
 	private static final Color CREATE_PRIMARY_HOVER = new Color(0x3A, 0x60, 0x40);
 	private static final Color CREATE_PRIMARY_FG = new Color(0xD4, 0xE9, 0xD4);
+	// Discard (abandon an edit): muted red, tuned to sit beside the green primary
+	// without shouting - same weight, opposite intent.
+	private static final Color DISCARD_BG = new Color(0x4D, 0x2E, 0x2E);
+	private static final Color DISCARD_HOVER = new Color(0x64, 0x3A, 0x3A);
+	private static final Color DISCARD_FG = new Color(0xE9, 0xC4, 0xC4);
 	private static final Color CREATE_FIELD_BG = new Color(0x2A, 0x2A, 0x2C);
 	/** Subtle rounded outline drawn around text fields (glam pass). */
 	private static final Color CREATE_FIELD_STROKE = new Color(0x4A, 0x4A, 0x50);
@@ -5851,14 +5856,20 @@ public class GoalPanel extends PluginPanel
 
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
-		JButton back = flatButton("Back", false);
-		back.addActionListener(e -> { if (update) closeEditGoalForm(); else onBack.run(); });
 		JLabel title = new JLabel(update
 			? "Edit " + tileLabel(type).toLowerCase(java.util.Locale.ROOT) + " goal"
 			: tileLabel(type) + " goal");
 		title.setForeground(CREATE_FG);
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
-		header.add(back, BorderLayout.WEST);
+		// Create mode keeps a header Back (it steps back through the create flow).
+		// Update mode has no header Back: abandoning an edit is a deliberate red
+		// Discard sitting beside Save changes in the footer (user feedback).
+		if (!update)
+		{
+			JButton back = flatButton("Back", false);
+			back.addActionListener(e -> onBack.run());
+			header.add(back, BorderLayout.WEST);
+		}
 		header.add(title, BorderLayout.CENTER);
 		inner.add(header, BorderLayout.NORTH);
 
@@ -5872,8 +5883,20 @@ public class GoalPanel extends PluginPanel
 			// section step, no second goal.
 			JButton add = flatButton(update ? "Save changes" : "Next: choose section", true);
 			add.addActionListener(e -> onAdd.run());
-			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+			JPanel footer = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 			footer.setOpaque(false);
+			if (update)
+			{
+				// Discard sits at the same level as Save changes, in red, so
+				// abandoning an edit reads as the destructive choice it is.
+				JButton discard = flatButton("Discard", false);
+				discard.setForeground(DISCARD_FG);
+				discard.setBackground(DISCARD_BG);
+				hover(discard, DISCARD_BG, DISCARD_HOVER);
+				discard.setToolTipText("Discard these changes");
+				discard.addActionListener(e -> closeEditGoalForm());
+				footer.add(discard);
+			}
 			footer.add(add);
 			inner.add(footer, BorderLayout.SOUTH);
 		}
