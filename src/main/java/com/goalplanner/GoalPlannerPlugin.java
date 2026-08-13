@@ -1054,6 +1054,10 @@ public class GoalPlannerPlugin extends Plugin
 			// maybeAutoAddMiscApprovalGoal.
 			lastMiscApproval = -1;
 			miscApprovalIncreases = 0;
+			// Same sync jump, other consumer: hold off re-opening a completed
+			// decaying account goal (favour, slayer points) until the varp
+			// block has landed, so a pre-sync 0 can't un-complete it.
+			accountTracker.onLogin();
 			checkProfile();
 		}
 		else if (event.getGameState() == GameState.LOGIN_SCREEN

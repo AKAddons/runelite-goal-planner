@@ -66,6 +66,29 @@ class SkillTrackerTest
 	}
 
 	@Test
+	@DisplayName("a completed 99 goal stays complete when a lower XP value is reported")
+	void completedSkillGoalIsSticky()
+	{
+		MockGameState maxed = new MockGameState().skillXp(Skill.ATTACK, 13_034_431);
+		MockGameState unsynced = new MockGameState().skillXp(Skill.ATTACK, 0);
+
+		var h = TrackerTestHarness.forSkills(maxed);
+		Goal goal = makeSkillGoal(Skill.ATTACK, 13_034_431);
+		h.store().addGoal(goal);
+		h.tracker().checkGoals(h.store().getGoals());
+		assertTrue(goal.isComplete());
+		long completedAt = goal.getCompletedAt();
+
+		// XP is monotonic in game, so a lower read is a stale client, never a
+		// loss: the goal is not re-read and its completion date is preserved.
+		h = h.withNewState(unsynced);
+		assertFalse(h.tracker().checkGoals(h.store().getGoals()));
+		assertTrue(goal.isComplete());
+		assertEquals(completedAt, goal.getCompletedAt());
+		assertEquals(13_034_431, goal.getCurrentValue());
+	}
+
+	@Test
 	@DisplayName("tracks multiple skills independently")
 	void tracksMultipleSkills()
 	{

@@ -3,7 +3,9 @@ package com.goalplanner.tracker;
 import com.goalplanner.data.AchievementDiaryData;
 import com.goalplanner.model.AccountMetric;
 import com.goalplanner.model.Goal;
+import com.goalplanner.model.GoalStatus;
 import com.goalplanner.model.GoalType;
+import com.goalplanner.testsupport.MockClientFactory;
 import com.goalplanner.testsupport.MockGameState;
 import com.goalplanner.testsupport.TrackerTestHarness;
 import net.runelite.api.gameval.VarPlayerID;
@@ -344,6 +346,180 @@ class AccountTrackerTest
 
 			assertTrue(h.tracker().checkGoals(h.store().getGoals()));
 			assertEquals(250, goal.getCurrentValue());
+		}
+	}
+
+	@Nested
+	@DisplayName("Decaying metrics (completion follows the live value)")
+	class DecayingMetricTests
+	{
+		private MockGameState favour(int approval)
+		{
+			return new MockGameState().varbit(VarbitID.MISC_APPROVAL, approval);
+		}
+
+		@Test
+		@DisplayName("Miscellania favour goal completes at 100% approval")
+		void completesAtFullApproval()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+
+			h.tracker().checkGoals(h.store().getGoals());
+			assertEquals(127, goal.getCurrentValue());
+			assertTrue(goal.isComplete());
+		}
+
+		@Test
+		@DisplayName("re-opens the goal when favour decays below the target")
+		void reopensWhenFavourDecays()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+			assertTrue(goal.isComplete());
+
+			h = h.withNewState(favour(126));
+			assertTrue(h.tracker().checkGoals(h.store().getGoals()));
+			assertFalse(goal.isComplete());
+			assertEquals(0, goal.getCompletedAt());
+			assertEquals(126, goal.getCurrentValue());
+			assertEquals(GoalStatus.ACTIVE, goal.getStatus());
+		}
+
+		@Test
+		@DisplayName("re-completes once favour is topped back up")
+		void reCompletesWhenFavourRecovers()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+
+			h = h.withNewState(favour(120));
+			h.tracker().checkGoals(h.store().getGoals());
+			assertFalse(goal.isComplete());
+
+			h = h.withNewState(favour(127));
+			h.tracker().checkGoals(h.store().getGoals());
+			assertTrue(goal.isComplete());
+			assertEquals(127, goal.getCurrentValue());
+		}
+
+		@Test
+		@DisplayName("holds steady once re-opened - no flip-flop on an unchanged value")
+		void noFlipFlopWhileBelowTarget()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+
+			h = h.withNewState(favour(126));
+			assertTrue(h.tracker().checkGoals(h.store().getGoals()));
+			// A second pass over the same state changes nothing at all.
+			assertFalse(h.tracker().checkGoals(h.store().getGoals()));
+			assertFalse(goal.isComplete());
+			assertEquals(126, goal.getCurrentValue());
+		}
+
+		@Test
+		@DisplayName("a completed goal at full favour is left untouched")
+		void stableWhileStillMet()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+			long completedAt = goal.getCompletedAt();
+
+			assertFalse(h.tracker().checkGoals(h.store().getGoals()));
+			assertEquals(completedAt, goal.getCompletedAt());
+		}
+
+		@Test
+		@DisplayName("spent slayer points re-open a completed points goal")
+		void spendingSlayerPointsReopens()
+		{
+			var h = TrackerTestHarness.forAccount(
+				new MockGameState().varbit(VarbitID.SLAYER_POINTS, 1000));
+			Goal goal = makeAccountGoal(AccountMetric.SLAYER_POINTS, 1000);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+			assertTrue(goal.isComplete());
+
+			h = h.withNewState(new MockGameState().varbit(VarbitID.SLAYER_POINTS, 100));
+			h.tracker().checkGoals(h.store().getGoals());
+			assertFalse(goal.isComplete());
+			assertEquals(100, goal.getCurrentValue());
+		}
+
+		@Test
+		@DisplayName("the pre-sync zero read right after login does not un-complete it")
+		void loginSyncZeroDoesNotReopen()
+		{
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+			long completedAt = goal.getCompletedAt();
+
+			// Relog: the varbit block has not landed yet, so MISC_APPROVAL reads 0.
+			h = h.withNewState(favour(0));
+			h.tracker().onLogin();
+			assertFalse(h.tracker().checkGoals(h.store().getGoals()));
+			assertTrue(goal.isComplete());
+			assertEquals(completedAt, goal.getCompletedAt());
+			assertEquals(127, goal.getCurrentValue());
+		}
+
+		@Test
+		@DisplayName("a genuine zero re-opens the goal once the settle window passes")
+		void settledZeroDoesReopen()
+		{
+			// Fake clock: onLogin() arms the window, then time jumps past it.
+			long[] now = { 1_000_000L };
+			var h = TrackerTestHarness.forAccount(favour(127));
+			Goal goal = makeAccountGoal(AccountMetric.MISC_APPROVAL, 127);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+
+			AccountTracker settling = new AccountTracker(
+				MockClientFactory.createClient(favour(0)), h.api(), () -> now[0]);
+			settling.onLogin();
+			assertFalse(settling.checkGoals(h.store().getGoals()));
+			assertTrue(goal.isComplete());
+
+			now[0] += AccountTracker.LOGIN_SETTLE_MS;
+			assertTrue(settling.checkGoals(h.store().getGoals()));
+			assertFalse(goal.isComplete());
+			assertEquals(0, goal.getCurrentValue());
+		}
+	}
+
+	@Nested
+	@DisplayName("Monotonic metrics (completion stays sticky)")
+	class MonotonicMetricTests
+	{
+		@Test
+		@DisplayName("a completed quest-point goal survives a lower read")
+		void completedQuestPointGoalStaysComplete()
+		{
+			var h = TrackerTestHarness.forAccount(new MockGameState().questPoints(200));
+			Goal goal = makeAccountGoal(AccountMetric.QUEST_POINTS, 200);
+			h.store().addGoal(goal);
+			h.tracker().checkGoals(h.store().getGoals());
+			assertTrue(goal.isComplete());
+			long completedAt = goal.getCompletedAt();
+
+			// Unsynced/wrong read: the goal is never re-read once complete.
+			h = h.withNewState(new MockGameState().questPoints(0));
+			assertFalse(h.tracker().checkGoals(h.store().getGoals()));
+			assertTrue(goal.isComplete());
+			assertEquals(completedAt, goal.getCompletedAt());
+			assertEquals(200, goal.getCurrentValue());
 		}
 	}
 

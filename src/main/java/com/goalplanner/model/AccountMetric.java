@@ -15,31 +15,51 @@ public enum AccountMetric
 	 * goal creation prefers the live sum of the client's quest DB table via
 	 * {@link #effectiveMaxTarget}, which grows as new quests release.
 	 */
-	QUEST_POINTS("Quest Points", new Color(65, 155, 222), 899, null, 1, 341),
-	COMBAT_LEVEL("Combat Level", new Color(200, 60, 60), 168, null, 3, 126),
-	TOTAL_LEVEL("Total Level", new Color(76, 175, 80), 898, null, 1, 2376),
+	QUEST_POINTS("Quest Points", new Color(65, 155, 222), 899, null, 1, 341,
+		AccountMetric.MONOTONIC),
+	COMBAT_LEVEL("Combat Level", new Color(200, 60, 60), 168, null, 3, 126,
+		AccountMetric.MONOTONIC),
+	TOTAL_LEVEL("Total Level", new Color(76, 175, 80), 898, null, 1, 2376,
+		AccountMetric.MONOTONIC),
 	// MUSIC_TRACKS deferred - no reliable bulk API for counting unlocked tracks
-	CA_POINTS("CA Points", new Color(139, 69, 19), 0, null, 1, 2630),
-	SLAYER_POINTS("Slayer Points", new Color(0, 160, 160), 0, null, 1, 64000),
-	KUDOS("Museum Kudos", new Color(200, 170, 50), 0, "item:11182", 1, 243),
+	CA_POINTS("CA Points", new Color(139, 69, 19), 0, null, 1, 2630,
+		AccountMetric.MONOTONIC),
+	/**
+	 * Slayer reward points. The varbit is the SPENDABLE balance, not lifetime
+	 * earned - buying unlocks, task skips or blocks subtracts from it - so a
+	 * "have N points" goal stops being met the moment you spend them.
+	 */
+	SLAYER_POINTS("Slayer Points", new Color(0, 160, 160), 0, null, 1, 64000,
+		AccountMetric.DECAYS),
+	KUDOS("Museum Kudos", new Color(200, 170, 50), 0, "item:11182", 1, 243,
+		AccountMetric.MONOTONIC),
 	/** Combined Attack + Strength level (e.g. 130 for Warriors Guild entry). */
-	ATT_STR_COMBINED("Att + Str", new Color(46, 125, 50), 0, "item:8850", 2, 198),
-	/** Kingdom of Miscellania approval rating (0-127, where 127 = 100%). */
-	MISC_APPROVAL("Misc. Approval", new Color(200, 170, 50), 0, null, 1, 127),
+	ATT_STR_COMBINED("Att + Str", new Color(46, 125, 50), 0, "item:8850", 2, 198,
+		AccountMetric.MONOTONIC),
+	/**
+	 * Kingdom of Miscellania approval rating (0-127, where 127 = 100%).
+	 * Favour decays every day you stay away from the kingdom, so completion
+	 * has to follow the varbit back down - see {@link #decays()}.
+	 */
+	MISC_APPROVAL("Misc. Approval", new Color(200, 170, 50), 0, null, 1, 127,
+		AccountMetric.DECAYS),
 	/**
 	 * Tears of Guthix personal best (max tears collected in a single game).
 	 * Collection time in the minigame is capped by quest points, so this
 	 * ceiling IS the quest-point maximum - the static fallback matches
 	 * QUEST_POINTS and {@link #effectiveMaxTarget} shares its live read.
 	 */
-	TOG_MAX_TEARS("Tears of Guthix PB", new Color(100, 180, 220), 0, null, 1, 341),
+	TOG_MAX_TEARS("Tears of Guthix PB", new Color(100, 180, 220), 0, null, 1, 341,
+		AccountMetric.MONOTONIC),
 	/** Chompy bird kill count. */
-	CHOMPY_KILLS("Chompy Kills", new Color(139, 69, 19), 0, "item:" + net.runelite.api.ItemID.RAW_CHOMPY, 1, 4000),
+	CHOMPY_KILLS("Chompy Kills", new Color(139, 69, 19), 0,
+		"item:" + net.runelite.api.ItemID.RAW_CHOMPY, 1, 4000, AccountMetric.MONOTONIC),
 	/** Fortis Colosseum personal best glory (highest single-run glory). */
 	COLOSSEUM_GLORY("Colosseum Glory", new Color(212, 175, 55), 0,
-		"item:" + net.runelite.api.ItemID.SMOL_HEREDIT, 1, 100000),
+		"item:" + net.runelite.api.ItemID.SMOL_HEREDIT, 1, 100000, AccountMetric.MONOTONIC),
 	/** Doom of Mokhaiotl deepest delve level reached (1-8+). */
-	DOM_DEEPEST_LEVEL("DoM Deepest Level", new Color(80, 40, 120), 0, null, 1, 8),
+	DOM_DEEPEST_LEVEL("DoM Deepest Level", new Color(80, 40, 120), 0, null, 1, 8,
+		AccountMetric.MONOTONIC),
 	/**
 	 * Collection log unique slots obtained (VarPlayer COLLECTION_COUNT,
 	 * transmitted on login since the Jan 2025 collection log update; reads 0
@@ -49,7 +69,7 @@ public enum AccountMetric
 	 * grows as new slots are added to the game.
 	 */
 	COLLECTION_LOG_SLOTS("Collection Log Slots", new Color(181, 137, 60), 0,
-		"item:" + net.runelite.api.ItemID.COLLECTION_LOG, 1, 1701),
+		"item:" + net.runelite.api.ItemID.COLLECTION_LOG, 1, 1701, AccountMetric.MONOTONIC),
 	/**
 	 * Achievement diary tiers completed across all 12 areas and 4 tiers
 	 * (0-48). Summed from the same per-tier completion varbit refdata that
@@ -57,7 +77,8 @@ public enum AccountMetric
 	 * Easy/Medium/Hard task-count varbits.
 	 * Icon: SpriteID.AchievementDiaryIcons.GREEN_ACHIEVEMENT_DIARIES.
 	 */
-	DIARY_TIERS_COMPLETED("Diary Tiers", new Color(76, 175, 80), 836, null, 1, 48),
+	DIARY_TIERS_COMPLETED("Diary Tiers", new Color(76, 175, 80), 836, null, 1, 48,
+		AccountMetric.MONOTONIC),
 	/**
 	 * League Points - lifetime points earned during the active OSRS Leagues
 	 * event (VarPlayer LEAGUE_POINTS_COMPLETED). Only increments; spending
@@ -66,7 +87,8 @@ public enum AccountMetric
 	 * used for the leagues pane (orange counterpart to the green diary /
 	 * red minigames tab icons).
 	 */
-	LEAGUE_POINTS("League Points", new Color(255, 152, 0), 1713, null, 1, 500000),
+	LEAGUE_POINTS("League Points", new Color(255, 152, 0), 1713, null, 1, 500000,
+		AccountMetric.MONOTONIC),
 	/**
 	 * Total Leagues tasks completed across all difficulty tiers
 	 * (Varbit LEAGUE_TOTAL_TASKS_COMPLETED). Reads 0 outside a leagues world.
@@ -74,7 +96,19 @@ public enum AccountMetric
 	 * used for the leagues pane (orange counterpart to the green diary /
 	 * red minigames tab icons).
 	 */
-	LEAGUE_TASKS("Leagues Tasks", new Color(255, 152, 0), 1713, null, 1, 1500);
+	LEAGUE_TASKS("Leagues Tasks", new Color(255, 152, 0), 1713, null, 1, 1500,
+		AccountMetric.MONOTONIC);
+
+	/**
+	 * Constructor marker: the live value can fall during normal play, so a goal
+	 * on it is only "complete" while the live value still meets the target.
+	 */
+	static final boolean DECAYS = true;
+	/**
+	 * Constructor marker: the live value never falls, so completion is sticky -
+	 * once earned, a transient low read must not un-complete the goal.
+	 */
+	static final boolean MONOTONIC = false;
 
 	private final String displayName;
 	private final Color color;
@@ -83,9 +117,10 @@ public enum AccountMetric
 	private final String iconKey;
 	private final int minTarget;
 	private final int maxTarget;
+	private final boolean decays;
 
 	AccountMetric(String displayName, Color color, int spriteId, String iconKey,
-		int minTarget, int maxTarget)
+		int minTarget, int maxTarget, boolean decays)
 	{
 		this.displayName = displayName;
 		this.color = color;
@@ -93,7 +128,40 @@ public enum AccountMetric
 		this.iconKey = iconKey;
 		this.minTarget = minTarget;
 		this.maxTarget = maxTarget;
+		this.decays = decays;
 	}
+
+	/**
+	 * Whether this metric's live value can FALL during normal play.
+	 *
+	 * <p>Completion is sticky for every other goal in the plugin: 99 Attack and
+	 * a finished quest cannot be un-earned, so once {@code completedAt} is
+	 * stamped the trackers leave the goal alone (which also stops a transient
+	 * pre-sync zero read from clobbering the completion date). A decaying metric
+	 * breaks that assumption - Miscellania favour falls a little every day you
+	 * stay away - so for these two metrics completion is derived ABSOLUTELY from
+	 * the live value: below target re-opens the goal, back at target completes
+	 * it again. See {@link com.goalplanner.tracker.AccountTracker}.
+	 *
+	 * <p>Classification, one line per metric:
+	 * <ul>
+	 *   <li>MISC_APPROVAL - DECAYS. Kingdom favour drops ~1%/day of absence.</li>
+	 *   <li>SLAYER_POINTS - DECAYS. The varbit is the spendable balance;
+	 *       unlocks/skips/blocks subtract from it.</li>
+	 *   <li>QUEST_POINTS, DIARY_TIERS_COMPLETED, CA_POINTS, KUDOS,
+	 *       CHOMPY_KILLS, COLLECTION_LOG_SLOTS - monotonic counters of things
+	 *       completed or obtained; the game never takes them back.</li>
+	 *   <li>TOTAL_LEVEL, COMBAT_LEVEL, ATT_STR_COMBINED - real (unboosted)
+	 *       levels, which never drop.</li>
+	 *   <li>TOG_MAX_TEARS, COLOSSEUM_GLORY, DOM_DEEPEST_LEVEL - personal
+	 *       bests: a worse run does not lower the record.</li>
+	 *   <li>LEAGUE_POINTS - monotonic despite being a currency: the varp read
+	 *       is LEAGUE_POINTS_COMPLETED (lifetime EARNED), not the spendable
+	 *       balance, so shopping does not move it.</li>
+	 *   <li>LEAGUE_TASKS - monotonic count of tasks completed.</li>
+	 * </ul>
+	 */
+	public boolean decays() { return decays; }
 
 	public String getDisplayName() { return displayName; }
 	public Color getColor() { return color; }

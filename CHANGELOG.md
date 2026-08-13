@@ -6,6 +6,16 @@ versioning is [semver](https://semver.org/) with the caveat that the
 0.x series is experimental and may include breaking changes on minor
 bumps.
 
+## [Unreleased]
+
+### Fixed
+- **A Miscellania favour goal now un-completes when your favour decays** — the
+  two account metrics that can actually lose value (Kingdom approval and
+  spendable slayer points) are judged purely on the live game value, so the
+  goal re-opens the moment you drop below the target and completes again when
+  you're back over it. Everything else stays sticky: levels, quest points and
+  diary tiers can't be un-earned.
+
 ## [0.5.0] — 2026-08-08
 
 ### Added

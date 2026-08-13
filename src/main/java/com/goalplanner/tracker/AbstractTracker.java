@@ -49,6 +49,21 @@ public abstract class AbstractTracker
 	}
 
 	/**
+	 * Whether a COMPLETE goal should still be re-read from the client.
+	 *
+	 * <p>Default false: completion is sticky, because the backing value for
+	 * almost everything tracked here (XP, quest state, kill counts, diary
+	 * varbits) is monotonic in-game. Override and return true only for goals
+	 * whose backing value can genuinely FALL - then completion is derived
+	 * absolutely from the live value and the goal re-opens when it drops below
+	 * target (see {@link AccountTracker} / {@code AccountMetric.decays()}).
+	 */
+	protected boolean tracksAfterCompletion(Goal goal)
+	{
+		return false;
+	}
+
+	/**
 	 * Check all goals of this tracker's type and update progress.
 	 * Returns true if any goal was updated.
 	 */
@@ -75,12 +90,22 @@ public abstract class AbstractTracker
 		// types the user can re-run tracking by editing the backing goal
 		// state explicitly.
 		//
+		// The one exception is a goal whose backing value can actually FALL
+		// (Miscellania favour decays, slayer points get spent). Those opt in
+		// via tracksAfterCompletion(goal) and keep being read while COMPLETE,
+		// so recordGoalProgress can clear completedAt the moment the live
+		// value drops below target. BLOCKED/PAUSED goals are never read.
+		//
 		// ItemTracker overrides this method entirely for its own semantics.
 		List<Goal> snapshot = new java.util.ArrayList<>(goals);
 		for (Goal goal : snapshot)
 		{
 			if (goal.getType() != targetType()) continue;
-			if (goal.getStatus() != GoalStatus.ACTIVE) continue;
+			if (goal.getStatus() != GoalStatus.ACTIVE
+				&& !(goal.getStatus() == GoalStatus.COMPLETE && tracksAfterCompletion(goal)))
+			{
+				continue;
+			}
 
 			if (!shouldTrack(goal))
 			{

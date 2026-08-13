@@ -105,7 +105,9 @@
         "tracker/DiaryTracker.java"
       ],
       "tests": [
-        "tracker/ItemTrackerTest.java"
+        "tracker/ItemTrackerTest.java",
+        "tracker/AccountTrackerTest.java",
+        "tracker/SkillTrackerTest.java"
       ],
       "since": "0.1.0",
       "capture": "Panel visible while gaining XP toward a skill goal (chop a tree). Bar/numbers tick. ~6s."
@@ -118,15 +120,18 @@
       "media": "docs/img/account-metrics.gif",
       "code": [
         "model/AccountMetric.java",
+        "tracker/AccountTracker.java",
         "api/GoalCreationService.java",
         "ui/GoalDialogFactory.java"
       ],
       "tests": [
         "model/AccountMetricMaxTest.java",
+        "model/AccountMetricDecayTest.java",
+        "tracker/AccountTrackerTest.java",
         "api/GoalPlannerApiImplTest.java"
       ],
       "since": "0.1.0",
-      "notes": "Live ceilings (quest DB sum, collection-log varp) since 0.3.0; over-max targets allowed since 0.3.0; leagues metrics hidden off-profile since 0.3.0."
+      "notes": "Live ceilings (quest DB sum, collection-log varp) since 0.3.0; over-max targets allowed since 0.3.0; leagues metrics hidden off-profile since 0.3.0. Each metric declares AccountMetric.decays(): the two that can lose value (Miscellania favour, spendable slayer points) have their completion re-derived from the live varbit every tick, so the goal re-opens when the value drops below target and completes again when it recovers; every other metric keeps sticky completion. A 5s post-login settle window stops the pre-sync zero read from un-completing them."
     },
     {
       "id": "misc-auto-track",

@@ -92,11 +92,13 @@ Cards update from game state on their own: skills by XP, quests by completion st
 
 Sixteen account-wide metrics — Quest Points, Total/Combat Level, CA Points, Slayer Points, Kudos, Collection Log Slots, Diary Tiers, Tears of Guthix PB, and more. The Collection Log ceiling is read **live from the client** (it grows as slots are added); Quest Points / ToG PB use a wiki-authoritative max (339). Targets *above* the max are allowed — they keep tracking until the game catches up. League metrics only appear on leagues profiles.
 
+Two of them can go *down*: Miscellania approval decays, and slayer points get spent. Those two are judged purely on the live value — the goal un-completes the moment you fall below the target and completes again when you're back over it. Everything else (levels, quest points, diary tiers, personal bests) can't be un-earned, so once those are done they stay done.
+
 ![Account goal dialog with a Max shortcut](docs/img/account-metrics.gif)
 
 ### Auto-track Miscellania
 
-Kingdom of Miscellania approval decays if you ignore it, so it's a goal worth keeping at 100%. When the plugin sees your approval *rise* — you're actively managing the kingdom — and you don't already have the goal, it adds a **Misc. Approval 100%** goal to your default section for you. Deleting it isn't permanent: it returns the next time your approval climbs while the goal is missing. Don't want it at all? Turn it off under **Behaviour → Auto-track Miscellania** (on by default) — a chat line points you there the first time. It's a normal goal, so **⌘Z** removes it too.
+Kingdom of Miscellania approval decays if you ignore it, so it's a goal worth keeping at 100% — and the goal follows the decay: hit 100%, wander off, and it re-opens as soon as favour slips. When the plugin sees your approval *rise* — you're actively managing the kingdom — and you don't already have the goal, it adds a **Misc. Approval 100%** goal to your default section for you. Deleting it isn't permanent: it returns the next time your approval climbs while the goal is missing. Don't want it at all? Turn it off under **Behaviour → Auto-track Miscellania** (on by default) — a chat line points you there the first time. It's a normal goal, so **⌘Z** removes it too.
 
 ### Change Amount / retargeting
 
