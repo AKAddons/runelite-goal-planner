@@ -117,6 +117,9 @@ public class GoalPanel extends PluginPanel
 	 *  primary button UPDATES it instead of creating a second goal. */
 	private String dockEditFormGoalId = null;
 	private boolean dockEditFormMounted = false;
+	/** The selection a transient overlay was opened against, so a selection change
+	 *  can drop it (see {@link #refreshDock()}). */
+	private String dockOverlaySelectionKey = "";
 	/** The currently selected SECTION's id (dock SECTION state), or null. Mutually
 	 *  exclusive with the goal selection: selecting a section clears the goal
 	 *  selection and vice-versa (enforced in {@link #refreshDock()}). */
@@ -1979,6 +1982,17 @@ public class GoalPanel extends PluginPanel
 		{
 			selectedSectionId = null;
 		}
+		// Selecting something ALWAYS resets the panel, even mid-flow (user): if the
+		// selection moved since a transient overlay (color / tag / share / move /
+		// edit form) was opened, that overlay belongs to the old selection - drop it
+		// so the dock renders the NEW selection instead of stranding the user in a
+		// half-finished flow against the wrong goal.
+		String selKey = dockSelectionKey();
+		if (dockOverlayActive() && !selKey.equals(dockOverlaySelectionKey))
+		{
+			clearTransientOverlays();
+		}
+		dockOverlaySelectionKey = selKey;
 		com.goalplanner.ui.dock.DockContext ctx =
 			com.goalplanner.ui.dock.DockContext.of(api.getSelectedGoalIds(), selectedSectionId);
 
@@ -3493,6 +3507,54 @@ public class GoalPanel extends PluginPanel
 
 	/** Whether the move overlay still has at least one live goal to act on, so
 	 *  refreshDock can drop a stale overlay instead of mounting an empty surface. */
+	/** A stable signature of what is selected right now (goal ids + section), used
+	 *  to notice that the selection moved under an open overlay. */
+	private String dockSelectionKey()
+	{
+		java.util.List<String> ids = new ArrayList<>(api.getSelectedGoalIds());
+		java.util.Collections.sort(ids);
+		return String.join(",", ids) + "|" + (selectedSectionId == null ? "" : selectedSectionId);
+	}
+
+	/** True while any transient overlay (color / tag / share / move / edit form /
+	 *  import / saved plans) is driving the dock. */
+	private boolean dockOverlayActive()
+	{
+		return dockColorReturn != null
+			|| dockTagMode != null
+			|| dockShareScope != null
+			|| dockMoveMode != null
+			|| dockEditFormGoalId != null
+			|| dockImportActive
+			|| dockSavedActive;
+	}
+
+	/** Drop every transient overlay so the dock falls back to the plain state for
+	 *  the current selection. Used when the selection changes mid-flow. */
+	private void clearTransientOverlays()
+	{
+		dockColorReturn = null;
+		dockColorTarget = null;
+		dockColorMounted = false;
+		dockTagMode = null;
+		dockTagReturn = null;
+		dockTagTarget = null;
+		dockTagMounted = false;
+		dockShareScope = null;
+		dockShareGoalIds = null;
+		dockShareSectionId = null;
+		dockShareMounted = false;
+		dockMoveMode = null;
+		dockMoveGoalIds = null;
+		dockMoveMounted = false;
+		dockEditFormGoalId = null;
+		dockEditFormMounted = false;
+		dockImportActive = false;
+		dockImportMounted = false;
+		dockSavedActive = false;
+		dockSavedMounted = false;
+	}
+
 	private boolean moveTargetValid()
 	{
 		if (dockMoveMode == null || dockMoveGoalIds == null)
