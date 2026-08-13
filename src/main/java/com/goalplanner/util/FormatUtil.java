@@ -24,6 +24,29 @@ public final class FormatUtil
 	}
 
 	/**
+	 * Progress percent for a goal that has NOT met its target, e.g. "99%".
+	 *
+	 * <p>Floors instead of rounding, and caps at 99. Rounding made a goal at
+	 * 126/127 Miscellania favour render "100%" while the card still showed it
+	 * as unfinished - a percentage that claims completion on an incomplete goal
+	 * reads as a bug even when the underlying tracking is right. Flooring also
+	 * matches how a grind actually feels: you are at 99% until you are done.
+	 *
+	 * <p>Callers must only use this for incomplete goals; a finished goal shows
+	 * its completion icon instead of a percentage.
+	 */
+	public static String formatProgressPercent(int currentValue, int targetValue)
+	{
+		if (targetValue <= 0)
+		{
+			return "0%";
+		}
+		double pct = (currentValue * 100.0) / targetValue;
+		int floored = (int) Math.floor(pct);
+		return Math.max(0, Math.min(99, floored)) + "%";
+	}
+
+	/**
 	 * Format a number with commas: 1,234,567.
 	 */
 	public static String formatXp(int xp)

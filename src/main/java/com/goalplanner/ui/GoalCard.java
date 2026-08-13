@@ -905,8 +905,9 @@ public class GoalCard extends JPanel
 		if (("SKILL".equals(type) || "BOSS".equals(type)) && view.targetValue > 0)
 		{
 			int remaining = Math.max(0, view.targetValue - view.currentValue);
-			double pct = view.targetValue == 0 ? 0
-				: Math.max(0.0, Math.min(100.0, (view.currentValue * 100.0) / view.targetValue));
+			// Floors and caps at 99 - every path here is an incomplete goal, so
+			// "100%" would be a lie (see FormatUtil.formatProgressPercent).
+			String pct = FormatUtil.formatProgressPercent(view.currentValue, view.targetValue);
 			// When the status column is narrow - a nested card, or any card above
 			// Normal scale - the rich two-line form wraps and clips, so collapse to a
 			// single compact token. SKILL keeps just the percent (levels already show
@@ -915,7 +916,7 @@ public class GoalCard extends JPanel
 			if (compactStatus || PanelFonts.scale() > 1.0f)
 			{
 				return "SKILL".equals(type)
-					? String.format("%.0f%%", pct)
+					? pct
 					: FormatUtil.formatNumber(view.currentValue) + " / " + FormatUtil.formatNumber(view.targetValue);
 			}
 			String unit = "SKILL".equals(type) ? " left" : " kills left";
@@ -925,16 +926,14 @@ public class GoalCard extends JPanel
 			// Past ~10 chars, "0 / 300K (0%)" wraps the column into three
 			// clipped lines - so wide counts drop the percent token instead.
 			String top = counts.length() <= 10
-				? counts + " (" + String.format("%.0f%%", pct) + ")"
+				? counts + " (" + pct + ")"
 				: counts;
 			return "<html>"
 				+ top
 				+ "<br><span style='font-size:9px; color:#a0a0a0'>"
 				+ FormatUtil.formatNumber(remaining) + unit + "</span></html>";
 		}
-		double pct = view.targetValue == 0 ? 0
-			: Math.max(0.0, Math.min(100.0, (view.currentValue * 100.0) / view.targetValue));
-		return String.format("%.0f%%", pct);
+		return FormatUtil.formatProgressPercent(view.currentValue, view.targetValue);
 	}
 
 	/**

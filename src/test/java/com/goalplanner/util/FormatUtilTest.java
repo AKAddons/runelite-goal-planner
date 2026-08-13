@@ -49,6 +49,32 @@ public class FormatUtilTest
 	}
 
 	@Test
+	public void testFormatProgressPercentFloorsInsteadOfRounding()
+	{
+		// 126/127 Miscellania favour = 99.2% - used to round to a misleading "100%".
+		assertEquals("99%", FormatUtil.formatProgressPercent(126, 127));
+		// 99.6% floors to 99, not 100.
+		assertEquals("99%", FormatUtil.formatProgressPercent(996, 1000));
+		assertEquals("0%", FormatUtil.formatProgressPercent(9, 1000));
+		assertEquals("50%", FormatUtil.formatProgressPercent(1, 2));
+	}
+
+	@Test
+	public void testFormatProgressPercentNeverClaimsCompletion()
+	{
+		// Callers only render this for goals that are NOT complete.
+		assertEquals("99%", FormatUtil.formatProgressPercent(127, 127));
+		assertEquals("99%", FormatUtil.formatProgressPercent(500, 100));
+	}
+
+	@Test
+	public void testFormatProgressPercentEdgeCases()
+	{
+		assertEquals("0%", FormatUtil.formatProgressPercent(50, 0));
+		assertEquals("0%", FormatUtil.formatProgressPercent(-5, 100));
+	}
+
+	@Test
 	public void testEscapeHtml()
 	{
 		assertEquals("hello", FormatUtil.escapeHtml("hello"));

@@ -15,6 +15,8 @@ bumps.
   goal re-opens the moment you drop below the target and completes again when
   you're back over it. Everything else stays sticky: levels, quest points and
   diary tiers can't be un-earned.
+- **Progress percentages no longer round up to a misleading "100%"** — a goal
+  at 99.6% now reads *99%*. Only a finished goal shows as finished.
 
 ## [0.5.0] — 2026-08-08
 
