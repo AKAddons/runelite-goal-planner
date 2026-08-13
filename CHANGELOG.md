@@ -87,6 +87,7 @@ bumps.
   [ADR-0003](docs/decisions/0003-repeatable-goals-live-in-a-derived-built-in-section.md),
   [ADR-0004](docs/decisions/0004-clock-driven-reset-via-period-keys.md),
   [ADR-0005](docs/decisions/0005-derived-goals-re-base-their-target-instead-of-storing-a-baseline.md).
+
 ### Added (Fallen From Grace — Wyrmscraig, 2026-07-29)
 - **Fallen From Grace quest goal.** Requirement row seeded with its skills
   (Sailing 62, Crafting 60, Runecraft 47, Mining 53), the Pandemonium
