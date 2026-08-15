@@ -3896,19 +3896,25 @@ public class GoalPanel extends PluginPanel
 		// mounts the in-dock new-section form (buildSectionNewForm). Adding a goal
 		// is about goals; the grid stays clean.
 
-		// Import + Saved goals below the tiles (previously only on the header Options
-		// popup). Gated exactly like that popup: Import needs share support; Saved
-		// goals needs the Saved Plans library too. Each opens its inline surface.
+		// Import / Share all / Saved goals below the tiles (previously only on the
+		// header Options popup and the retired section right-click menu). Gated like
+		// that popup: all need share support; Saved goals needs the library too.
+		// "Share all" lives here so panel-level sharing does not require selecting a
+		// section first (user: the share/save options had gone missing).
 		if (isShareAvailable())
 		{
 			boolean saved = isSavedPlansAvailable();
-			JPanel extra = new JPanel(new GridLayout(1, saved ? 2 : 1, 5, 0));
+			JPanel extra = new JPanel(new GridLayout(1, saved ? 3 : 2, 5, 0));
 			extra.setOpaque(false);
 			extra.setBorder(new EmptyBorder(6, 0, 0, 0));
 			JButton importBtn = flatButton("Import", false);
 			importBtn.setToolTipText("Paste and import a share code");
 			importBtn.addActionListener(e -> openImportSurface());
 			extra.add(importBtn);
+			JButton shareAllBtn = flatButton("Share all", false);
+			shareAllBtn.setToolTipText("Copy or save a share code for every section");
+			shareAllBtn.addActionListener(e -> openShareForAllSections());
+			extra.add(shareAllBtn);
 			if (saved)
 			{
 				JButton savedBtn = flatButton("Saved goals", false);
