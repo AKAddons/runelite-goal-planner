@@ -120,6 +120,9 @@ public class GoalPanel extends PluginPanel
 	/** The selection a transient overlay was opened against, so a selection change
 	 *  can drop it (see {@link #refreshDock()}). */
 	private String dockOverlaySelectionKey = "";
+	/** Cap on tag type-ahead suggestions, so a large tag set can't blow the dock
+	 *  height open before the user has narrowed it. */
+	private static final int TAG_SUGGEST_MAX = 12;
 	/** The currently selected SECTION's id (dock SECTION state), or null. Mutually
 	 *  exclusive with the goal selection: selecting a section clears the goal
 	 *  selection and vice-versa (enforced in {@link #refreshDock()}). */
@@ -7360,52 +7363,108 @@ public class GoalPanel extends PluginPanel
 		body.setOpaque(false);
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-		// Existing tags as rounded tappable chips; tapping adds and returns.
-		JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
-		chips.setOpaque(false);
-		chips.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-		java.util.List<com.goalplanner.api.TagView> all = api.queryAllTags();
-		for (com.goalplanner.api.TagView t : all)
-		{
-			final String label = t.label;
-			final String cat = t.category;
-			String catName = tagCategoryDisplay(cat);
-			String tip = catName != null ? "Add " + label + " (" + catName + ")" : "Add " + label;
-			chips.add(chip(label, tip, () -> addExisting.accept(label, cat)));
-		}
-		if (all.isEmpty())
-		{
-			JLabel none = new JLabel("No existing tags yet");
-			none.setForeground(CREATE_FG);
-			none.setFont(none.getFont().deriveFont(11f));
-			chips.add(none);
-		}
-		chips.setMaximumSize(new Dimension(Integer.MAX_VALUE, chips.getPreferredSize().height));
-		body.add(chips);
-		body.add(Box.createVerticalStrut(8));
+		final java.util.List<com.goalplanner.api.TagView> all = api.queryAllTags();
 
-		// New-tag inline field + Add button (create-and-add a brand-new label).
-		JPanel newRow = new JPanel(new BorderLayout(4, 0));
-		newRow.setOpaque(false);
-		newRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		// ONE field drives everything (user): typing narrows the existing tags to
+		// live suggestions so you attach the tag that already exists instead of
+		// creating a near-duplicate; a brand-new label is only created when nothing
+		// matches it exactly.
 		final JTextField field = new JTextField();
 		styleField(field);
-		field.setToolTipText("Type a new tag label");
-		JButton addBtn = flatButton("Add", true);
-		addBtn.setToolTipText("Create and add this tag");
-		Runnable commit = () -> {
-			String text = field.getText() == null ? "" : field.getText().trim();
-			if (!text.isEmpty())
+		field.setToolTipText("Type to find an existing tag, or create a new one");
+		field.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
+		body.add(field);
+		body.add(Box.createVerticalStrut(6));
+
+		final JPanel suggest = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		suggest.setOpaque(false);
+		suggest.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		body.add(suggest);
+
+		// Enter / the Create chip: an exact (case-insensitive) hit attaches THAT tag
+		// with its real category; otherwise the typed label becomes a new tag.
+		final Runnable commit = () -> {
+			String q = field.getText() == null ? "" : field.getText().trim();
+			if (q.isEmpty())
 			{
-				addNew.accept(text);
+				return;
 			}
+			for (com.goalplanner.api.TagView t : all)
+			{
+				if (t.label != null && t.label.equalsIgnoreCase(q))
+				{
+					addExisting.accept(t.label, t.category);
+					return;
+				}
+			}
+			addNew.accept(q);
 		};
-		addBtn.addActionListener(e -> commit.run());
+
+		final Runnable renderSuggestions = () -> {
+			String q = field.getText() == null ? "" : field.getText().trim();
+			String needle = q.toLowerCase(java.util.Locale.ROOT);
+			suggest.removeAll();
+			boolean exact = false;
+			int shown = 0;
+			for (com.goalplanner.api.TagView t : all)
+			{
+				final String label = t.label;
+				if (label == null)
+				{
+					continue;
+				}
+				String hay = label.toLowerCase(java.util.Locale.ROOT);
+				if (hay.equals(needle))
+				{
+					exact = true;
+				}
+				if (!needle.isEmpty() && !hay.contains(needle))
+				{
+					continue;
+				}
+				if (shown >= TAG_SUGGEST_MAX)
+				{
+					continue;
+				}
+				shown++;
+				final String cat = t.category;
+				String catName = tagCategoryDisplay(cat);
+				String tip = catName != null ? "Add " + label + " (" + catName + ")" : "Add " + label;
+				suggest.add(chip(label, tip, () -> addExisting.accept(label, cat)));
+			}
+			if (all.isEmpty())
+			{
+				suggest.add(mutedTip("No tags yet - type a name to create the first one."));
+			}
+			else if (shown == 0 && !needle.isEmpty())
+			{
+				suggest.add(mutedTip("No tag matches that."));
+			}
+			// Creating is offered only when the text isn't already a tag, so the
+			// suggestion above is always the way to reuse an existing one.
+			if (!q.isEmpty() && !exact)
+			{
+				JButton create = flatButton("Create \"" + q + "\"", true);
+				create.setToolTipText("Create a new tag named " + q);
+				create.addActionListener(e -> commit.run());
+				suggest.add(create);
+			}
+			suggest.setMaximumSize(
+				new Dimension(Integer.MAX_VALUE, suggest.getPreferredSize().height));
+			suggest.revalidate();
+			suggest.repaint();
+			remeasureDock();
+		};
+
+		field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener()
+		{
+			@Override public void insertUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
+			@Override public void removeUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
+			@Override public void changedUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
+		});
 		field.addActionListener(e -> commit.run());
-		newRow.add(field, BorderLayout.CENTER);
-		newRow.add(addBtn, BorderLayout.EAST);
-		newRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, newRow.getPreferredSize().height));
-		body.add(newRow);
+		renderSuggestions.run();
 
 		inner.add(body, BorderLayout.CENTER);
 		return surfaceShell("Add Tag", false, inner);
