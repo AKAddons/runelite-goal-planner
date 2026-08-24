@@ -382,7 +382,7 @@ public class GoalPanel extends PluginPanel
 				if (isSavedPlansAvailable())
 				{
 					JMenuItem savedPlans = new JMenuItem("Saved plans...");
-					savedPlans.addActionListener(ev -> openSavedPlans());
+					savedPlans.addActionListener(ev -> openSavedPlansSurface());
 					popup.add(savedPlans);
 				}
 				// Section sharing lives on the section-header right-click menu
@@ -802,14 +802,6 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** Open the Saved Plans library manager. */
-	public void openSavedPlans()
-	{
-		if (!isSavedPlansAvailable())
-		{
-			return;
-		}
-		SavedPlansDialog.open(this, api, shareCodec, savedPlanStore, this::rebuild);
-	}
 
 	/**
 	 * Lightweight selection refresh - updates card borders without
@@ -7811,7 +7803,7 @@ public class GoalPanel extends PluginPanel
 	// ShareDialogs.doImport for the per-character re-import warning + the success
 	// confirmation (the paste itself is inline). Saved goals is a genuine inline
 	// list (name + Load + Delete); the heavier Edit / Copy / section-name-override
-	// management still lives in the intact SavedPlansDialog.
+	// management lives in the dock's Saved goals surface.
 	// ------------------------------------------------------------
 
 	/** Open the inline Import surface (paste a share code). */
@@ -8010,6 +8002,10 @@ public class GoalPanel extends PluginPanel
 		JPanel actions = new JPanel(new WrapLayout(FlowLayout.RIGHT, 4, 0));
 		actions.setOpaque(false);
 		actions.add(chip("Load", "Import this saved plan", () -> loadSavedPlan(plan)));
+		actions.add(chip("Copy", "Copy the share code to your clipboard", () -> {
+			java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+				new java.awt.datatransfer.StringSelection(plan.getCode()), null);
+		}));
 		actions.add(chip("Delete", "Delete this saved plan", () -> {
 			savedPlanStore.remove(plan.getId());
 			remountSavedPlansSurface();
@@ -8019,7 +8015,7 @@ public class GoalPanel extends PluginPanel
 		return row;
 	}
 
-	/** "3 goals - 2 sections", or "unreadable code" (mirrors SavedPlansDialog.preview). */
+	/** "3 goals - 2 sections", or "unreadable code". */
 	private String savedPlanPreview(com.goalplanner.persistence.SavedPlan plan)
 	{
 		try
@@ -8036,7 +8032,7 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	/** Import a saved plan (mirrors SavedPlansDialog.importPlan): decode, apply its
+	/** Import a saved plan : decode, apply its
 	 *  saved section-name overrides, then hand to {@link ShareDialogs#doImport}. An
 	 *  unreadable code shows a brief inline notice instead. */
 	private void loadSavedPlan(com.goalplanner.persistence.SavedPlan plan)
