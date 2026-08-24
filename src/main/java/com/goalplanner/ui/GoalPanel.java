@@ -1520,9 +1520,8 @@ public class GoalPanel extends PluginPanel
 	private static final Color UNDO_REDO_DISABLED = new Color(80, 80, 90);
 
 	/**
-	 * Open the Discord invite. Uses RuneLite's LinkBrowser, which handles the
-	 * unsupported/headless cases and the client's own link confirmation -
-	 * Desktop::browse is not permitted on the plugin hub.
+	 * Open the Discord invite through RuneLite's LinkBrowser, which handles
+	 * unsupported/headless cases and the client's own link confirmation.
 	 */
 	private void openDiscordInvite()
 	{
