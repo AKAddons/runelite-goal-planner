@@ -427,7 +427,7 @@ public class GoalPanel extends PluginPanel
 
 				JMenuItem importShare = new JMenuItem("Import shared goals...");
 				importShare.addActionListener(ev ->
-					ShareDialogs.promptImport(GoalPanel.this, api, shareCodec, savedPlanStore, this::rebuild));
+					openImportSurfaceFromHeader());
 				popup.add(importShare);
 
 				if (isSavedPlansAvailable())
@@ -784,35 +784,8 @@ public class GoalPanel extends PluginPanel
 		return shareCodec != null;
 	}
 
-	/** Copy a share code for the given goals to the clipboard. */
-	public void copyGoalsShareCode(List<String> goalIds)
-	{
-		if (shareCodec == null)
-		{
-			return;
-		}
-		ShareDialogs.copyGoals(this, api, shareCodec, playerNameSupplier, goalIds);
-	}
 
-	/** Copy a share code for a whole section to the clipboard. */
-	public void copySectionShareCode(String sectionId)
-	{
-		if (shareCodec == null)
-		{
-			return;
-		}
-		ShareDialogs.copySection(this, api, shareCodec, playerNameSupplier, sectionId);
-	}
 
-	/** Copy one share code carrying every user section (v2 multi-section). */
-	public void copyAllSectionsShareCode()
-	{
-		if (!isShareAvailable())
-		{
-			return;
-		}
-		ShareDialogs.copyAllSections(this, api, shareCodec, playerNameSupplier);
-	}
 
 	/** Whether the Saved Plans library is wired (gates save/library menu entries). */
 	public boolean isSavedPlansAvailable()
@@ -820,35 +793,8 @@ public class GoalPanel extends PluginPanel
 		return shareCodec != null && savedPlanStore != null;
 	}
 
-	/** Bookmark a section's share code into the Saved Plans library. */
-	public void saveSectionPlan(String sectionId)
-	{
-		if (!isSavedPlansAvailable())
-		{
-			return;
-		}
-		ShareDialogs.savePlanForSection(this, api, shareCodec, playerNameSupplier, savedPlanStore, sectionId);
-	}
 
-	/** Bookmark a selection's share code into the Saved Plans library. */
-	public void saveGoalsPlan(List<String> goalIds)
-	{
-		if (!isSavedPlansAvailable())
-		{
-			return;
-		}
-		ShareDialogs.savePlanForGoals(this, api, shareCodec, playerNameSupplier, savedPlanStore, goalIds);
-	}
 
-	/** Bookmark an all-sections share code into the Saved Plans library. */
-	public void saveAllSectionsPlan()
-	{
-		if (!isSavedPlansAvailable())
-		{
-			return;
-		}
-		ShareDialogs.savePlanForAllSections(this, api, shareCodec, playerNameSupplier, savedPlanStore);
-	}
 
 	/** Open the Saved Plans library manager. */
 
@@ -7950,6 +7896,15 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** Open the inline Saved Plans surface (Load / Delete). */
+	/** The header import button opens the dock's inline Import surface (the
+	 *  promptImport window is retired; decode/warning semantics live in
+	 *  ShareDialogs.doImport, which the surface reuses unchanged). */
+	private void openImportSurfaceFromHeader()
+	{
+		dockImportActive = true;
+		refreshDock();
+	}
+
 	private void openSavedPlansSurface()
 	{
 		if (!isSavedPlansAvailable())
