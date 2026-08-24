@@ -178,6 +178,13 @@ public class GoalPanel extends PluginPanel
 	 *  (MULTI). */
 	private TagMode dockTagMode = null;
 	private TagReturn dockTagReturn = null;
+	/** Goal id whose inline Remove-requirements overlay is active (req-inline
+	 *  pass, replacing the MultiSelectDialog flows); null = inactive. */
+	private String dockReqRemoveTarget = null;
+	/** false = removing this goal's requirements; true = removing its dependents
+	 *  (the reversed edge - goals that require it). */
+	private boolean dockReqDependents = false;
+	private boolean dockReqMounted = false;
 	private String dockTagTarget = null;
 	private boolean dockTagMounted = false;
 	/** Which target the inline Share surface (share-inline pass) encodes: GOALS =
@@ -2082,6 +2089,30 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		// Inline Remove-requirements surface (req-inline pass): the same overlay
+		// pattern as the tag surfaces. Drops itself if the goal vanished.
+		if (dockReqRemoveTarget != null)
+		{
+			java.util.List<String> reqEdges = dockReqDependents
+				? api.getDependents(dockReqRemoveTarget)
+				: api.getRequirements(dockReqRemoveTarget);
+			if (goalStore.findGoalById(dockReqRemoveTarget) == null || reqEdges.isEmpty())
+			{
+				dockReqRemoveTarget = null;
+				dockReqMounted = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockReqMounted)
+				{
+					actionDock.setExpandedComponent(buildReqRemoveSurface());
+					dockReqMounted = true;
+				}
+				return;
+			}
+		}
+
 		// Inline Share surface (share-inline pass): the same overlay pattern as the
 		// color / tag surfaces. When active it mounts the share-code view (read-only
 		// code + Copy + optional Save) above the footer. The target was captured at
@@ -2522,12 +2553,12 @@ public class GoalPanel extends PluginPanel
 			if (!api.getRequirements(gid).isEmpty())
 			{
 				bottom.add(item("Drop reqs", "Remove requirements of this goal",
-					() -> dockRemoveRequirements(g)));
+					() -> openReqRemoveSurface(g.getId(), false)));
 			}
 			if (!api.getDependents(gid).isEmpty())
 			{
 				bottom.add(item("Drop dependents", "Remove dependents of this goal",
-					() -> dockRemoveDependents(g)));
+					() -> openReqRemoveSurface(g.getId(), true)));
 			}
 		}
 
@@ -2842,61 +2873,7 @@ public class GoalPanel extends PluginPanel
 
 
 
-	private void dockRemoveRequirements(Goal g)
-	{
-		java.util.List<String> reqs = new ArrayList<>(api.getRequirements(g.getId()));
-		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
-		for (String reqId : reqs)
-		{
-			items.add(new MultiSelectDialog.Item(reqId, reorderController.goalNameById(reqId)));
-		}
-		java.util.List<String> chosen = MultiSelectDialog.show(this,
-			"Remove Requirements", "Remove", items);
-		if (chosen.isEmpty())
-		{
-			return;
-		}
-		api.beginCompound("Remove " + chosen.size() + " requirement(s)");
-		try
-		{
-			for (String reqId : chosen)
-			{
-				api.removeRequirement(g.getId(), reqId);
-			}
-		}
-		finally
-		{
-			api.endCompound();
-		}
-	}
 
-	private void dockRemoveDependents(Goal g)
-	{
-		java.util.List<String> deps = new ArrayList<>(api.getDependents(g.getId()));
-		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
-		for (String depId : deps)
-		{
-			items.add(new MultiSelectDialog.Item(depId, reorderController.goalNameById(depId)));
-		}
-		java.util.List<String> chosen = MultiSelectDialog.show(this,
-			"Remove Dependents", "Remove", items);
-		if (chosen.isEmpty())
-		{
-			return;
-		}
-		api.beginCompound("Remove " + chosen.size() + " dependent(s)");
-		try
-		{
-			for (String depId : chosen)
-			{
-				api.removeRequirement(depId, g.getId());
-			}
-		}
-		finally
-		{
-			api.endCompound();
-		}
-	}
 
 	/** True when a quest/diary/boss goal carries game-data requirements that can
 	 *  be seeded into its section. Mirrors the menu's gate. */
@@ -7153,7 +7130,7 @@ public class GoalPanel extends PluginPanel
 	// tag nav drivers and refresh; refreshDock mounts buildTagSurface above the
 	// footer and returns early. Back / apply route through closeTagSurface, which
 	// remounts the surface the overlay replaced. The right-click menus still open
-	// MultiSelectDialog (dockRemoveRequirements is its last caller).
+	// the dock surfaces below (MultiSelectDialog is fully retired).
 	// ------------------------------------------------------------
 
 	/** Open the inline Add Tag surface for a single goal. */
@@ -7234,6 +7211,78 @@ public class GoalPanel extends PluginPanel
 			case MULTI: return !api.getSelectedGoalIds().isEmpty();
 			default:    return false;
 		}
+	}
+
+	/** Open the inline Remove-requirements overlay for a goal (req-inline pass:
+	 *  the dock surface that replaced the MultiSelectDialog flows). */
+	private void openReqRemoveSurface(String goalId, boolean dependents)
+	{
+		dockReqRemoveTarget = goalId;
+		dockReqDependents = dependents;
+		dockReqMounted = false;
+		refreshDock();
+	}
+
+	private void closeReqSurface()
+	{
+		dockReqRemoveTarget = null;
+		dockReqMounted = false;
+		dockEditMounted = false;
+		refreshDock();
+	}
+
+	/** One chip per requirement; a click removes that requirement and remounts,
+	 *  so several can be dropped without leaving the overlay. Mirrors
+	 *  {@link #buildTagRemoveSurface}. */
+	private JComponent buildReqRemoveSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without removing more requirements", this::closeReqSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel chips = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
+		chips.setOpaque(false);
+		final String gid = dockReqRemoveTarget;
+		final boolean deps = dockReqDependents;
+		java.util.List<String> edges = deps
+			? new ArrayList<>(api.getDependents(gid))
+			: new ArrayList<>(api.getRequirements(gid));
+		for (String reqId : edges)
+		{
+			final String name = reorderController.goalNameById(reqId);
+			final String rid = reqId;
+			chips.add(chip(name,
+				deps ? name + " no longer requires this goal"
+					: "Remove the requirement on " + name, () -> {
+				api.beginCompound((deps ? "Remove dependent '" : "Remove requirement '")
+					+ name + "'");
+				try
+				{
+					// A dependent is the reversed edge: THAT goal requires this one.
+					if (deps)
+					{
+						api.removeRequirement(rid, gid);
+					}
+					else
+					{
+						api.removeRequirement(gid, rid);
+					}
+				}
+				finally
+				{
+					api.endCompound();
+				}
+				dockReqMounted = false;
+				refreshDock();
+			}));
+		}
+		inner.add(chips, BorderLayout.CENTER);
+		return inner;
 	}
 
 	/** Dispatch to the active inline tag surface (ADD or REMOVE). */
