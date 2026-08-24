@@ -437,15 +437,9 @@ public class GoalPanel extends PluginPanel
 			popup.show(optionsButton, 0, optionsButton.getHeight());
 		});
 
-		JButton manageTagsButton = new JButton(ShapeIcons.tag(12, new Color(220, 180, 140)));
-		manageTagsButton.setToolTipText("Manage tags");
-		manageTagsButton.setMargin(new Insets(3, 6, 3, 6));
-		manageTagsButton.addActionListener(e -> {
-			java.awt.Window window = SwingUtilities.getWindowAncestor(GoalPanel.this);
-			java.awt.Frame owner = window instanceof java.awt.Frame ? (java.awt.Frame) window : null;
-			TagManagementDialog dialog = new TagManagementDialog(owner, api, skillIconManager, itemManager);
-			dialog.setVisible(true);
-		});
+		// Tag administration (rename / re-icon / recolour) is deferred to 1.1.0
+		// as a dock surface; the TagManagementDialog window went with the 1.0.0
+		// no-popups rule. Day-to-day tagging lives in the dock tag surfaces.
 
 		// Undo/redo buttons. Tooltip + enable state refreshed on
 		// each panel rebuild via refreshUndoRedoButtons() (called from rebuild()).
@@ -464,7 +458,6 @@ public class GoalPanel extends PluginPanel
 		headerButtons.add(undoButton);
 		headerButtons.add(redoButton);
 		headerButtons.add(Box.createHorizontalStrut(6));
-		headerButtons.add(manageTagsButton);
 
 		// Title in CENTER (not WEST) so it yields space to the EAST buttons and
 		// clips instead of overlapping them when a large font widens it.
