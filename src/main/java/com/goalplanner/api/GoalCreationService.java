@@ -2315,7 +2315,7 @@ class GoalCreationService
 	 * rollover - see {@link com.goalplanner.service.RepeatResetService}.
 	 *
 	 * <p>Reads live client state (current XP / kill count), matching how
-	 * {@code GoalDialogFactory} resolves relative skill targets. If that read
+	 * the skill edit form resolves relative skill targets. If that read
 	 * fails, this returns null rather than creating a goal with a bogus target:
 	 * a BOSS goal targeting 20 when the player is already at 1,847 lifetime kills
 	 * would complete itself on the next tick.

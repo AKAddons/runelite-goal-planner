@@ -234,6 +234,11 @@ public class GoalPanel extends PluginPanel
 	 *  (the reversed edge - goals that require it). */
 	private boolean dockReqDependents = false;
 	private boolean dockReqMounted = false;
+	/** Section id whose inline Rename overlay is active; null = inactive. */
+	private String dockRenameSectionId = null;
+	private boolean dockRenameMounted = false;
+	/** One-shot inline hint after a failed rename (duplicate / invalid name). */
+	private boolean dockRenameFailed = false;
 	private String dockTagTarget = null;
 	private boolean dockTagMounted = false;
 	/** Which target the inline Share surface (share-inline pass) encodes: GOALS =
@@ -276,7 +281,6 @@ public class GoalPanel extends PluginPanel
 	private final net.runelite.client.game.SpriteManager spriteManager;
 	private final ItemSearchRequest itemSearchCallback;
 	private final GoalReorderController reorderController;
-	private final GoalDialogFactory dialogFactory;
 
 	/**
 	 * Callback the panel uses to ask the plugin to open the in-game chatbox
@@ -383,8 +387,6 @@ public class GoalPanel extends PluginPanel
 		this.spriteManager = spriteManager;
 		this.itemSearchCallback = itemSearchCallback;
 		this.reorderController = new GoalReorderController(api, goalStore);
-		this.dialogFactory = new GoalDialogFactory(api, goalStore, skillIconManager,
-			itemManager, spriteManager, itemSearchCallback, this);
 
 		setLayout(new BorderLayout());
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
@@ -663,7 +665,6 @@ public class GoalPanel extends PluginPanel
 	public void setClient(Client client)
 	{
 		this.client = client;
-		dialogFactory.setClient(client);
 	}
 
 	/**
@@ -746,7 +747,6 @@ public class GoalPanel extends PluginPanel
 	public void setClientThreadExecutor(Consumer<Runnable> exec)
 	{
 		this.clientThreadExec = exec != null ? exec : Runnable::run;
-		dialogFactory.setClientThreadExecutor(this.clientThreadExec);
 	}
 
 	/** Run {@code r} on the client thread (for live Client-state reads). */
@@ -2147,6 +2147,28 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
+		// Inline Rename-section surface: the same overlay pattern. Drops itself
+		// if the section vanished (deleted elsewhere, profile switch).
+		if (dockRenameSectionId != null)
+		{
+			if (findSectionView(dockRenameSectionId) == null)
+			{
+				dockRenameSectionId = null;
+				dockRenameMounted = false;
+				dockRenameFailed = false;
+			}
+			else
+			{
+				actionDock.setExpanded(true);
+				if (!dockRenameMounted)
+				{
+					actionDock.setExpandedComponent(buildRenameSectionSurface());
+					dockRenameMounted = true;
+				}
+				return;
+			}
+		}
+
 		// Inline Share surface (share-inline pass): the same overlay pattern as the
 		// color / tag surfaces. When active it mounts the share-code view (read-only
 		// code + Copy + optional Save) above the footer. The target was captured at
@@ -2544,7 +2566,7 @@ public class GoalPanel extends PluginPanel
 		// Change Amount - SKILL / ITEM_GRIND / BOSS carry a numeric target.
 		if (type == GoalType.SKILL || type == GoalType.ITEM_GRIND || type == GoalType.BOSS)
 		{
-			top.add(item("Amount", "Change this goal's target", () -> dockChangeAmount(g)));
+			top.add(item("Amount", "Change this goal's target", () -> openEditGoalForm(g)));
 		}
 
 		// Repeat - CUSTOM (set a period), a derived slice (edit period/amount),
@@ -2832,33 +2854,6 @@ public class GoalPanel extends PluginPanel
 
 	/** Route Change Amount to the right editor: the shared skill-target dialog,
 	 *  or a quantity/kill-count prompt for item/boss goals. */
-	private void dockChangeAmount(Goal g)
-	{
-		if (g.getType() == GoalType.SKILL)
-		{
-			dialogFactory.showChangeSkillTargetDialog(g);
-			return;
-		}
-		String noun = g.getType() == GoalType.BOSS ? "kill count" : "quantity";
-		String input = JOptionPane.showInputDialog(this,
-			"New target " + noun + " for " + g.getName() + ":",
-			String.valueOf(g.getTargetValue()));
-		if (input == null)
-		{
-			return;
-		}
-		try
-		{
-			int newTarget = Integer.parseInt(input.trim().replace(",", ""));
-			if (newTarget > 0)
-			{
-				api.changeTarget(g.getId(), newTarget);
-			}
-		}
-		catch (NumberFormatException ignored)
-		{
-		}
-	}
 
 	private void dockChangeName(Goal g)
 	{
@@ -7319,6 +7314,84 @@ public class GoalPanel extends PluginPanel
 		return inner;
 	}
 
+	private void openRenameSectionSurface(String sectionId)
+	{
+		dockRenameSectionId = sectionId;
+		dockRenameMounted = false;
+		dockRenameFailed = false;
+		refreshDock();
+	}
+
+	private void closeRenameSectionSurface()
+	{
+		dockRenameSectionId = null;
+		dockRenameMounted = false;
+		dockRenameFailed = false;
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** A prefilled name field with Save / Back chips; a failed rename (duplicate
+	 *  or invalid name) shows an inline hint and stays open. Replaces the
+	 *  showRenameSectionDialog window. */
+	private JComponent buildRenameSectionSurface()
+	{
+		com.goalplanner.api.SectionView sv = findSectionView(dockRenameSectionId);
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		inner.setOpaque(false);
+		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+
+		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		head.setOpaque(false);
+		head.add(chip("< Back", "Back without renaming", this::closeRenameSectionSurface));
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel body = new JPanel();
+		body.setOpaque(false);
+		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+
+		final JTextField name = new JTextField(sv.name, 16);
+		styleField(name);
+		name.setMaximumSize(new Dimension(Integer.MAX_VALUE, name.getPreferredSize().height));
+		name.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(name);
+
+		if (dockRenameFailed)
+		{
+			JLabel hint = new JLabel("Name is invalid, duplicate, or unchanged.");
+			hint.setForeground(new Color(220, 140, 120));
+			hint.setFont(hint.getFont().deriveFont(11f));
+			hint.setAlignmentX(Component.LEFT_ALIGNMENT);
+			body.add(Box.createVerticalStrut(4));
+			body.add(hint);
+		}
+
+		Runnable commit = () -> {
+			boolean ok = api.renameSection(dockRenameSectionId, name.getText().trim());
+			if (ok)
+			{
+				closeRenameSectionSurface();
+			}
+			else
+			{
+				dockRenameFailed = true;
+				dockRenameMounted = false;
+				refreshDock();
+			}
+		};
+		name.addActionListener(e -> commit.run());
+
+		JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
+		actions.setOpaque(false);
+		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+		actions.add(chip("Save", "Rename this section", commit));
+		body.add(Box.createVerticalStrut(6));
+		body.add(actions);
+
+		inner.add(body, BorderLayout.CENTER);
+		return inner;
+	}
+
 	/** Dispatch to the active inline tag surface (ADD or REMOVE). */
 	private JComponent buildTagSurface()
 	{
@@ -8723,7 +8796,7 @@ public class GoalPanel extends PluginPanel
 	private void buildSectionEditChips(com.goalplanner.api.SectionView sv, JPanel wrap)
 	{
 		wrap.add(chip("Rename", "Rename this section",
-			() -> dialogFactory.showRenameSectionDialog(sv)));
+			() -> openRenameSectionSurface(sv.id)));
 		wrap.add(chip("Change color", "Change this section's color",
 			() -> openColorSurfaceForSection(sv.id)));
 		wrap.add(chip("Delete", "Delete this section (undoable)",
