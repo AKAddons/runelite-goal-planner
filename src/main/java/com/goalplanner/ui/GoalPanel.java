@@ -1520,28 +1520,13 @@ public class GoalPanel extends PluginPanel
 	private static final Color UNDO_REDO_DISABLED = new Color(80, 80, 90);
 
 	/**
-	 * Open the Discord invite in the user's default browser. Falls back to
-	 * a no-op (with a log warning) if Desktop browse isn't supported - on
-	 * a headless system there's nothing useful we can do.
+	 * Open the Discord invite. Uses RuneLite's LinkBrowser, which handles the
+	 * unsupported/headless cases and the client's own link confirmation -
+	 * Desktop::browse is not permitted on the plugin hub.
 	 */
 	private void openDiscordInvite()
 	{
-		try
-		{
-			if (java.awt.Desktop.isDesktopSupported()
-				&& java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE))
-			{
-				java.awt.Desktop.getDesktop().browse(java.net.URI.create(DISCORD_URL));
-			}
-			else
-			{
-				log.warn("Desktop browse not supported; cannot open Discord invite");
-			}
-		}
-		catch (Exception ex)
-		{
-			log.warn("Failed to open Discord invite: {}", ex.getMessage());
-		}
+		net.runelite.client.util.LinkBrowser.browse(DISCORD_URL);
 	}
 
 	private void refreshUndoRedoButtons()
