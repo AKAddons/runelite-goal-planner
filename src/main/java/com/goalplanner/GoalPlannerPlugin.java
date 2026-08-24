@@ -1156,78 +1156,7 @@ public class GoalPlannerPlugin extends Plugin
 	 * Prompt the user for a Level/XP target and add a skill goal via the API.
 	 * Called from the right-click handler on the Skills tab.
 	 */
-	private void promptAndAddSkillGoal(net.runelite.api.Skill skill)
-	{
-		com.goalplanner.ui.SkillTargetForm form = new com.goalplanner.ui.SkillTargetForm(99);
 
-		int result = JOptionPane.showConfirmDialog(panel, form,
-			"Add " + skill.getName() + " Goal",
-			JOptionPane.OK_CANCEL_OPTION,
-			JOptionPane.PLAIN_MESSAGE);
-		if (result != JOptionPane.OK_OPTION) return;
-
-		int targetXp = form.getTargetXp();
-		if (targetXp < 0)
-		{
-			JOptionPane.showMessageDialog(panel,
-				"Enter a valid level (1-99) or XP (0-200,000,000).",
-				"Invalid", JOptionPane.WARNING_MESSAGE);
-			return;
-		}
-		goalTrackerApi.addSkillGoal(skill, targetXp);
-	}
-
-	private void promptAndAddAccountGoal(com.goalplanner.model.AccountMetric metric)
-	{
-		if (metric == com.goalplanner.model.AccountMetric.CA_POINTS)
-		{
-			// CA Points: show tier picker
-			String[] options = new String[com.goalplanner.model.AccountMetric.CA_TIER_NAMES.length];
-			System.arraycopy(com.goalplanner.model.AccountMetric.CA_TIER_NAMES, 0, options, 0, options.length);
-			String choice = (String) JOptionPane.showInputDialog(panel,
-				"Select CA tier target:",
-				"Add CA Points Goal",
-				JOptionPane.PLAIN_MESSAGE,
-				null, options, options[0]);
-			if (choice == null) return;
-			for (int i = 0; i < com.goalplanner.model.AccountMetric.CA_TIER_NAMES.length; i++)
-			{
-				if (choice.equals(com.goalplanner.model.AccountMetric.CA_TIER_NAMES[i]))
-				{
-					goalTrackerApi.addAccountGoal(metric.name(),
-						com.goalplanner.model.AccountMetric.CA_TIER_VALUES[i]);
-					return;
-				}
-			}
-		}
-		else
-		{
-			// Other metrics: target input with max hint
-			String input = JOptionPane.showInputDialog(panel,
-				"Target " + metric.getDisplayName() + " (max " + metric.effectiveMaxTarget(client) + "):",
-				"Add " + metric.getDisplayName() + " Goal",
-				JOptionPane.PLAIN_MESSAGE);
-			if (input == null || input.trim().isEmpty()) return;
-			try
-			{
-				int target = Integer.parseInt(input.trim().replace(",", ""));
-				if (target <= 0)
-				{
-					JOptionPane.showMessageDialog(panel,
-						"Target must be greater than 0.",
-						"Invalid", JOptionPane.WARNING_MESSAGE);
-					return;
-				}
-				goalTrackerApi.addAccountGoal(metric.name(), target);
-			}
-			catch (NumberFormatException e)
-			{
-				JOptionPane.showMessageDialog(panel,
-					"Enter a valid number.",
-					"Invalid", JOptionPane.WARNING_MESSAGE);
-			}
-		}
-	}
 
 	/** Quest list widget group ID (InterfaceID.QUESTLIST). */
 	private static final int QUESTLIST_GROUP_ID = 399;
@@ -1540,7 +1469,7 @@ public class GoalPlannerPlugin extends Plugin
 					.setTarget("<col=ff9040>" + skill.getName() + "</col>")
 					.setType(MenuAction.RUNELITE)
 					.onClick(e -> SwingUtilities.invokeLater(() ->
-						promptAndAddSkillGoal(skill)));
+						panel.openSeededCreate(com.goalplanner.model.GoalType.SKILL, skill, null, null, null, null)));
 				break;
 			}
 
@@ -1686,7 +1615,8 @@ public class GoalPlannerPlugin extends Plugin
 					.setTarget("<col=ff9040>Total Level</col>")
 					.setType(MenuAction.RUNELITE)
 					.onClick(e -> SwingUtilities.invokeLater(() ->
-						promptAndAddAccountGoal(com.goalplanner.model.AccountMetric.TOTAL_LEVEL)));
+						panel.openSeededCreate(com.goalplanner.model.GoalType.ACCOUNT, null, null, null, null,
+							com.goalplanner.model.AccountMetric.TOTAL_LEVEL.name())));
 				break;
 			}
 
@@ -1703,7 +1633,8 @@ public class GoalPlannerPlugin extends Plugin
 						.setTarget("<col=ff9040>Quest Points</col>")
 						.setType(MenuAction.RUNELITE)
 						.onClick(e -> SwingUtilities.invokeLater(() ->
-							promptAndAddAccountGoal(com.goalplanner.model.AccountMetric.QUEST_POINTS)));
+							panel.openSeededCreate(com.goalplanner.model.GoalType.ACCOUNT, null, null, null, null,
+							com.goalplanner.model.AccountMetric.QUEST_POINTS.name())));
 					break;
 				}
 				// param0=5: CA Overview/Tasks/Bosses/Rewards → one entry per CA tier
@@ -1829,7 +1760,7 @@ public class GoalPlannerPlugin extends Plugin
 					.onClick(e ->
 					{
 						if (fromCollectionLog) quickAddItemGoal(realItemId, itemName, null);
-						else promptAddItemGoal(realItemId, itemName, null);
+						else panel.openSeededCreate(com.goalplanner.model.GoalType.ITEM_GRIND, null, null, realItemId, itemName, null);
 					});
 			}
 
@@ -2096,24 +2027,6 @@ public class GoalPlannerPlugin extends Plugin
 	// want a specific count). Collection-log items skip the prompt and land at 1
 	// via quickAddItemGoal - you're bookmarking "get this drop", and the count is
 	// adjustable afterward through the card's Change Amount action.
-	private void promptAddItemGoal(int realItemId, String itemName, String sectionId)
-	{
-		final List<String> autoTagIds = resolveItemTagIds(realItemId);
-		SwingUtilities.invokeLater(() ->
-		{
-			String input = JOptionPane.showInputDialog(
-				panel, "Target quantity for " + itemName + ":", "1");
-			if (input == null) return;
-			int qty;
-			try
-			{
-				qty = Integer.parseInt(input.trim().replace(",", ""));
-				if (qty <= 0) return;
-			}
-			catch (NumberFormatException ignored) { return; }
-			addItemGoalInternal(realItemId, itemName, sectionId, qty, autoTagIds);
-		});
-	}
 
 	private void quickAddItemGoal(int realItemId, String itemName, String sectionId)
 	{

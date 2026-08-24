@@ -129,6 +129,10 @@ public class GoalPanel extends PluginPanel
 		boolean repeatable;
 		Integer targetXp;
 		Integer targetCount;
+		/** In-game right-click seeded an ACCOUNT metric (Total Level, Quest
+		 *  Points, CA Points) - preselect it rather than making the user
+		 *  re-pick what they just clicked. */
+		String accountMetric;
 	}
 	private CreateSeed dockCreateSeed = null;
 	/** Whether the create surface is currently mounted in the dock, and for which
@@ -3733,6 +3737,39 @@ public class GoalPanel extends PluginPanel
 	 *  "Make repeatable" seed (note 5) jumps a tall type straight to DETAILS with
 	 *  its pick preselected (the seed's target/repeat is consumed by the DETAILS
 	 *  builder). */
+	/** Open the dock's create surface pre-seeded from an IN-GAME right-click
+	 *  ("Add Goal" on a skill / boss / item / account widget). ADR-0008 routes
+	 *  creation through the dock, so the in-game menus seed it instead of
+	 *  opening their own windows. Clears any selection first so the dock leaves
+	 *  the edit surface. */
+	public void openSeededCreate(com.goalplanner.model.GoalType type,
+		net.runelite.api.Skill skill, String bossName, Integer itemId, String itemName,
+		String accountMetric)
+	{
+		CreateSeed seed = new CreateSeed();
+		seed.skill = skill;
+		seed.bossName = bossName;
+		seed.accountMetric = accountMetric;
+		dockCreateSeed = seed;
+		resetCreatePicks();
+		dockPickedSkill = skill;
+		dockPickedBoss = bossName;
+		if (itemId != null)
+		{
+			dockPickedItemId = itemId;
+			dockPickedItemName = itemName;
+		}
+		api.clearGoalSelection();
+		navigateCreate(type);
+		// Past the picker when the widget already told us what it is.
+		if (skill != null || bossName != null || itemId != null || accountMetric != null)
+		{
+			dockCreateStep = CreateStep.DETAILS;
+			dockCreateMounted = false;
+			refreshDock();
+		}
+	}
+
 	private void navigateCreate(com.goalplanner.model.GoalType type)
 	{
 		// Navigating the create surface keeps it expanded above the footer (a
@@ -4595,6 +4632,15 @@ public class GoalPanel extends PluginPanel
 		styleField(metricCombo);
 		// Update mode: the metric is fixed (no API re-points an existing account
 		// goal), so it shows selected but locked; only the target is editable.
+		if (editing == null && dockCreateSeed != null && dockCreateSeed.accountMetric != null)
+		{
+			try
+			{
+				metricCombo.setSelectedItem(com.goalplanner.model.AccountMetric
+					.valueOf(dockCreateSeed.accountMetric));
+			}
+			catch (RuntimeException ignored) { /* unknown metric: leave default */ }
+		}
 		if (editing != null)
 		{
 			try
