@@ -221,7 +221,6 @@ public class GoalPanel extends PluginPanel
 	private final ItemSearchRequest itemSearchCallback;
 	private final GoalReorderController reorderController;
 	private final GoalDialogFactory dialogFactory;
-	private final GoalContextMenuBuilder contextMenuBuilder;
 
 	/**
 	 * Callback the panel uses to ask the plugin to open the in-game chatbox
@@ -330,8 +329,6 @@ public class GoalPanel extends PluginPanel
 		this.reorderController = new GoalReorderController(api, goalStore);
 		this.dialogFactory = new GoalDialogFactory(api, goalStore, skillIconManager,
 			itemManager, spriteManager, itemSearchCallback, this);
-		this.contextMenuBuilder = new GoalContextMenuBuilder(api, goalStore, this,
-			dialogFactory, reorderController, config);
 
 		setLayout(new BorderLayout());
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
