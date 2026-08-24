@@ -2840,42 +2840,7 @@ public class GoalPanel extends PluginPanel
 		return removable;
 	}
 
-	private void dockAddTag(Goal g)
-	{
-		TagPickerDialog.Result picked = TagPickerDialog.show(this, "Add Tag", api);
-		if (picked != null)
-		{
-			api.addTagWithCategory(g.getId(), picked.label, picked.category.name());
-		}
-	}
 
-	private void dockRemoveTags(Goal g, java.util.List<Tag> removable)
-	{
-		java.util.List<MultiSelectDialog.Item> items = new ArrayList<>();
-		for (Tag t : removable)
-		{
-			items.add(new MultiSelectDialog.Item(
-				t.getLabel(),
-				t.getLabel() + " (" + t.getCategory().getDisplayName() + ")"));
-		}
-		java.util.List<String> chosen = MultiSelectDialog.show(this, "Remove Tags", "Remove", items);
-		if (chosen.isEmpty())
-		{
-			return;
-		}
-		api.beginCompound("Remove " + chosen.size() + " tag(s)");
-		try
-		{
-			for (String label : chosen)
-			{
-				api.removeTag(g.getId(), label);
-			}
-		}
-		finally
-		{
-			api.endCompound();
-		}
-	}
 
 	private void dockRemoveRequirements(Goal g)
 	{
@@ -7188,7 +7153,7 @@ public class GoalPanel extends PluginPanel
 	// tag nav drivers and refresh; refreshDock mounts buildTagSurface above the
 	// footer and returns early. Back / apply route through closeTagSurface, which
 	// remounts the surface the overlay replaced. The right-click menus still open
-	// the (intact, dead-in-dock) TagPickerDialog / MultiSelectDialog dialogs.
+	// MultiSelectDialog (dockRemoveRequirements is its last caller).
 	// ------------------------------------------------------------
 
 	/** Open the inline Add Tag surface for a single goal. */
