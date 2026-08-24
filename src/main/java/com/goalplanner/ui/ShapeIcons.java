@@ -55,11 +55,6 @@ public final class ShapeIcons
 		return new PlusIcon(size, color);
 	}
 
-	/** "Remove all" / minus icon - single horizontal bevel bar, matches plus styling. */
-	public static Icon minus(int size, Color color)
-	{
-		return new MinusIcon(size, color);
-	}
 
 	/** Price-tag silhouette - diagonal point on the left, eyelet hole, beveled body. */
 	public static Icon tag(int size, Color color)

@@ -1661,28 +1661,6 @@ public class GoalPanel extends PluginPanel
 	// Move-pick mode
 	// ------------------------------------------------------------------
 
-	/**
-	 * Enter move-pick mode. The next left-click on any goal card inserts
-	 * {@code sourceGoalId} above the clicked target (in the target's
-	 * section, at the target's position). Clicking the in-mode "+ New
-	 * Section" row instead creates a new section and moves there.
-	 * Exiting another pick mode first keeps the two states mutually
-	 * exclusive.
-	 */
-	void enterMoveMode(String sourceGoalId)
-	{
-		if (!pendingRelationSourceIds.isEmpty()) exitRelationMode();
-		// Same rule as enterRelationMode - pick mode is single-source, so
-		// any existing multi-select highlight is visual noise.
-		api.clearGoalSelection();
-		pendingMoveSourceId = sourceGoalId;
-		String sourceName = reorderController.goalNameById(sourceGoalId);
-		moveModeLabel.setText("<html>Click a goal to place \"" + sourceName
-			+ "\" above it, or click + New Section - ESC to cancel</html>");
-		moveModeBanner.setVisible(true);
-		// Rebuild so the blue source-card border + New Section row appear.
-		rebuild();
-	}
 
 	/** Exit move-pick mode without moving. */
 	void exitMoveMode()
@@ -3014,38 +2992,7 @@ public class GoalPanel extends PluginPanel
 		dockChooser("Amount per period", labels, actions);
 	}
 
-	/** Derive a repeatable slice from a skill goal (activityName null) or a
-	 *  resolved item activity. Picks a period, then an amount, then creates on
-	 *  the client thread (the derive reads live XP / kill-count). */
-	/** "Make repeatable" on a plain SKILL grind (note 5): hand off to the create
-	 *  flow pre-seeded for a repeatable skill goal (skill preselected, repeat
-	 *  disclosure ON, target prefilled). Clears the selection first so the dock
-	 *  leaves the edit surface for the create surface. May create a fresh parent +
-	 *  slice - that is the create flow and matches the ask. */
-	private void makeRepeatableFromSkill(Goal g)
-	{
-		CreateSeed seed = new CreateSeed();
-		seed.skill = skillOf(g);
-		seed.repeatable = true;
-		seed.targetXp = g.getTargetValue();
-		dockCreateSeed = seed;
-		api.clearGoalSelection();
-		navigateCreate(GoalType.SKILL);
-	}
 
-	/** "Make repeatable" on a plain BOSS grind (note 5): hand off to the create
-	 *  flow pre-seeded for a repeatable boss goal (boss preselected, repeat ON,
-	 *  target kill count prefilled). */
-	private void makeRepeatableFromBoss(Goal g)
-	{
-		CreateSeed seed = new CreateSeed();
-		seed.bossName = g.getBossName();
-		seed.repeatable = true;
-		seed.targetCount = g.getTargetValue();
-		dockCreateSeed = seed;
-		api.clearGoalSelection();
-		navigateCreate(GoalType.BOSS);
-	}
 
 	private void dockDeriveRepeat(Goal g, String activityName)
 	{
@@ -3162,225 +3109,9 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	private void dockMoveToSection(Goal g)
-	{
-		List<String> labels = new ArrayList<>();
-		List<Runnable> actions = new ArrayList<>();
-		boolean goalInDefault = false;
-		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
-		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
-		{
-			if (sv.builtIn)
-			{
-				if (sv.id.equals(g.getSectionId()))
-				{
-					goalInDefault = true;
-				}
-				continue;
-			}
-			if (sv.id.equals(g.getSectionId()))
-			{
-				continue;
-			}
-			destinations.add(sv);
-		}
-		if (!goalInDefault)
-		{
-			labels.add("Default (Incomplete / Completed)");
-			actions.add(() -> api.moveGoalsToDefault(Collections.singletonList(g.getId())));
-		}
-		for (com.goalplanner.api.SectionView dest : destinations)
-		{
-			final String destId = dest.id;
-			labels.add(dest.name);
-			actions.add(() -> api.moveGoalToSection(g.getId(), destId));
-		}
-		labels.add("New section...");
-		actions.add(() -> promptNewSectionThen(newId -> api.moveGoalToSection(g.getId(), newId)));
-		dockChooser("Move to section", labels, actions);
-	}
 
-	private void dockDuplicateToSection(Goal g)
-	{
-		List<String> labels = new ArrayList<>();
-		List<Runnable> actions = new ArrayList<>();
-		String defaultIncompleteId = null;
-		boolean goalInDefault = false;
-		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
-		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
-		{
-			if ("INCOMPLETE".equals(sv.kind))
-			{
-				defaultIncompleteId = sv.id;
-			}
-			if (sv.builtIn)
-			{
-				if (sv.id.equals(g.getSectionId()))
-				{
-					goalInDefault = true;
-				}
-				continue;
-			}
-			if (sv.id.equals(g.getSectionId()))
-			{
-				continue;
-			}
-			destinations.add(sv);
-		}
-		if (!goalInDefault && defaultIncompleteId != null)
-		{
-			final String defId = defaultIncompleteId;
-			labels.add("Default (Incomplete / Completed)");
-			actions.add(() -> api.duplicateGoalsToSection(
-				Collections.singletonList(g.getId()), defId));
-		}
-		for (com.goalplanner.api.SectionView dest : destinations)
-		{
-			final String destId = dest.id;
-			labels.add(dest.name);
-			actions.add(() -> api.duplicateGoalsToSection(
-				Collections.singletonList(g.getId()), destId));
-		}
-		labels.add("New section...");
-		actions.add(() -> promptNewSectionThen(newId -> api.duplicateGoalsToSection(
-			Collections.singletonList(g.getId()), newId)));
-		dockChooser("Duplicate to section", labels, actions);
-	}
 
-	private void dockBulkMoveToSection(List<Goal> goals, Set<String> ids)
-	{
-		final LinkedHashSet<String> sel = new LinkedHashSet<>(ids);
-		List<String> labels = new ArrayList<>();
-		List<Runnable> actions = new ArrayList<>();
-		String defaultIncompleteId = null;
-		String defaultCompletedId = null;
-		List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
-		for (com.goalplanner.api.SectionView sv : allSections)
-		{
-			if ("INCOMPLETE".equals(sv.kind))
-			{
-				defaultIncompleteId = sv.id;
-			}
-			if ("COMPLETED".equals(sv.kind))
-			{
-				defaultCompletedId = sv.id;
-			}
-		}
-		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
-		for (com.goalplanner.api.SectionView sv : allSections)
-		{
-			if (sv.builtIn)
-			{
-				continue;
-			}
-			boolean allAlreadyHere = true;
-			for (Goal g : goals)
-			{
-				if (!sv.id.equals(g.getSectionId()))
-				{
-					allAlreadyHere = false;
-					break;
-				}
-			}
-			if (allAlreadyHere)
-			{
-				continue;
-			}
-			destinations.add(sv);
-		}
-		boolean allInDefault = !goals.isEmpty();
-		for (Goal g : goals)
-		{
-			String sid = g.getSectionId();
-			if (sid == null || (!sid.equals(defaultIncompleteId) && !sid.equals(defaultCompletedId)))
-			{
-				allInDefault = false;
-				break;
-			}
-		}
-		if (!allInDefault)
-		{
-			labels.add("Default (Incomplete / Completed)");
-			actions.add(() -> api.moveGoalsToDefault(sel));
-		}
-		for (com.goalplanner.api.SectionView dest : destinations)
-		{
-			final String destId = dest.id;
-			labels.add(dest.name);
-			actions.add(() -> api.bulkMoveGoalsToSection(sel, destId));
-		}
-		labels.add("New section...");
-		actions.add(() -> promptNewSectionThen(newId -> api.bulkMoveGoalsToSection(sel, newId)));
-		dockChooser("Move " + goals.size() + " to section", labels, actions);
-	}
 
-	private void dockBulkDuplicateToSection(List<Goal> goals, Set<String> ids)
-	{
-		final LinkedHashSet<String> sel = new LinkedHashSet<>(ids);
-		List<String> labels = new ArrayList<>();
-		List<Runnable> actions = new ArrayList<>();
-		String defaultIncompleteId = null;
-		String defaultCompletedId = null;
-		List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
-		for (com.goalplanner.api.SectionView sv : allSections)
-		{
-			if ("INCOMPLETE".equals(sv.kind))
-			{
-				defaultIncompleteId = sv.id;
-			}
-			if ("COMPLETED".equals(sv.kind))
-			{
-				defaultCompletedId = sv.id;
-			}
-		}
-		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
-		for (com.goalplanner.api.SectionView sv : allSections)
-		{
-			if (sv.builtIn)
-			{
-				continue;
-			}
-			boolean allAlreadyHere = true;
-			for (Goal g : goals)
-			{
-				if (!sv.id.equals(g.getSectionId()))
-				{
-					allAlreadyHere = false;
-					break;
-				}
-			}
-			if (allAlreadyHere)
-			{
-				continue;
-			}
-			destinations.add(sv);
-		}
-		boolean allInDefault = !goals.isEmpty();
-		for (Goal g : goals)
-		{
-			String sid = g.getSectionId();
-			if (sid == null || (!sid.equals(defaultIncompleteId) && !sid.equals(defaultCompletedId)))
-			{
-				allInDefault = false;
-				break;
-			}
-		}
-		if (!allInDefault && defaultIncompleteId != null)
-		{
-			final String defId = defaultIncompleteId;
-			labels.add("Default (Incomplete / Completed)");
-			actions.add(() -> api.duplicateGoalsToSection(sel, defId));
-		}
-		for (com.goalplanner.api.SectionView dest : destinations)
-		{
-			final String destId = dest.id;
-			labels.add(dest.name);
-			actions.add(() -> api.duplicateGoalsToSection(sel, destId));
-		}
-		labels.add("New section...");
-		actions.add(() -> promptNewSectionThen(newId -> api.duplicateGoalsToSection(sel, newId)));
-		dockChooser("Duplicate " + goals.size() + " to section", labels, actions);
-	}
 
 	// --- Inline move / copy-to-section overlay (inline-move pass) --------------
 	// Move / Copy to section used to open the dockChooser JOptionPane above (kept
@@ -3590,23 +3321,6 @@ public class GoalPanel extends PluginPanel
 			verb + " to new section", this::closeMoveSurface);
 	}
 
-	private void promptAddSectionFromDock()
-	{
-		String input = JOptionPane.showInputDialog(this,
-			"Section name:", "Add Section", JOptionPane.PLAIN_MESSAGE);
-		if (input != null && !input.trim().isEmpty())
-		{
-			try
-			{
-				api.createSection(input.trim());
-			}
-			catch (IllegalArgumentException e)
-			{
-				JOptionPane.showMessageDialog(this, e.getMessage(),
-					"Add Section", JOptionPane.WARNING_MESSAGE);
-			}
-		}
-	}
 
 	// ============================================================
 	// Create surface (ADR-0008): the dock's EMPTY-state content.
@@ -3697,14 +3411,6 @@ public class GoalPanel extends PluginPanel
 		dockCreateMountedStep = dockCreateStep;
 	}
 
-	/** The types whose FORM splits into a PICKER step then a DETAILS step. All
-	 *  other types render DETAILS directly. */
-	private static boolean isTallType(com.goalplanner.model.GoalType t)
-	{
-		return t == com.goalplanner.model.GoalType.SKILL
-			|| t == com.goalplanner.model.GoalType.BOSS
-			|| t == com.goalplanner.model.GoalType.ITEM_GRIND;
-	}
 
 	/** Forget any stashed picker selection - called when the create flow leaves a
 	 *  form or changes type, so a stale pick never bleeds into the next form. */
@@ -8429,72 +8135,6 @@ public class GoalPanel extends PluginPanel
 		return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
-	/** Inline repeat controls for edit mode (ADR-0008), replacing the repeat
-	 *  JOptionPane choosers. Renders only for goals that carry their OWN repeat
-	 *  state - CUSTOM goals and derived per-period slices (repeatChunk > 0). A
-	 *  plain auto-tracked grind has no own-repeat; it derives a slice via the
-	 *  "Make repeatable" chip instead. */
-	private void addEditRepeatControls(JPanel body, Goal g, String amountLabel)
-	{
-		final String gid = g.getId();
-		final boolean hasChunk = g.getRepeatChunk() > 0;
-		if (g.getType() != GoalType.CUSTOM && !hasChunk)
-		{
-			return;
-		}
-
-		final com.goalplanner.model.RepeatPeriod[] period = {
-			g.getRepeatEvery().isRepeating() ? g.getRepeatEvery()
-				: com.goalplanner.model.RepeatPeriod.DAILY };
-
-		JCheckBox toggle = new JCheckBox("Repeatable");
-		toggle.setOpaque(false);
-		toggle.setForeground(CREATE_FG);
-		toggle.setFont(toggle.getFont().deriveFont(11f));
-		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
-		toggle.setSelected(g.getRepeatEvery().isRepeating());
-
-		JPanel detail = new JPanel();
-		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
-		detail.setOpaque(false);
-		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
-		detail.setVisible(toggle.isSelected());
-		detail.add(Box.createVerticalStrut(4));
-		detail.add(buildEditPeriodPills(gid, period));
-		detail.add(Box.createVerticalStrut(4));
-		if (hasChunk)
-		{
-			JTextField chunk = new JTextField(8);
-			styleField(chunk);
-			chunk.setText(Integer.toString(g.getRepeatChunk()));
-			commitOnBlurOrEnter(chunk, () ->
-			{
-				int v = parsePositiveInt(chunk.getText());
-				if (v <= 0) { chunk.setText(Integer.toString(g.getRepeatChunk())); return; }
-				api.setGoalRepeatChunk(gid, v);
-			});
-			addFormRow(detail, amountLabel, chunk);
-		}
-
-		toggle.addActionListener(e ->
-		{
-			api.setGoalRepeat(gid, toggle.isSelected()
-				? period[0] : com.goalplanner.model.RepeatPeriod.NONE);
-			detail.setVisible(toggle.isSelected());
-			remeasureDock();
-		});
-
-		JLabel head = new JLabel("Repeat");
-		head.setForeground(CREATE_FG_DIM);
-		head.setFont(head.getFont().deriveFont(10f));
-		head.setAlignmentX(Component.LEFT_ALIGNMENT);
-		body.add(Box.createVerticalStrut(2));
-		body.add(head);
-		body.add(Box.createVerticalStrut(2));
-		body.add(toggle);
-		body.add(detail);
-		body.add(Box.createVerticalStrut(6));
-	}
 
 	/** Daily / Weekly / Monthly pills for edit mode: the tapped one is highlighted
 	 *  AND committed to the goal via {@code setGoalRepeat}. */

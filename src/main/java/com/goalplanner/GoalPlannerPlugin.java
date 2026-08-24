@@ -1087,34 +1087,6 @@ public class GoalPlannerPlugin extends Plugin
 		}
 	}
 
-	/**
-	 * Build an achievement diary Goal for a given area + tier. Stores the completion
-	 * varbit on the Goal so DiaryTracker can poll it (0 if no varbit is exposed, e.g.
-	 * Karamja Easy/Medium/Hard - those stay manual).
-	 */
-	private Goal buildDiaryGoal(String areaDisplayName, AchievementDiaryData.Tier tier)
-	{
-		if (areaDisplayName == null || tier == null) return null;
-
-		AchievementDiaryData.Tracking tracking = AchievementDiaryData.tracking(areaDisplayName, tier);
-		if (tracking == null)
-		{
-			log.info("Diary goal '{} {}' has no tracking varbit; will be manual-only",
-				areaDisplayName, tier);
-		}
-		int varbitId = tracking != null ? tracking.varbitId : 0;
-		int targetValue = tracking != null ? tracking.requiredValue : 1;
-
-		return Goal.builder()
-			.type(GoalType.DIARY)
-			.name(areaDisplayName)
-			.description(tier.getDisplayName() + " Achievement Diary")
-			.targetValue(targetValue)
-			.currentValue(0)
-			.spriteId(AchievementDiaryData.DIARY_SPRITE_ID)
-			.varbitId(varbitId)
-			.build();
-	}
 
 	/**
 	 * Map from Skills-tab widget id (InterfaceID.Stats.&lt;SKILL&gt;) to the
@@ -1195,30 +1167,6 @@ public class GoalPlannerPlugin extends Plugin
 		return null;
 	}
 
-	/**
-	 * Build a quest Goal from a quest-list menu entry's target string.
-	 * Returns null if the target can't be mapped to a known Quest.
-	 */
-	private Goal buildQuestGoal(String menuTarget)
-	{
-		String displayName = stripColorTags(menuTarget);
-		net.runelite.api.Quest quest = findQuestByDisplayName(displayName);
-		if (quest == null)
-		{
-			log.warn("Quest list right-click: unknown quest '{}'", displayName);
-			return null;
-		}
-
-		return Goal.builder()
-			.type(GoalType.QUEST)
-			.name(quest.getName())
-			.description("Quest")
-			.questName(quest.name())
-			.targetValue(1)
-			.currentValue(0)
-			.spriteId(QUEST_SPRITE_ID)
-			.build();
-	}
 
 	/**
 	 * Read a row's child widget from a per-row dynamic-children container.
@@ -2087,39 +2035,6 @@ public class GoalPlannerPlugin extends Plugin
 		}
 	}
 
-	private void addSectionMenuEntries(String baseOption, String menuTarget, Goal probe, String label,
-		Supplier<String> bareAdd)
-	{
-		List<com.goalplanner.api.SectionView> sections = userSections();
-		if (sections.isEmpty())
-		{
-			return;
-		}
-		if (sections.size() == 1)
-		{
-			// One user section → unambiguous destination, no need to name it.
-			final String sectionId = sections.get(0).id;
-			client.createMenuEntry(1)
-				.setOption(baseOption)
-				.setTarget(menuTarget)
-				.setType(MenuAction.RUNELITE)
-				.onClick(e -> skillSyncGate.runWhenSynced(() -> addToSection(sectionId, probe, label, bareAdd)));
-			return;
-		}
-		MenuEntry parent = client.createMenuEntry(1)
-			.setOption(baseOption)
-			.setTarget(menuTarget)
-			.setType(MenuAction.RUNELITE);
-		net.runelite.api.Menu sub = parent.createSubMenu();
-		for (com.goalplanner.api.SectionView section : sections)
-		{
-			final String sectionId = section.id;
-			sub.createMenuEntry(0)
-				.setOption(section.name)
-				.setType(MenuAction.RUNELITE)
-				.onClick(e -> skillSyncGate.runWhenSynced(() -> addToSection(sectionId, probe, label, bareAdd)));
-		}
-	}
 
 	/**
 	 * Common flush after tracker updates: reconcile completed goals into

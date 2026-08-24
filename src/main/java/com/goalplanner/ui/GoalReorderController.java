@@ -22,14 +22,6 @@ class GoalReorderController
 		this.goalStore = goalStore;
 	}
 
-	/**
-	 * Move a goal by one slot, bounded to its current section.
-	 */
-	void moveGoalBounded(String goalId, int fromIndex, int toIndex, int minIndex, int maxIndex)
-	{
-		if (toIndex < minIndex || toIndex > maxIndex) return;
-		api.moveGoal(goalId, toIndex);
-	}
 
 	/** Move a goal directly to a target index within its section. */
 	void moveGoalTo(String goalId, int toIndex)

@@ -121,45 +121,6 @@ public class SkillTargetForm extends JPanel
 		levelField.setText(Integer.toString(initialLevel));
 	}
 
-	/**
-	 * Switch the form into relative mode with the given current XP as the
-	 * baseline. Both fields are interpreted as deltas: level field = "+N
-	 * levels above current", XP field = "+N XP". They sync correctly through
-	 * the baseline (entering 100,000 XP shows the resulting level delta, not
-	 * the level for 100,000 XP in isolation).
-	 *
-	 * <p>Pass -1 to switch back to absolute mode (existing behavior).
-	 *
-	 *
-	 */
-	public void setRelativeBaseline(int currentXp)
-	{
-		// No-op when nothing actually changes - callers (e.g., the Add Goal
-		// dialog's updateLabels) re-invoke this on every type/mode tweak,
-		// and clearing/reseeding on a no-op wipes whatever the user typed.
-		if (currentXp == this.relativeBaselineXp) return;
-		boolean toAbsolute = currentXp < 0;
-		this.relativeBaselineXp = currentXp;
-		levelLabel.setText(toAbsolute ? "Level:" : "+ Levels:");
-		// On a real transition, reseed: 99 in absolute mode (the common
-		// target), empty in relative mode so an old absolute value isn't
-		// reinterpreted as a (probably nonsensical) delta.
-		syncing = true;
-		try
-		{
-			if (toAbsolute)
-			{
-				levelField.setText("99");
-				xpField.setText(Integer.toString(Experience.getXpForLevel(99)));
-			}
-			else
-			{
-				levelField.setText("");
-				xpField.setText("");
-			}
-		}
-		finally { syncing = false; }
-	}
 
 	/** @return target XP currently represented by the form, or -1 if invalid. */
 	public int getTargetXp()
@@ -178,23 +139,6 @@ public class SkillTargetForm extends JPanel
 		xpField.setText(Integer.toString(xp));
 	}
 
-	/**
-	 * Run {@code commit} whenever the user finishes editing either field -
-	 * pressing Enter in it, or moving focus away. Used by the unified edit form
-	 * (ADR-0008) to apply the new target on commit rather than via a button.
-	 */
-	public void onCommit(Runnable commit)
-	{
-		FocusAdapter blur = new FocusAdapter()
-		{
-			@Override public void focusLost(FocusEvent e) { commit.run(); }
-		};
-		ActionListener enter = e -> commit.run();
-		levelField.addFocusListener(blur);
-		xpField.addFocusListener(blur);
-		levelField.addActionListener(enter);
-		xpField.addActionListener(enter);
-	}
 
 	private static Integer parseInt(String s)
 	{
