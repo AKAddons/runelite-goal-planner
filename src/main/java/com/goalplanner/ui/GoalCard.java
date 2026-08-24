@@ -14,6 +14,20 @@ import java.awt.*;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
+import java.awt.BasicStroke;
+import java.awt.Shape;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.geom.RoundRectangle2D;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
+import javax.imageio.ImageIO;
+import javax.swing.Icon;
+import javax.swing.SwingUtilities;
 
 /**
  * Individual goal card. Consumes a {@link GoalView} (the public DTO) - does not
@@ -57,10 +71,10 @@ public class GoalCard extends JPanel
 	{
 		ImageIcon cached = completionIcon;
 		if (cached != null) return cached;
-		try (java.io.InputStream in = GoalCard.class.getResourceAsStream("/goal_icon.png"))
+		try (InputStream in = GoalCard.class.getResourceAsStream("/goal_icon.png"))
 		{
 			if (in == null) return null;
-			java.awt.image.BufferedImage raw = javax.imageio.ImageIO.read(in);
+			BufferedImage raw = ImageIO.read(in);
 			if (raw == null) return null;
 			Image scaled = raw.getScaledInstance(
 				COMPLETION_ICON_PX, COMPLETION_ICON_PX, Image.SCALE_SMOOTH);
@@ -68,7 +82,7 @@ public class GoalCard extends JPanel
 			completionIcon = built;
 			return built;
 		}
-		catch (java.io.IOException e)
+		catch (IOException e)
 		{
 			return null;
 		}
@@ -163,12 +177,12 @@ public class GoalCard extends JPanel
 			}
 			tip.append("<i>Click to add them to this section.</i></html>");
 			blockedBadge.setToolTipText(tip.toString());
-			blockedBadge.addMouseListener(new java.awt.event.MouseAdapter()
+			blockedBadge.addMouseListener(new MouseAdapter()
 			{
 				@Override
-				public void mousePressed(java.awt.event.MouseEvent e)
+				public void mousePressed(MouseEvent e)
 				{
-					if (e.getButton() == java.awt.event.MouseEvent.BUTTON1)
+					if (e.getButton() == MouseEvent.BUTTON1)
 					{
 						onAddMissingRequirements.run();
 					}
@@ -280,11 +294,11 @@ public class GoalCard extends JPanel
 			String iconKey = (String) view.attributes.get("iconKey");
 			if (iconKey != null)
 			{
-				java.awt.image.BufferedImage icon = resolveIcon(iconKey);
+				BufferedImage icon = resolveIcon(iconKey);
 				if (icon != null)
 				{
-					java.awt.image.BufferedImage scaled = new java.awt.image.BufferedImage(
-						18, 18, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+					BufferedImage scaled = new BufferedImage(
+						18, 18, BufferedImage.TYPE_INT_ARGB);
 					Graphics2D g2d = scaled.createGraphics();
 					g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 						RenderingHints.VALUE_INTERPOLATION_BILINEAR);
@@ -303,8 +317,8 @@ public class GoalCard extends JPanel
 			spriteManager.getSpriteAsync(view.spriteId, 0, img ->
 				SwingUtilities.invokeLater(() -> {
 					if (img == null) return;
-					java.awt.image.BufferedImage scaled = new java.awt.image.BufferedImage(
-						18, 18, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+					BufferedImage scaled = new BufferedImage(
+						18, 18, BufferedImage.TYPE_INT_ARGB);
 					Graphics2D g2d = scaled.createGraphics();
 					g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
 						RenderingHints.VALUE_INTERPOLATION_BILINEAR);
@@ -401,10 +415,10 @@ public class GoalCard extends JPanel
 		// bundled /icons/<key>.png. Falls through to colored pill if both fail.
 		if (tag.iconKey != null && !tag.iconKey.isEmpty())
 		{
-			java.awt.image.BufferedImage img = resolveIcon(tag.iconKey);
+			BufferedImage img = resolveIcon(tag.iconKey);
 			if (img != null)
 			{
-				java.awt.image.BufferedImage scaled = new java.awt.image.BufferedImage(11, 11, java.awt.image.BufferedImage.TYPE_INT_ARGB);
+				BufferedImage scaled = new BufferedImage(11, 11, BufferedImage.TYPE_INT_ARGB);
 				Graphics2D g2d = scaled.createGraphics();
 				g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
 				g2d.drawImage(img, 0, 0, 11, 11, null);
@@ -432,7 +446,7 @@ public class GoalCard extends JPanel
 	 *
 	 * <p>Returns null if all lookups fail; caller falls back to colored pill.
 	 */
-	private java.awt.image.BufferedImage resolveIcon(String iconKey)
+	private BufferedImage resolveIcon(String iconKey)
 	{
 		// item:<id> prefix → ItemManager
 		if (iconKey.startsWith("item:") && itemManager != null)
@@ -456,14 +470,14 @@ public class GoalCard extends JPanel
 			catch (IllegalArgumentException ignored) {}
 		}
 		// Bundled resource → /icons/<key>.png
-		try (java.io.InputStream in = getClass().getResourceAsStream("/icons/" + iconKey + ".png"))
+		try (InputStream in = getClass().getResourceAsStream("/icons/" + iconKey + ".png"))
 		{
 			if (in != null)
 			{
-				return javax.imageio.ImageIO.read(in);
+				return ImageIO.read(in);
 			}
 		}
-		catch (java.io.IOException ignored) {}
+		catch (IOException ignored) {}
 		return null;
 	}
 
@@ -515,10 +529,10 @@ public class GoalCard extends JPanel
 	private JButton createArrowButton(boolean up, ActionListener action, Runnable jumpAction)
 	{
 		final int iconSize = 7;
-		final javax.swing.Icon idle = up
+		final Icon idle = up
 			? ShapeIcons.upTriangle(iconSize, ARROW_COLOR)
 			: ShapeIcons.downTriangle(iconSize, ARROW_COLOR);
-		final javax.swing.Icon hover = up
+		final Icon hover = up
 			? ShapeIcons.upTriangle(iconSize, ARROW_HOVER)
 			: ShapeIcons.downTriangle(iconSize, ARROW_HOVER);
 
@@ -533,20 +547,20 @@ public class GoalCard extends JPanel
 			: "Move down (right-click: move to bottom)");
 		btn.addActionListener(action);
 
-		btn.addMouseListener(new java.awt.event.MouseAdapter()
+		btn.addMouseListener(new MouseAdapter()
 		{
 			@Override
-			public void mouseEntered(java.awt.event.MouseEvent e) { btn.setIcon(hover); }
+			public void mouseEntered(MouseEvent e) { btn.setIcon(hover); }
 			@Override
-			public void mouseExited(java.awt.event.MouseEvent e) { btn.setIcon(idle); }
+			public void mouseExited(MouseEvent e) { btn.setIcon(idle); }
 			@Override
-			public void mousePressed(java.awt.event.MouseEvent e)
+			public void mousePressed(MouseEvent e)
 			{
 				// Right-click jumps the goal to the section edge. The button's
 				// own ActionListener only fires on left-click (BUTTON1), so this
 				// MousePressed handler doesn't double-trigger with the arrow's
 				// normal one-step move.
-				if (javax.swing.SwingUtilities.isRightMouseButton(e) && jumpAction != null)
+				if (SwingUtilities.isRightMouseButton(e) && jumpAction != null)
 				{
 					jumpAction.run();
 				}
@@ -632,10 +646,10 @@ public class GoalCard extends JPanel
 		// Optional goals: diagonal hatching overlay (like Outlook optional meetings).
 		if (view.optional)
 		{
-			java.awt.Shape oldClip = g2.getClip();
-			g2.setClip(new java.awt.geom.RoundRectangle2D.Float(0, 0, w, h, CORNER_RADIUS, CORNER_RADIUS));
+			Shape oldClip = g2.getClip();
+			g2.setClip(new RoundRectangle2D.Float(0, 0, w, h, CORNER_RADIUS, CORNER_RADIUS));
 			g2.setColor(new Color(255, 255, 255, 30));
-			g2.setStroke(new java.awt.BasicStroke(2f));
+			g2.setStroke(new BasicStroke(2f));
 			int spacing = 10;
 			for (int x = -h; x < w + h; x += spacing)
 			{
@@ -647,7 +661,7 @@ public class GoalCard extends JPanel
 		// Selection indicator
 		if (view.selected)
 		{
-			g2.setStroke(new java.awt.BasicStroke(2f));
+			g2.setStroke(new BasicStroke(2f));
 			g2.setColor(isComplete() ? new Color(140, 140, 140) : Color.WHITE);
 			// Inset by 1px on each side so the 2px stroke sits cleanly inside the bounds.
 			g2.drawRoundRect(1, 1, w - 2, h - 2, CORNER_RADIUS, CORNER_RADIUS);
@@ -869,8 +883,8 @@ public class GoalCard extends JPanel
 
 	private static String formatCompletionDate(long epochMillis)
 	{
-		java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("MMM d, yyyy");
-		return fmt.format(new java.util.Date(epochMillis));
+		SimpleDateFormat fmt = new SimpleDateFormat("MMM d, yyyy");
+		return fmt.format(new Date(epochMillis));
 	}
 
 	private String formatPercent()
@@ -960,14 +974,14 @@ public class GoalCard extends JPanel
 			if (view.name != null && view.name.length() > 22) base = view.name;
 		}
 
-		java.util.List<GoalView.RelationView> requires = view.requiresNames != null
-			? view.requiresNames : java.util.Collections.emptyList();
-		java.util.List<GoalView.RelationView> orRequires = view.orRequiresNames != null
-			? view.orRequiresNames : java.util.Collections.emptyList();
-		java.util.List<GoalView.RelationView> requiredBy = view.requiredByNames != null
-			? view.requiredByNames : java.util.Collections.emptyList();
-		java.util.List<GoalView.RelationView> orRequiredBy = view.orRequiredByNames != null
-			? view.orRequiredByNames : java.util.Collections.emptyList();
+		List<GoalView.RelationView> requires = view.requiresNames != null
+			? view.requiresNames : Collections.emptyList();
+		List<GoalView.RelationView> orRequires = view.orRequiresNames != null
+			? view.orRequiresNames : Collections.emptyList();
+		List<GoalView.RelationView> requiredBy = view.requiredByNames != null
+			? view.requiredByNames : Collections.emptyList();
+		List<GoalView.RelationView> orRequiredBy = view.orRequiredByNames != null
+			? view.orRequiredByNames : Collections.emptyList();
 
 		boolean hasRelations = !requires.isEmpty() || !orRequires.isEmpty()
 			|| !requiredBy.isEmpty() || !orRequiredBy.isEmpty();
@@ -985,25 +999,25 @@ public class GoalCard extends JPanel
 			if (hasRelations) sb.append("<br><br>");
 		}
 		// Split into required vs recommended (optional).
-		java.util.List<GoalView.RelationView> reqRequired = new java.util.ArrayList<>();
-		java.util.List<GoalView.RelationView> reqRecommended = new java.util.ArrayList<>();
+		List<GoalView.RelationView> reqRequired = new ArrayList<>();
+		List<GoalView.RelationView> reqRecommended = new ArrayList<>();
 		for (GoalView.RelationView r : requires)
 		{
 			if (r.optional) reqRecommended.add(r); else reqRequired.add(r);
 		}
 		// For "required by" / "recommended by": if THIS goal is optional,
 		// all parents see it as a recommendation, not a requirement.
-		java.util.List<GoalView.RelationView> byRequired;
-		java.util.List<GoalView.RelationView> byRecommended;
+		List<GoalView.RelationView> byRequired;
+		List<GoalView.RelationView> byRecommended;
 		if (view.optional)
 		{
-			byRequired = java.util.Collections.emptyList();
+			byRequired = Collections.emptyList();
 			byRecommended = requiredBy;
 		}
 		else
 		{
 			byRequired = requiredBy;
-			byRecommended = java.util.Collections.emptyList();
+			byRecommended = Collections.emptyList();
 		}
 
 		boolean first = true;
@@ -1056,7 +1070,7 @@ public class GoalCard extends JPanel
 	 * render compactly as "SkillName Level"; non-skill relations use the
 	 * goal name. Items separated by ", ".
 	 */
-	private static String formatRelations(java.util.List<GoalView.RelationView> relations,
+	private static String formatRelations(List<GoalView.RelationView> relations,
 										  SkillIconManager skillIconManager)
 	{
 		return formatRelationsWithSeparator(relations, skillIconManager, ", ");
@@ -1066,13 +1080,13 @@ public class GoalCard extends JPanel
 	 * Format OR-relations with " OR " separator for inline display
 	 * inside parentheses (e.g., "(Attack 99 OR Strength 99)").
 	 */
-	private static String formatRelationsOr(java.util.List<GoalView.RelationView> relations,
+	private static String formatRelationsOr(List<GoalView.RelationView> relations,
 											SkillIconManager skillIconManager)
 	{
 		return formatRelationsWithSeparator(relations, skillIconManager, " OR ");
 	}
 
-	private static String formatRelationsWithSeparator(java.util.List<GoalView.RelationView> relations,
+	private static String formatRelationsWithSeparator(List<GoalView.RelationView> relations,
 													   SkillIconManager skillIconManager, String separator)
 	{
 		StringBuilder sb = new StringBuilder();

@@ -11,6 +11,13 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import java.awt.Cursor;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Consumer;
+import javax.swing.JLabel;
 
 /**
  * Renders one section's goals as a <em>subtly nested</em> list: each real
@@ -73,9 +80,9 @@ public final class SectionNestContainer extends JPanel
 	private final int basePad;
 	private int stepPx = INDENT_STEP; // effective per-level indent, width-adapted each doLayout()
 	/** Collapse chevron per parent row id, positioned in the gutter in doLayout(). */
-	private final java.util.Map<String, javax.swing.JLabel> chevrons = new java.util.HashMap<>();
+	private final Map<String, JLabel> chevrons = new HashMap<>();
 
-	public SectionNestContainer(List<Row> rows, java.util.function.Consumer<String> onToggleCollapse)
+	public SectionNestContainer(List<Row> rows, Consumer<String> onToggleCollapse)
 	{
 		this.rows = rows;
 		setOpaque(false);
@@ -93,18 +100,18 @@ public final class SectionNestContainer extends JPanel
 			// A clickable collapse chevron for goals that have a nested subtree.
 			if (r.parent && onToggleCollapse != null)
 			{
-				javax.swing.JLabel chev = new javax.swing.JLabel(r.collapsed
+				JLabel chev = new JLabel(r.collapsed
 					? com.goalplanner.ui.ShapeIcons.rightTriangle(8, CHEVRON_COLOR)
 					: com.goalplanner.ui.ShapeIcons.downTriangle(8, CHEVRON_COLOR));
-				chev.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+				chev.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 				chev.setToolTipText(r.collapsed
 					? "Show nested prerequisites" : "Hide nested prerequisites");
 				final String gid = r.id;
-				chev.addMouseListener(new java.awt.event.MouseAdapter()
+				chev.addMouseListener(new MouseAdapter()
 				{
-					@Override public void mousePressed(java.awt.event.MouseEvent e)
+					@Override public void mousePressed(MouseEvent e)
 					{
-						if (e.getButton() == java.awt.event.MouseEvent.BUTTON1) onToggleCollapse.accept(gid);
+						if (e.getButton() == MouseEvent.BUTTON1) onToggleCollapse.accept(gid);
 					}
 				});
 				chevrons.put(r.id, chev);
@@ -146,7 +153,7 @@ public final class SectionNestContainer extends JPanel
 			int x = cardX(r.level);
 			int h = r.card.getPreferredSize().height;
 			r.card.setBounds(x, y, Math.max(40, width - x), h);
-			javax.swing.JLabel chev = chevrons.get(r.id);
+			JLabel chev = chevrons.get(r.id);
 			if (chev != null)
 			{
 				int cw = chev.getPreferredSize().width;

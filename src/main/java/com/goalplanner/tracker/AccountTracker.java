@@ -10,6 +10,7 @@ import net.runelite.api.gameval.VarbitID;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import java.util.function.LongSupplier;
 
 /**
  * Tracks account-wide goals: quest points, combat level, total level,
@@ -32,7 +33,7 @@ public class AccountTracker extends AbstractTracker
 	 */
 	static final long LOGIN_SETTLE_MS = 5_000;
 
-	private final java.util.function.LongSupplier clock;
+	private final LongSupplier clock;
 
 	/** Wall-clock time from which a below-target read may re-open a completed
 	 *  decaying goal. 0 = no login seen yet (tests, or the plugin starting up
@@ -47,7 +48,7 @@ public class AccountTracker extends AbstractTracker
 
 	/** Test seam: inject the clock backing the post-login settle window. */
 	AccountTracker(Client client, GoalPlannerApiImpl api,
-		java.util.function.LongSupplier clock)
+		LongSupplier clock)
 	{
 		super(client, api);
 		this.clock = clock;

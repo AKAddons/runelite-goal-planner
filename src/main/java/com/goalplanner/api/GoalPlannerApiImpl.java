@@ -12,6 +12,17 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Quest;
 import net.runelite.api.Skill;
 import net.runelite.client.game.ItemManager;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * Default implementation of {@link GoalPlannerApi}. Bound to the public
@@ -43,26 +54,26 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 
 	/** Supplies when a period ends. Set by the plugin, which owns the boundary
 	 *  config; null-safe default so tests and headless callers just see 0. */
-	java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant>
+	Function<com.goalplanner.model.RepeatPeriod, Instant>
 		nextBoundaryFn = p -> null;
 
 	/** The zone the boundary config measures days in. */
-	java.util.function.Supplier<java.time.ZoneId> boundaryZoneFn =
-		() -> java.time.ZoneOffset.UTC;
+	Supplier<ZoneId> boundaryZoneFn =
+		() -> ZoneOffset.UTC;
 
 	/** Plugin-internal: hand the API a way to resolve period boundaries. */
 	public void setNextBoundaryFn(
-		java.util.function.Function<com.goalplanner.model.RepeatPeriod, java.time.Instant> fn,
-		java.util.function.Supplier<java.time.ZoneId> zoneFn)
+		Function<com.goalplanner.model.RepeatPeriod, Instant> fn,
+		Supplier<ZoneId> zoneFn)
 	{
 		this.nextBoundaryFn = fn != null ? fn : p -> null;
-		this.boundaryZoneFn = zoneFn != null ? zoneFn : () -> java.time.ZoneOffset.UTC;
+		this.boundaryZoneFn = zoneFn != null ? zoneFn : () -> ZoneOffset.UTC;
 	}
 	/** Lightweight selection-only refresh - avoids full rebuild for selection changes. */
 	Runnable onSelectionChanged = () -> {};
 
 	/** Ephemeral selection set - not persisted, lost on plugin restart. */
-	final java.util.Set<String> selectedGoalIds = new java.util.LinkedHashSet<>();
+	final Set<String> selectedGoalIds = new LinkedHashSet<>();
 
 	/** Undo/redo history. Session-only. Tracker-driven mutations
 	 *  bypass this - only user actions routed through {@link #executeCommand}
@@ -74,8 +85,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	// Blocked-prereqs indicator: goalId -> labels of unmet, not-in-plan DIRECT
 	// prerequisites. Recomputed on the client thread (reads live state) and read
 	// by the panel when building views. Replaced atomically; never mutated in place.
-	private volatile java.util.Map<String, java.util.List<String>> blockedByGoalId =
-		java.util.Collections.emptyMap();
+	private volatile Map<String, List<String>> blockedByGoalId =
+		Collections.emptyMap();
 	final TagService tagService;
 	private final GoalMutationService mutationService;
 	private final GoalQueryService queryService;
@@ -155,7 +166,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	// Not part of the published GoalPlannerApi - the public addQuestGoal / addDiaryGoal
 	// now auto-resolve prereqs internally. Kept public on the impl for tests and
 	// internal callers that want to supply pre-computed templates directly.
-	public String addQuestGoalWithPrereqs(Quest quest, java.util.List<Goal> prereqTemplates) { return creationService.addQuestGoalWithPrereqs(quest, prereqTemplates); }
+	public String addQuestGoalWithPrereqs(Quest quest, List<Goal> prereqTemplates) { return creationService.addQuestGoalWithPrereqs(quest, prereqTemplates); }
 	@Override public String addDiaryGoal(String areaDisplayName, DiaryTier tier) { String id = creationService.addDiaryGoal(areaDisplayName, tier); selectAfterCreate(id); return id; }
 	// Bare diary add: insert the diary goal ONLY, no prereq auto-seeding. Used by the
 	// in-game diary menu (organising/seeding is left to the panel's "Add requirements
@@ -169,9 +180,9 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	public int seedBossRequirementsForGoal(String bossGoalId, boolean includeMet) { return creationService.seedBossRequirementsForGoal(bossGoalId, includeMet); }
 
 	/** Cached missing-direct-prereq labels for a goal (empty if none / not yet computed). */
-	public java.util.List<String> blockedRequirements(String goalId)
+	public List<String> blockedRequirements(String goalId)
 	{
-		return blockedByGoalId.getOrDefault(goalId, java.util.List.of());
+		return blockedByGoalId.getOrDefault(goalId, List.of());
 	}
 
 	/**
@@ -182,7 +193,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	 */
 	public boolean recomputeBlockedRequirements()
 	{
-		java.util.Map<String, java.util.List<String>> next = new java.util.HashMap<>();
+		Map<String, List<String>> next = new HashMap<>();
 		for (Goal g : goalStore.getGoals())
 		{
 			if (g.isComplete()) continue;
@@ -193,7 +204,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 			{
 				continue;
 			}
-			java.util.List<String> missing = creationService.missingDirectPrereqLabels(g);
+			List<String> missing = creationService.missingDirectPrereqLabels(g);
 			if (!missing.isEmpty())
 			{
 				next.put(g.getId(), missing);
@@ -210,7 +221,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	/** Search loaded combat achievements by name/task for the create surface's
 	 *  Combat picker (WikiCaRepository is package-private; the dock reaches it
 	 *  through this accessor). Empty until the wiki data has loaded. */
-	public java.util.List<WikiCaRepository.CaInfo> searchCombatAchievements(String query, int limit) { return wikiCaRepository.search(query, limit); }
+	public List<WikiCaRepository.CaInfo> searchCombatAchievements(String query, int limit) { return wikiCaRepository.search(query, limit); }
 	@Override public String addBossGoal(String bossName, int targetKills) { String id = creationService.addBossGoal(bossName, targetKills); selectAfterCreate(id); return id; }
 	// Bare boss add (no prereq tree), for the dock's "Add prerequisites" toggle.
 	// Mirrors the bare-add intent of addQuestGoalWithPrereqs(..., []).
@@ -230,7 +241,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	public com.goalplanner.share.ShareBundle exportAllSectionsBundle(String sharedBy) { return shareExportService.exportAllUserSections(sharedBy); }
 
 	/** Build a share bundle for the given goal ids (plugin-internal). */
-	public com.goalplanner.share.ShareBundle exportGoalsBundle(java.util.List<String> goalIds, String sharedBy) { return shareExportService.exportGoals(goalIds, sharedBy); }
+	public com.goalplanner.share.ShareBundle exportGoalsBundle(List<String> goalIds, String sharedBy) { return shareExportService.exportGoals(goalIds, sharedBy); }
 
 	// =====================================================================
 	// Query delegations
@@ -240,8 +251,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	public GoalView queryGoalView(String goalId) { return queryService.queryGoalView(goalId); }
 	@Override public List<GoalView> searchGoals(String query) { return queryService.searchGoals(query); }
 	@Override public List<SectionView> queryAllSections() { return queryService.queryAllSections(); }
-	@Override public java.util.List<GoalView> queryGoalsTopologicallySorted(String sectionId) { return queryService.queryGoalsTopologicallySorted(sectionId); }
-	@Override public java.util.Map<String, java.util.List<GoalView>> queryAllGoalsTopologicallySorted() { return queryService.queryAllGoalsTopologicallySorted(); }
+	@Override public List<GoalView> queryGoalsTopologicallySorted(String sectionId) { return queryService.queryGoalsTopologicallySorted(sectionId); }
+	@Override public Map<String, List<GoalView>> queryAllGoalsTopologicallySorted() { return queryService.queryAllGoalsTopologicallySorted(); }
 
 	// =====================================================================
 	// Mutation delegations
@@ -264,10 +275,10 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean changeTarget(String goalId, int newTarget) { autoDeselectIfNotMember(goalId); return mutationService.changeTarget(goalId, newTarget); }
 	@Override public boolean recordGoalProgress(String goalId, int newValue) { return mutationService.recordGoalProgress(goalId, newValue); }
 	@Override public boolean isGoalOverridden(String goalId) { return mutationService.isGoalOverridden(goalId); }
-	@Override public int bulkRestoreDefaults(java.util.Set<String> goalIds) { return mutationService.bulkRestoreDefaults(goalIds); }
-	@Override public int bulkRemoveGoals(java.util.Set<String> goalIds) { return mutationService.bulkRemoveGoals(goalIds); }
-	@Override public int bulkMarkIncomplete(java.util.Set<String> goalIds) { return mutationService.bulkMarkIncomplete(goalIds); }
-	@Override public int bulkMoveGoalsToSection(java.util.Set<String> goalIds, String targetSectionId) { return mutationService.bulkMoveGoalsToSection(goalIds, targetSectionId); }
+	@Override public int bulkRestoreDefaults(Set<String> goalIds) { return mutationService.bulkRestoreDefaults(goalIds); }
+	@Override public int bulkRemoveGoals(Set<String> goalIds) { return mutationService.bulkRemoveGoals(goalIds); }
+	@Override public int bulkMarkIncomplete(Set<String> goalIds) { return mutationService.bulkMarkIncomplete(goalIds); }
+	@Override public int bulkMoveGoalsToSection(Set<String> goalIds, String targetSectionId) { return mutationService.bulkMoveGoalsToSection(goalIds, targetSectionId); }
 	@Override public void removeAllGoals() { mutationService.removeAllGoals(); }
 	// Not part of the published GoalPlannerApi - UI "Remove duplicate goals" cleanup.
 	public int removeDuplicateGoals() { return mutationService.removeDuplicateGoals(); }
@@ -296,8 +307,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean setTagIcon(String tagId, String iconKey) { return tagService.setTagIcon(tagId, iconKey); }
 	@Override public boolean clearTagIcon(String tagId) { return tagService.clearTagIcon(tagId); }
 	@Override public boolean setTagColor(String goalId, String tagLabel, int colorRgb) { autoDeselectIfNotMember(goalId); return tagService.setTagColor(goalId, tagLabel, colorRgb); }
-	@Override public int bulkRemoveTagFromGoals(java.util.Set<String> goalIds, String tagId) { return tagService.bulkRemoveTagFromGoals(goalIds, tagId); }
-	@Override public List<TagRemovalOption> getRemovableTagsForSelection(java.util.Set<String> goalIds) { return tagService.getRemovableTagsForSelection(goalIds); }
+	@Override public int bulkRemoveTagFromGoals(Set<String> goalIds, String tagId) { return tagService.bulkRemoveTagFromGoals(goalIds, tagId); }
+	@Override public List<TagRemovalOption> getRemovableTagsForSelection(Set<String> goalIds) { return tagService.getRemovableTagsForSelection(goalIds); }
 
 	// =====================================================================
 	// Section delegations
@@ -310,9 +321,9 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean reorderSection(String sectionId, int newUserIndex) { return sectionService.reorderSection(sectionId, newUserIndex); }
 	@Override public boolean moveGoalToSection(String goalId, String sectionId) { autoDeselectIfNotMember(goalId); return sectionService.moveGoalToSection(goalId, sectionId); }
 	// Not part of the published GoalPlannerApi - UI duplicate-to-section action.
-	public java.util.List<String> duplicateGoalsToSection(java.util.Collection<String> goalIds, String targetSectionId) { return creationService.duplicateGoalsToSection(goalIds, targetSectionId); }
+	public List<String> duplicateGoalsToSection(Collection<String> goalIds, String targetSectionId) { return creationService.duplicateGoalsToSection(goalIds, targetSectionId); }
 	// Not part of the published GoalPlannerApi - UI "Move to Default" action.
-	public int moveGoalsToDefault(java.util.Collection<String> goalIds) { return mutationService.moveGoalsToDefault(goalIds); }
+	public int moveGoalsToDefault(Collection<String> goalIds) { return mutationService.moveGoalsToDefault(goalIds); }
 	@Override public int removeAllUserSections() { return sectionService.removeAllUserSections(); }
 	@Override public int removeEmptyUserSections() { return sectionService.removeEmptyUserSections(); }
 
@@ -360,8 +371,8 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	@Override public boolean addRequirement(String fromGoalId, String toGoalId) { return relationService.addRequirement(fromGoalId, toGoalId); }
 	@Override public boolean removeRequirement(String fromGoalId, String toGoalId) { return relationService.removeRequirement(fromGoalId, toGoalId); }
 	public boolean addOrRequirement(String fromGoalId, String toGoalId) { return relationService.addOrRequirement(fromGoalId, toGoalId); }
-	@Override public java.util.List<String> getRequirements(String goalId) { return relationService.getRequirements(goalId); }
-	@Override public java.util.List<String> getDependents(String goalId) { return relationService.getDependents(goalId); }
+	@Override public List<String> getRequirements(String goalId) { return relationService.getRequirements(goalId); }
+	@Override public List<String> getDependents(String goalId) { return relationService.getDependents(goalId); }
 	@Override public FindOrCreateResult findOrCreateRequirement(Goal template, String preferredSectionId) { return relationService.findOrCreateRequirement(template, preferredSectionId); }
 	@Override public com.goalplanner.data.QuestRequirementResolver.Resolved resolveQuestRequirements(Quest quest) { return relationService.resolveQuestRequirements(quest); }
 
@@ -457,10 +468,10 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	// =====================================================================
 
 	@Override
-	public boolean replaceGoalSelection(java.util.Collection<String> goalIds)
+	public boolean replaceGoalSelection(Collection<String> goalIds)
 	{
 		log.debug("API.internal replaceGoalSelection(size={})", goalIds == null ? 0 : goalIds.size());
-		java.util.Set<String> next = new java.util.LinkedHashSet<>();
+		Set<String> next = new LinkedHashSet<>();
 		if (goalIds != null) next.addAll(goalIds);
 		if (next.equals(selectedGoalIds)) return false;
 		selectedGoalIds.clear();
@@ -531,13 +542,13 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	{
 		if (newGoalId == null) return;
 		if (selectedGoalIds.contains(newGoalId)) return;
-		replaceGoalSelection(java.util.Collections.singleton(newGoalId));
+		replaceGoalSelection(Collections.singleton(newGoalId));
 	}
 
 	@Override
-	public java.util.Set<String> getSelectedGoalIds()
+	public Set<String> getSelectedGoalIds()
 	{
-		return java.util.Collections.unmodifiableSet(selectedGoalIds);
+		return Collections.unmodifiableSet(selectedGoalIds);
 	}
 
 	@Override

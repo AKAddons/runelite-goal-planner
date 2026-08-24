@@ -9,6 +9,14 @@ import java.util.Map;
 import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.VarPlayerID;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 
 /**
  * Maps boss display names to their VarPlayerID kill count variables.
@@ -40,7 +48,7 @@ public final class BossKillData
 	 * Used when right-clicking raid entries in the collection log
 	 * to show one menu entry per tier.
 	 */
-	private static final Map<String, java.util.List<String>> COLLECTION_LOG_ALIASES = new HashMap<>();
+	private static final Map<String, List<String>> COLLECTION_LOG_ALIASES = new HashMap<>();
 
 	static
 	{
@@ -253,21 +261,21 @@ public final class BossKillData
 			{
 				return;
 			}
-			try (java.io.InputStream in = BossKillData.class.getResourceAsStream("boss-prereqs.json"))
+			try (InputStream in = BossKillData.class.getResourceAsStream("boss-prereqs.json"))
 			{
 				if (in == null)
 				{
 					throw new IllegalStateException("missing resource: boss-prereqs.json");
 				}
-				try (java.io.Reader reader = new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))
+				try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8))
 				{
 					BOSS_PREREQS.putAll(gson.fromJson(reader,
 						new com.google.gson.reflect.TypeToken<Map<String, BossPrereqs>>(){}.getType()));
 				}
 			}
-			catch (java.io.IOException e)
+			catch (IOException e)
 			{
-				throw new java.io.UncheckedIOException("failed to load boss-prereqs.json", e);
+				throw new UncheckedIOException("failed to load boss-prereqs.json", e);
 			}
 			prereqsLoaded = true;
 		}
@@ -287,13 +295,13 @@ public final class BossKillData
 	 * maps to multiple entries, or a single-element list for exact
 	 * matches. Returns empty if unknown.
 	 */
-	public static java.util.List<String> resolveCollectionLogName(String name)
+	public static List<String> resolveCollectionLogName(String name)
 	{
-		if (name == null) return java.util.Collections.emptyList();
-		java.util.List<String> aliases = COLLECTION_LOG_ALIASES.get(name);
+		if (name == null) return Collections.emptyList();
+		List<String> aliases = COLLECTION_LOG_ALIASES.get(name);
 		if (aliases != null) return aliases;
-		if (BOSSES.containsKey(name)) return java.util.List.of(name);
-		return java.util.Collections.emptyList();
+		if (BOSSES.containsKey(name)) return List.of(name);
+		return Collections.emptyList();
 	}
 
 	/**
@@ -302,7 +310,7 @@ public final class BossKillData
 	public static String[] getBossNames()
 	{
 		String[] names = BOSSES.keySet().toArray(new String[0]);
-		java.util.Arrays.sort(names);
+		Arrays.sort(names);
 		return names;
 	}
 
@@ -335,14 +343,14 @@ public final class BossKillData
 
 	private static void loadIntMap(String resource, Map<String, Integer> map)
 	{
-		try (java.io.InputStream in = BossKillData.class.getResourceAsStream(resource))
+		try (InputStream in = BossKillData.class.getResourceAsStream(resource))
 		{
 			if (in == null)
 			{
 				throw new IllegalStateException("missing resource: " + resource);
 			}
-			try (java.io.BufferedReader reader = new java.io.BufferedReader(
-				new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)))
+			try (BufferedReader reader = new BufferedReader(
+				new InputStreamReader(in, StandardCharsets.UTF_8)))
 			{
 				String line;
 				while ((line = reader.readLine()) != null)
@@ -353,22 +361,22 @@ public final class BossKillData
 				}
 			}
 		}
-		catch (java.io.IOException e)
+		catch (IOException e)
 		{
-			throw new java.io.UncheckedIOException("failed to load " + resource, e);
+			throw new UncheckedIOException("failed to load " + resource, e);
 		}
 	}
 
-	private static void loadAliases(String resource, Map<String, java.util.List<String>> map)
+	private static void loadAliases(String resource, Map<String, List<String>> map)
 	{
-		try (java.io.InputStream in = BossKillData.class.getResourceAsStream(resource))
+		try (InputStream in = BossKillData.class.getResourceAsStream(resource))
 		{
 			if (in == null)
 			{
 				throw new IllegalStateException("missing resource: " + resource);
 			}
-			try (java.io.BufferedReader reader = new java.io.BufferedReader(
-				new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)))
+			try (BufferedReader reader = new BufferedReader(
+				new InputStreamReader(in, StandardCharsets.UTF_8)))
 			{
 				String line;
 				while ((line = reader.readLine()) != null)
@@ -376,13 +384,13 @@ public final class BossKillData
 					if (line.isEmpty()) continue;
 					int t = line.indexOf('\t');
 					map.put(line.substring(0, t),
-						java.util.List.of(line.substring(t + 1).split(";")));
+						List.of(line.substring(t + 1).split(";")));
 				}
 			}
 		}
-		catch (java.io.IOException e)
+		catch (IOException e)
 		{
-			throw new java.io.UncheckedIOException("failed to load " + resource, e);
+			throw new UncheckedIOException("failed to load " + resource, e);
 		}
 	}
 

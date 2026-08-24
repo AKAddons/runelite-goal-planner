@@ -23,6 +23,23 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.awt.Color;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 /**
  * Persists goals and sections using RuneLite's ConfigManager.
@@ -66,7 +83,7 @@ public class GoalStore
 	private static final Type SECTION_LIST_TYPE = new TypeToken<List<Section>>(){}.getType();
 	private static final Type TAG_LIST_TYPE = new TypeToken<List<Tag>>(){}.getType();
 	private static final Type CATEGORY_COLOR_MAP_TYPE =
-		new TypeToken<java.util.Map<String, Integer>>(){}.getType();
+		new TypeToken<Map<String, Integer>>(){}.getType();
 	private static final Type STRING_LIST_TYPE = new TypeToken<List<String>>(){}.getType();
 
 	private final ConfigManager configManager;
@@ -80,10 +97,10 @@ public class GoalStore
 	// Sections rarely change but are read constantly (every normalizeOrder /
 	// rebuild, from both the client thread and the EDT). CopyOnWriteArrayList
 	// makes those reads lock-free and CME-proof; volatile publishes reassignments.
-	private volatile List<Section> sections = new java.util.concurrent.CopyOnWriteArrayList<>();
+	private volatile List<Section> sections = new CopyOnWriteArrayList<>();
 	private List<Tag> tags = new ArrayList<>();
 	/** Per-category color overrides. Key = TagCategory.name(), value = packed 0xRRGGBB. */
-	private java.util.Map<String, Integer> categoryColors = new java.util.HashMap<>();
+	private Map<String, Integer> categoryColors = new HashMap<>();
 
 	/**
 	 * Active profile ("main" or "leagues"). All config keys are prefixed with
@@ -183,21 +200,21 @@ public class GoalStore
 	/** Goals needing a save. Written from the client thread (tracker progress)
 	 *  and the EDT (user edits); a concurrent set avoids CME when the save loop
 	 *  iterates it while the other thread marks a goal dirty. */
-	private final java.util.Set<String> dirtyGoalIds = java.util.concurrent.ConcurrentHashMap.newKeySet();
-	private final java.util.Set<String> dirtyTagIds = new java.util.HashSet<>();
+	private final Set<String> dirtyGoalIds = ConcurrentHashMap.newKeySet();
+	private final Set<String> dirtyTagIds = new HashSet<>();
 	private boolean goalOrderDirty = false;
 	private boolean tagIdsDirty = false;
 	private boolean sectionsDirty = false;
 	private boolean categoryColorsDirty = false;
 
 	/** O(1) goal lookup by id. Maintained on add/remove/load. */
-	private final java.util.Map<String, Goal> goalIndex = new java.util.HashMap<>();
+	private final Map<String, Goal> goalIndex = new HashMap<>();
 	/** O(1) section lookup by id. Maintained on create/delete/load. */
-	private final java.util.Map<String, Section> sectionIndex = new java.util.HashMap<>();
+	private final Map<String, Section> sectionIndex = new HashMap<>();
 	/** O(1) tag lookup by id. Maintained on create/delete/load. */
-	private final java.util.Map<String, Tag> tagIndex = new java.util.HashMap<>();
+	private final Map<String, Tag> tagIndex = new HashMap<>();
 	/** Reverse index: toGoalId → set of fromGoalIds that require it. O(1) getDependents. */
-	private final java.util.Map<String, java.util.Set<String>> dependentIndex = new java.util.HashMap<>();
+	private final Map<String, Set<String>> dependentIndex = new HashMap<>();
 
 	@Inject
 	public GoalStore(ConfigManager configManager, Gson gson)
@@ -403,8 +420,8 @@ public class GoalStore
 		// loadV2 always resets goals/tags to empty before reading. Without this,
 		// switching to a profile that has no sections key leaves the old profile's
 		// sections in memory (and they then leak into that profile on the next save).
-		sections = new java.util.concurrent.CopyOnWriteArrayList<>();
-		categoryColors = new java.util.HashMap<>();
+		sections = new CopyOnWriteArrayList<>();
+		categoryColors = new HashMap<>();
 
 		// Sections
 		String sectionsJson = getCfg(SECTIONS_KEY);
@@ -415,14 +432,14 @@ public class GoalStore
 				List<Section> loaded = gson.fromJson(sectionsJson, SECTION_LIST_TYPE);
 				if (loaded != null)
 				{
-					sections = new java.util.concurrent.CopyOnWriteArrayList<>(loaded);
+					sections = new CopyOnWriteArrayList<>(loaded);
 					log.info("Loaded {} sections", sections.size());
 				}
 			}
 			catch (Exception e)
 			{
 				log.error("Failed to load sections", e);
-				sections = new java.util.concurrent.CopyOnWriteArrayList<>();
+				sections = new CopyOnWriteArrayList<>();
 			}
 		}
 
@@ -432,17 +449,17 @@ public class GoalStore
 		{
 			try
 			{
-				java.util.Map<String, Integer> loaded = gson.fromJson(categoryColorsJson, CATEGORY_COLOR_MAP_TYPE);
+				Map<String, Integer> loaded = gson.fromJson(categoryColorsJson, CATEGORY_COLOR_MAP_TYPE);
 				if (loaded != null)
 				{
-					categoryColors = new java.util.HashMap<>(loaded);
+					categoryColors = new HashMap<>(loaded);
 					log.info("Loaded {} category color overrides", categoryColors.size());
 				}
 			}
 			catch (Exception e)
 			{
 				log.error("Failed to load category colors", e);
-				categoryColors = new java.util.HashMap<>();
+				categoryColors = new HashMap<>();
 			}
 		}
 	}
@@ -482,7 +499,7 @@ public class GoalStore
 	public void rememberImportedCode(String canonicalCode)
 	{
 		if (canonicalCode == null || canonicalCode.isEmpty()) return;
-		java.util.List<String> hashes = importedCodeHashes();
+		List<String> hashes = importedCodeHashes();
 		String h = sha1(canonicalCode);
 		if (hashes.contains(h)) return;
 		hashes.add(h);
@@ -490,13 +507,13 @@ public class GoalStore
 		setCfg(IMPORTED_CODES_KEY, gson.toJson(hashes));
 	}
 
-	private java.util.List<String> importedCodeHashes()
+	private List<String> importedCodeHashes()
 	{
 		String raw = getCfg(IMPORTED_CODES_KEY);
 		if (raw == null || raw.trim().isEmpty()) return new ArrayList<>();
 		try
 		{
-			java.util.List<String> hashes = gson.fromJson(raw, STRING_LIST_TYPE);
+			List<String> hashes = gson.fromJson(raw, STRING_LIST_TYPE);
 			return hashes != null ? hashes : new ArrayList<>();
 		}
 		catch (Exception e)
@@ -509,13 +526,13 @@ public class GoalStore
 	{
 		try
 		{
-			byte[] d = java.security.MessageDigest.getInstance("SHA-1")
-				.digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			byte[] d = MessageDigest.getInstance("SHA-1")
+				.digest(text.getBytes(StandardCharsets.UTF_8));
 			StringBuilder sb = new StringBuilder(d.length * 2);
 			for (byte b : d) sb.append(String.format("%02x", b));
 			return sb.toString();
 		}
-		catch (java.security.NoSuchAlgorithmException e)
+		catch (NoSuchAlgorithmException e)
 		{
 			// SHA-1 is mandatory on every JVM; fall back to something stable anyway.
 			return Integer.toHexString(text.hashCode());
@@ -576,20 +593,20 @@ public class GoalStore
 		}
 		log.info("Migrating profile-scoped storage → account namespace {}", activeAccount);
 
-		java.util.List<String> keys = new java.util.ArrayList<>(java.util.List.of(
+		List<String> keys = new ArrayList<>(List.of(
 			SCHEMA_KEY, GOAL_ORDER_KEY, TAG_IDS_KEY, SECTIONS_KEY,
 			CATEGORY_COLORS_KEY, GOALS_KEY, TAGS_KEY, ACCOUNT_HASH_KEY));
 		String order = configManager.getConfiguration(CONFIG_GROUP, src + GOAL_ORDER_KEY);
 		String tagIds = configManager.getConfiguration(CONFIG_GROUP, src + TAG_IDS_KEY);
 		try
 		{
-			java.util.List<String> ids = order == null ? null : gson.fromJson(order, STRING_LIST_TYPE);
+			List<String> ids = order == null ? null : gson.fromJson(order, STRING_LIST_TYPE);
 			if (ids != null) for (String id : ids) keys.add(GOAL_PREFIX + id);
 		}
 		catch (Exception e) { log.warn("account migration: goal order parse failed", e); }
 		try
 		{
-			java.util.List<String> ids = tagIds == null ? null : gson.fromJson(tagIds, STRING_LIST_TYPE);
+			List<String> ids = tagIds == null ? null : gson.fromJson(tagIds, STRING_LIST_TYPE);
 			if (ids != null) for (String id : ids) keys.add(TAG_PREFIX + id);
 		}
 		catch (Exception e) { log.warn("account migration: tag ids parse failed", e); }
@@ -800,7 +817,7 @@ public class GoalStore
 			{
 				for (String reqId : g.getRequiredGoalIds())
 				{
-					dependentIndex.computeIfAbsent(reqId, k -> new java.util.HashSet<>())
+					dependentIndex.computeIfAbsent(reqId, k -> new HashSet<>())
 						.add(g.getId());
 				}
 			}
@@ -828,19 +845,19 @@ public class GoalStore
 	private boolean scrubInvalidRelationEdges()
 	{
 		boolean changed = false;
-		java.util.Set<String> validIds = new java.util.HashSet<>();
+		Set<String> validIds = new HashSet<>();
 		for (Goal g : getGoals()) validIds.add(g.getId());
 
 		// Build a scratch graph where we re-accept edges one-by-one and drop
 		// any that would close a cycle in the scratch graph.
-		java.util.Map<String, java.util.List<String>> accepted = new java.util.HashMap<>();
+		Map<String, List<String>> accepted = new HashMap<>();
 		for (Goal g : getGoals()) accepted.put(g.getId(), new ArrayList<>());
 
 		for (Goal g : getGoals())
 		{
 			List<String> reqs = g.getRequiredGoalIds();
 			if (reqs == null || reqs.isEmpty()) continue;
-			java.util.Iterator<String> it = reqs.iterator();
+			Iterator<String> it = reqs.iterator();
 			while (it.hasNext())
 			{
 				String target = it.next();
@@ -875,12 +892,12 @@ public class GoalStore
 	}
 
 	/** DFS on the scratch adjacency map used by {@link #scrubInvalidRelationEdges}. */
-	private boolean scratchPathExists(java.util.Map<String, java.util.List<String>> adj,
+	private boolean scratchPathExists(Map<String, List<String>> adj,
 		String from, String to)
 	{
 		if (from.equals(to)) return true;
-		java.util.Set<String> visited = new java.util.HashSet<>();
-		java.util.Deque<String> stack = new java.util.ArrayDeque<>();
+		Set<String> visited = new HashSet<>();
+		Deque<String> stack = new ArrayDeque<>();
 		stack.push(from);
 		while (!stack.isEmpty())
 		{
@@ -906,7 +923,7 @@ public class GoalStore
 	private boolean mergeTagsByLabelRename(String oldLabel, String newLabel, TagCategory category)
 	{
 		Tag canonical = findTagByLabel(newLabel, category);
-		java.util.List<Tag> toMerge = new ArrayList<>();
+		List<Tag> toMerge = new ArrayList<>();
 		for (Tag t : tags)
 		{
 			if (t.getCategory() == category && oldLabel.equalsIgnoreCase(t.getLabel()))
@@ -942,7 +959,7 @@ public class GoalStore
 	 */
 	private boolean dedupeTagsByLabelCategory()
 	{
-		java.util.Map<String, java.util.List<Tag>> groups = new java.util.LinkedHashMap<>();
+		Map<String, List<Tag>> groups = new LinkedHashMap<>();
 		for (Tag t : tags)
 		{
 			if (t.getCategory() == null || t.getLabel() == null) continue;
@@ -950,7 +967,7 @@ public class GoalStore
 			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(t);
 		}
 		boolean anyMerged = false;
-		for (java.util.List<Tag> group : groups.values())
+		for (List<Tag> group : groups.values())
 		{
 			if (group.size() <= 1) continue;
 			// Pick canonical: prefer one with a color override (
@@ -989,7 +1006,7 @@ public class GoalStore
 		{
 			if (g.getTagIds() != null)
 			{
-				java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+				Set<String> seen = new LinkedHashSet<>();
 				for (String id : g.getTagIds())
 				{
 					seen.add(fromTagId.equals(id) ? toTagId : id);
@@ -998,7 +1015,7 @@ public class GoalStore
 			}
 			if (g.getDefaultTagIds() != null)
 			{
-				java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+				Set<String> seen = new LinkedHashSet<>();
 				for (String id : g.getDefaultTagIds())
 				{
 					seen.add(fromTagId.equals(id) ? toTagId : id);
@@ -1018,7 +1035,7 @@ public class GoalStore
 		// Build a lookup from sectionId to section.order. Snapshot sections — this
 		// runs on both the client thread (reconcile) and the EDT (queries), and
 		// the EDT also mutates sections (section CRUD).
-		java.util.Map<String, Integer> sectionOrders = new java.util.HashMap<>();
+		Map<String, Integer> sectionOrders = new HashMap<>();
 		for (Section s : getSections())
 		{
 			sectionOrders.put(s.getId(), s.getOrder());
@@ -1333,9 +1350,9 @@ public class GoalStore
 	}
 
 	/** Snapshot of currently dirty goal IDs (before saveDirtyGoals clears them). */
-	public java.util.Set<String> getDirtyGoalIds()
+	public Set<String> getDirtyGoalIds()
 	{
-		return new java.util.HashSet<>(dirtyGoalIds);
+		return new HashSet<>(dirtyGoalIds);
 	}
 
 	/**
@@ -1349,7 +1366,7 @@ public class GoalStore
 		// Snapshot, save, then remove exactly what we saved — an id marked dirty
 		// on the other thread DURING the save survives for the next flush (a bare
 		// clear() would silently drop it and lose that goal's progress).
-		java.util.Set<String> batch = new java.util.HashSet<>(dirtyGoalIds);
+		Set<String> batch = new HashSet<>(dirtyGoalIds);
 		int count = batch.size();
 		for (String id : batch)
 		{
@@ -1394,7 +1411,7 @@ public class GoalStore
 		saveSuspended = false;
 		long start = System.currentTimeMillis();
 		// Flush dirty goals (snapshot + removeAll so a concurrent mark survives)
-		java.util.Set<String> batch = new java.util.HashSet<>(dirtyGoalIds);
+		Set<String> batch = new HashSet<>(dirtyGoalIds);
 		for (String id : batch)
 		{
 			Goal g = findGoalById(id);
@@ -1436,7 +1453,7 @@ public class GoalStore
 		if (category == null) return 0;
 		Integer override = categoryColors.get(category.name());
 		if (override != null && override >= 0) return override;
-		java.awt.Color c = category.getColor();
+		Color c = category.getColor();
 		return (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue();
 	}
 
@@ -1444,7 +1461,7 @@ public class GoalStore
 	public int getCategoryDefaultColor(TagCategory category)
 	{
 		if (category == null) return 0;
-		java.awt.Color c = category.getColor();
+		Color c = category.getColor();
 		return (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue();
 	}
 
@@ -1510,7 +1527,7 @@ public class GoalStore
 	 * duplicate-guard for goal types that have a natural identity check (quest
 	 * name, diary area+tier, combat achievement task id, etc.).
 	 */
-	public boolean exists(java.util.function.Predicate<Goal> predicate)
+	public boolean exists(Predicate<Goal> predicate)
 	{
 		for (Goal g : getGoals())
 		{
@@ -1603,7 +1620,7 @@ public class GoalStore
 		{
 			for (String reqId : goal.getRequiredGoalIds())
 			{
-				dependentIndex.computeIfAbsent(reqId, k -> new java.util.HashSet<>())
+				dependentIndex.computeIfAbsent(reqId, k -> new HashSet<>())
 					.add(goal.getId());
 			}
 		}
@@ -1611,7 +1628,7 @@ public class GoalStore
 		{
 			for (String reqId : goal.getOrRequiredGoalIds())
 			{
-				dependentIndex.computeIfAbsent(reqId, k -> new java.util.HashSet<>())
+				dependentIndex.computeIfAbsent(reqId, k -> new HashSet<>())
 					.add(goal.getId());
 			}
 		}
@@ -1667,14 +1684,14 @@ public class GoalStore
 			if (g.getRequiredGoalIds() != null && g.getRequiredGoalIds().remove(goalId))
 			{
 				edgeScrubbed.add(g);
-				java.util.Set<String> deps = dependentIndex.get(goalId);
+				Set<String> deps = dependentIndex.get(goalId);
 				if (deps != null) deps.remove(g.getId());
 			}
 			// Also scrub OR-edges
 			if (g.getOrRequiredGoalIds() != null && g.getOrRequiredGoalIds().remove(goalId))
 			{
 				if (!edgeScrubbed.contains(g)) edgeScrubbed.add(g);
-				java.util.Set<String> deps = dependentIndex.get(goalId);
+				Set<String> deps = dependentIndex.get(goalId);
 				if (deps != null) deps.remove(g.getId());
 			}
 		}
@@ -1686,7 +1703,7 @@ public class GoalStore
 			{
 				for (String reqId : removed.getRequiredGoalIds())
 				{
-					java.util.Set<String> deps = dependentIndex.get(reqId);
+					Set<String> deps = dependentIndex.get(reqId);
 					if (deps != null) deps.remove(goalId);
 				}
 			}
@@ -1694,7 +1711,7 @@ public class GoalStore
 			{
 				for (String reqId : removed.getOrRequiredGoalIds())
 				{
-					java.util.Set<String> deps = dependentIndex.get(reqId);
+					Set<String> deps = dependentIndex.get(reqId);
 					if (deps != null) deps.remove(goalId);
 				}
 			}
@@ -1735,7 +1752,7 @@ public class GoalStore
 		if (from.getRequiredGoalIds().contains(toGoalId)) return false; // idempotent
 		if (wouldCreateCycle(fromGoalId, toGoalId)) return false;
 		from.getRequiredGoalIds().add(toGoalId);
-		dependentIndex.computeIfAbsent(toGoalId, k -> new java.util.HashSet<>()).add(fromGoalId);
+		dependentIndex.computeIfAbsent(toGoalId, k -> new HashSet<>()).add(fromGoalId);
 		saveGoalIfNotSuspended(from);
 		return true;
 	}
@@ -1752,7 +1769,7 @@ public class GoalStore
 		boolean removed = from.getRequiredGoalIds().remove(toGoalId);
 		if (removed)
 		{
-			java.util.Set<String> deps = dependentIndex.get(toGoalId);
+			Set<String> deps = dependentIndex.get(toGoalId);
 			if (deps != null) deps.remove(fromGoalId);
 			saveGoalIfNotSuspended(from);
 		}
@@ -1778,7 +1795,7 @@ public class GoalStore
 		if (from.getOrRequiredGoalIds().contains(toGoalId)) return false;
 		if (wouldCreateCycle(fromGoalId, toGoalId)) return false;
 		from.getOrRequiredGoalIds().add(toGoalId);
-		dependentIndex.computeIfAbsent(toGoalId, k -> new java.util.HashSet<>()).add(fromGoalId);
+		dependentIndex.computeIfAbsent(toGoalId, k -> new HashSet<>()).add(fromGoalId);
 		saveGoalIfNotSuspended(from);
 		return true;
 	}
@@ -1794,7 +1811,7 @@ public class GoalStore
 		boolean removed = from.getOrRequiredGoalIds().remove(toGoalId);
 		if (removed)
 		{
-			java.util.Set<String> deps = dependentIndex.get(toGoalId);
+			Set<String> deps = dependentIndex.get(toGoalId);
 			if (deps != null) deps.remove(fromGoalId);
 			saveGoalIfNotSuspended(from);
 		}
@@ -1808,7 +1825,7 @@ public class GoalStore
 	public List<String> getDependents(String goalId)
 	{
 		if (goalId == null) return new ArrayList<>();
-		java.util.Set<String> deps = dependentIndex.get(goalId);
+		Set<String> deps = dependentIndex.get(goalId);
 		return deps != null ? new ArrayList<>(deps) : new ArrayList<>();
 	}
 
@@ -1826,8 +1843,8 @@ public class GoalStore
 		if (fromGoalId == null || toGoalId == null) return false;
 		if (fromGoalId.equals(toGoalId)) return true; // self-loop IS a cycle
 		// DFS from `to`. If we can reach `from`, adding from→to closes a cycle.
-		java.util.Set<String> visited = new java.util.HashSet<>();
-		java.util.Deque<String> stack = new java.util.ArrayDeque<>();
+		Set<String> visited = new HashSet<>();
+		Deque<String> stack = new ArrayDeque<>();
 		stack.push(toGoalId);
 		while (!stack.isEmpty())
 		{
@@ -2029,7 +2046,7 @@ public class GoalStore
 				if (pred.getRequiredGoalIds().contains(succId)) continue;
 				if (predId.equals(succId)) continue;
 				pred.getRequiredGoalIds().add(succId);
-				dependentIndex.computeIfAbsent(succId, k -> new java.util.HashSet<>()).add(predId);
+				dependentIndex.computeIfAbsent(succId, k -> new HashSet<>()).add(predId);
 				addedBypassEdges.add(new String[]{predId, succId});
 			}
 		}
@@ -2049,7 +2066,7 @@ public class GoalStore
 		// 6. Remove outgoing edges from the dependentIndex.
 		for (String succId : successors)
 		{
-			java.util.Set<String> deps = dependentIndex.get(succId);
+			Set<String> deps = dependentIndex.get(succId);
 			if (deps != null) deps.remove(goalId);
 		}
 
@@ -2473,7 +2490,7 @@ public class GoalStore
 	{
 		Section section = findSection(sectionId);
 		if (section == null || section.isBuiltIn()) return false;
-		if (java.util.Objects.equals(section.getAutoArchiveOverride(), value)) return false;
+		if (Objects.equals(section.getAutoArchiveOverride(), value)) return false;
 		section.setAutoArchiveOverride(value);
 		saveSectionsIfNotSuspended();
 		return true;
@@ -2648,7 +2665,7 @@ public class GoalStore
 	public int removeAllUserSections()
 	{
 		String incompleteId = getIncompleteSection().getId();
-		java.util.Set<String> doomed = new java.util.HashSet<>();
+		Set<String> doomed = new HashSet<>();
 		for (Section s : sections)
 		{
 			if (!s.isBuiltIn()) doomed.add(s.getId());
@@ -2842,7 +2859,7 @@ public class GoalStore
 		{
 			if (g.getTagIds() != null)
 			{
-				java.util.List<String> ids = g.getTagIds();
+				List<String> ids = g.getTagIds();
 				for (int i = 0; i < ids.size(); i++)
 				{
 					if (sourceId.equals(ids.get(i)))
@@ -2856,7 +2873,7 @@ public class GoalStore
 			}
 			if (g.getDefaultTagIds() != null)
 			{
-				java.util.List<String> ids = g.getDefaultTagIds();
+				List<String> ids = g.getDefaultTagIds();
 				for (int i = 0; i < ids.size(); i++)
 				{
 					if (sourceId.equals(ids.get(i)))
@@ -2927,7 +2944,7 @@ public class GoalStore
 		Tag t = findTag(tagId);
 		if (t == null) return false;
 		String normalized = (iconKey == null || iconKey.trim().isEmpty()) ? null : iconKey.trim();
-		if (java.util.Objects.equals(t.getIconKey(), normalized)) return false;
+		if (Objects.equals(t.getIconKey(), normalized)) return false;
 		t.setIconKey(normalized);
 		saveTagIfNotSuspended(t);
 		return true;

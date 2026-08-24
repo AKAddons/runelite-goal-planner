@@ -8,6 +8,11 @@ import com.goalplanner.model.TagCategory;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import java.awt.Color;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Encapsulates all tag-management methods extracted from {@link GoalPlannerApiImpl}.
@@ -65,7 +70,7 @@ class TagService
 		if (goalId == null || label == null) return false;
 		Goal g = api.findGoal(goalId);
 		if (g == null || g.getTagIds() == null) return false;
-		List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
+		List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
 		String toRemove = null;
 		int idx = -1;
 		for (int i = 0; i < g.getTagIds().size(); i++)
@@ -178,7 +183,7 @@ class TagService
 		if (g == null) return false;
 		List<String> defaults = g.getDefaultTagIds();
 		if (defaults == null || defaults.isEmpty()) return false;
-		final List<String> snapshotTagIds = new ArrayList<>(g.getTagIds() != null ? g.getTagIds() : java.util.Collections.emptyList());
+		final List<String> snapshotTagIds = new ArrayList<>(g.getTagIds() != null ? g.getTagIds() : Collections.emptyList());
 		final String name = g.getName();
 		return api.executeCommand(new com.goalplanner.command.Command()
 		{
@@ -305,8 +310,8 @@ class TagService
 		// restore both. We also snapshot defaultTagIds membership for goals
 		// that had this tag in their defaults.
 		final Tag captured = t;
-		final java.util.List<String> tagOnGoals = new ArrayList<>();
-		final java.util.List<String> tagOnDefaults = new ArrayList<>();
+		final List<String> tagOnGoals = new ArrayList<>();
+		final List<String> tagOnDefaults = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (g.getTagIds() != null && g.getTagIds().contains(tagId)) tagOnGoals.add(g.getId());
@@ -371,7 +376,7 @@ class TagService
 	{
 		try
 		{
-			java.awt.Color c = TagCategory.valueOf(categoryName).getColor();
+			Color c = TagCategory.valueOf(categoryName).getColor();
 			return (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue();
 		}
 		catch (IllegalArgumentException ex) { return 0; }
@@ -435,17 +440,17 @@ class TagService
 		return false;
 	}
 
-	List<GoalPlannerInternalApi.TagRemovalOption> getRemovableTagsForSelection(java.util.Set<String> goalIds)
+	List<GoalPlannerInternalApi.TagRemovalOption> getRemovableTagsForSelection(Set<String> goalIds)
 	{
-		if (goalIds == null || goalIds.isEmpty()) return java.util.Collections.emptyList();
+		if (goalIds == null || goalIds.isEmpty()) return Collections.emptyList();
 		// tagId → count of selected goals where it's both present and removable
-		java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+		Map<String, Integer> counts = new HashMap<>();
 		for (String goalId : goalIds)
 		{
 			Goal g = api.findGoal(goalId);
 			if (g == null || g.getTagIds() == null) continue;
 			boolean isCustom = g.getType() == GoalType.CUSTOM;
-			List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
+			List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
 			for (String tid : g.getTagIds())
 			{
 				if (!isCustom && defaults.contains(tid)) continue;
@@ -453,7 +458,7 @@ class TagService
 			}
 		}
 		List<GoalPlannerInternalApi.TagRemovalOption> out = new ArrayList<>(counts.size());
-		for (java.util.Map.Entry<String, Integer> e : counts.entrySet())
+		for (Map.Entry<String, Integer> e : counts.entrySet())
 		{
 			Tag tag = api.goalStore.findTag(e.getKey());
 			if (tag == null) continue;
@@ -467,7 +472,7 @@ class TagService
 		return out;
 	}
 
-	int bulkRemoveTagFromGoals(java.util.Set<String> goalIds, String tagId)
+	int bulkRemoveTagFromGoals(Set<String> goalIds, String tagId)
 	{
 		log.debug("API.internal bulkRemoveTagFromGoals({} goals, tagId={})",
 			goalIds == null ? 0 : goalIds.size(), tagId);
@@ -475,16 +480,16 @@ class TagService
 		// Snapshot which goals will lose this tag and at what
 		// index, so revert can re-insert at the same position.
 		final String fTagId = tagId;
-		final java.util.List<int[]> snapshots = new java.util.ArrayList<>(); // unused
-		final java.util.List<String> goalIdsAffected = new java.util.ArrayList<>();
-		final java.util.List<Integer> indices = new java.util.ArrayList<>();
+		final List<int[]> snapshots = new ArrayList<>(); // unused
+		final List<String> goalIdsAffected = new ArrayList<>();
+		final List<Integer> indices = new ArrayList<>();
 		for (String goalId : goalIds)
 		{
 			Goal g = api.findGoal(goalId);
 			if (g == null || g.getTagIds() == null) continue;
 			if (!g.getTagIds().contains(tagId)) continue;
 			boolean isCustom = g.getType() == GoalType.CUSTOM;
-			List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
+			List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
 			if (!isCustom && defaults.contains(tagId)) continue;
 			goalIdsAffected.add(goalId);
 			indices.add(g.getTagIds().indexOf(tagId));

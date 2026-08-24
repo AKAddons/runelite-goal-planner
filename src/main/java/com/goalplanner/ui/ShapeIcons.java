@@ -8,6 +8,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
+import java.awt.geom.AffineTransform;
 
 /**
  * Programmatic Swing icons for the small UI glyphs we used to render with
@@ -423,7 +424,7 @@ public final class ShapeIcons
 				if (mirrored)
 				{
 					// Flip horizontally around the center
-					java.awt.geom.AffineTransform at = g2.getTransform();
+					AffineTransform at = g2.getTransform();
 					g2.translate(2 * cx, 0);
 					g2.scale(-1, 1);
 				}
@@ -511,7 +512,7 @@ public final class ShapeIcons
 
 				// Drop shadow
 				Path2D shadow = new Path2D.Float();
-				shadow.append(body.getPathIterator(java.awt.geom.AffineTransform.getTranslateInstance(1, 1)), false);
+				shadow.append(body.getPathIterator(AffineTransform.getTranslateInstance(1, 1)), false);
 				g2.setColor(new Color(0, 0, 0, 110));
 				g2.fill(shadow);
 

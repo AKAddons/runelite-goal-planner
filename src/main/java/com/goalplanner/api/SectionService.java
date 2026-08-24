@@ -6,6 +6,11 @@ import com.goalplanner.model.Section;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Encapsulates section-management methods extracted from {@link GoalPlannerApiImpl}.
@@ -82,7 +87,7 @@ class SectionService
 		// Completed goals archived OUT of this section live in Completed and
 		// survive either path, but the delete clears their home memory -
 		// snapshot the ids so undo can restore the link.
-		final java.util.List<String> archivedOutIds = new ArrayList<>();
+		final List<String> archivedOutIds = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (sectionId.equals(g.getArchivedFromSectionId())) archivedOutIds.add(g.getId());
@@ -92,7 +97,7 @@ class SectionService
 		{
 			// Opt-in sparing path: relocate the goals to the default buckets,
 			// then drop the (now empty) section.
-			final java.util.List<String> displacedGoalIds = new ArrayList<>();
+			final List<String> displacedGoalIds = new ArrayList<>();
 			for (Goal g : api.goalStore.getGoals())
 			{
 				if (sectionId.equals(g.getSectionId())) displacedGoalIds.add(g.getId());
@@ -126,11 +131,11 @@ class SectionService
 		// copy of each one's outgoing edge lists (deletion scrubs doomed ids
 		// out of doomed peers' lists, mutating the very objects we keep), and
 		// the incoming edges from surviving goals (scrubbed by removeGoal).
-		final java.util.List<Goal> doomedGoals = new ArrayList<>();
-		final java.util.Map<String, Integer> originalIndex = new java.util.HashMap<>();
-		final java.util.Map<String, java.util.List<String>> savedRequires = new java.util.HashMap<>();
-		final java.util.Map<String, java.util.List<String>> savedOrRequires = new java.util.HashMap<>();
-		java.util.List<Goal> all = api.goalStore.getGoals();
+		final List<Goal> doomedGoals = new ArrayList<>();
+		final Map<String, Integer> originalIndex = new HashMap<>();
+		final Map<String, List<String>> savedRequires = new HashMap<>();
+		final Map<String, List<String>> savedOrRequires = new HashMap<>();
+		List<Goal> all = api.goalStore.getGoals();
 		for (int i = 0; i < all.size(); i++)
 		{
 			Goal g = all.get(i);
@@ -142,9 +147,9 @@ class SectionService
 				savedOrRequires.put(g.getId(), new ArrayList<>(g.getOrRequiredGoalIds()));
 			}
 		}
-		final java.util.Set<String> doomedIds = originalIndex.keySet();
-		final java.util.List<String[]> survivorAndEdges = new ArrayList<>();
-		final java.util.List<String[]> survivorOrEdges = new ArrayList<>();
+		final Set<String> doomedIds = originalIndex.keySet();
+		final List<String[]> survivorAndEdges = new ArrayList<>();
+		final List<String[]> survivorOrEdges = new ArrayList<>();
 		for (Goal g : all)
 		{
 			if (doomedIds.contains(g.getId())) continue;
@@ -213,7 +218,7 @@ class SectionService
 	}
 
 	/** Re-link completed goals in Completed back to their deleted-then-restored home section. */
-	private void restoreArchivedHomes(java.util.List<String> goalIds, String sectionId)
+	private void restoreArchivedHomes(List<String> goalIds, String sectionId)
 	{
 		for (String gid : goalIds)
 		{
@@ -308,12 +313,12 @@ class SectionService
 	int removeEmptyUserSections()
 	{
 		log.debug("API.internal removeEmptyUserSections()");
-		final java.util.Set<String> nonEmpty = new java.util.HashSet<>();
+		final Set<String> nonEmpty = new HashSet<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (g.getSectionId() != null) nonEmpty.add(g.getSectionId());
 		}
-		final java.util.List<String> empties = new ArrayList<>();
+		final List<String> empties = new ArrayList<>();
 		for (Section s : api.goalStore.getSections())
 		{
 			if (s.getBuiltInKind() == null && !nonEmpty.contains(s.getId()))
@@ -337,8 +342,8 @@ class SectionService
 	int removeAllUserSections()
 	{
 		log.debug("API.internal removeAllUserSections()");
-		final java.util.List<Section> sectionSnapshots = new ArrayList<>();
-		final java.util.Set<String> userSectionIds = new java.util.HashSet<>();
+		final List<Section> sectionSnapshots = new ArrayList<>();
+		final Set<String> userSectionIds = new HashSet<>();
 		for (Section s : api.goalStore.getSections())
 		{
 			if (s.getBuiltInKind() == null)
@@ -348,7 +353,7 @@ class SectionService
 			}
 		}
 		// Single pass over goals to group by section.
-		final java.util.Map<String, java.util.List<String>> goalsBySection = new java.util.HashMap<>();
+		final Map<String, List<String>> goalsBySection = new HashMap<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (userSectionIds.contains(g.getSectionId()))
@@ -426,7 +431,7 @@ class SectionService
 		log.debug("API.internal setSectionNestedOverride(sectionId={}, value={})", sectionId, value);
 		if (sectionId == null) return false;
 		Section s = api.goalStore.findSection(sectionId);
-		if (s == null || java.util.Objects.equals(s.getNestedOverride(), value)) return false;
+		if (s == null || Objects.equals(s.getNestedOverride(), value)) return false;
 		s.setNestedOverride(value);
 		api.goalStore.save();
 		api.fireIfNotInCompound();
@@ -469,7 +474,7 @@ class SectionService
 		log.debug("API.internal setSectionAutoArchiveOverride(sectionId={}, value={})", sectionId, value);
 		Section section = api.goalStore.findSection(sectionId);
 		if (section == null || section.isBuiltIn()) return false;
-		if (java.util.Objects.equals(section.getAutoArchiveOverride(), value)) return false;
+		if (Objects.equals(section.getAutoArchiveOverride(), value)) return false;
 		final Boolean prev = section.getAutoArchiveOverride();
 		final String name = section.getName();
 		return api.executeCommand(new com.goalplanner.command.Command()

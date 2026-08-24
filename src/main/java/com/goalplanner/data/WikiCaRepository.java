@@ -21,6 +21,9 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /**
  * Fetches and caches combat achievement metadata from the OSRS Wiki.
@@ -129,9 +132,9 @@ public class WikiCaRepository
 	 * create surface's Combat task picker. Returns up to {@code limit} matches
 	 * sorted by id (stable). Empty when the repository has not loaded yet.
 	 */
-	public java.util.List<CaInfo> search(String query, int limit)
+	public List<CaInfo> search(String query, int limit)
 	{
-		java.util.List<CaInfo> out = new java.util.ArrayList<>();
+		List<CaInfo> out = new ArrayList<>();
 		if (query == null || query.trim().isEmpty())
 		{
 			return out;
@@ -146,7 +149,7 @@ public class WikiCaRepository
 				out.add(info);
 			}
 		}
-		out.sort(java.util.Comparator.comparingInt(c -> c.id));
+		out.sort(Comparator.comparingInt(c -> c.id));
 		return out.size() > limit ? out.subList(0, limit) : out;
 	}
 
@@ -216,7 +219,7 @@ public class WikiCaRepository
 		JsonArray rows = bucketEl.getAsJsonArray();
 
 		// First pass: collect CaInfo objects with id parsed
-		java.util.List<CaInfo> all = new java.util.ArrayList<>(rows.size());
+		List<CaInfo> all = new ArrayList<>(rows.size());
 		for (JsonElement el : rows)
 		{
 			if (!el.isJsonObject()) continue;
@@ -235,11 +238,11 @@ public class WikiCaRepository
 		}
 
 		// Sort by id so groupIndex is deterministic and matches the game's internal order
-		all.sort(java.util.Comparator.comparingInt(c -> c.id));
+		all.sort(Comparator.comparingInt(c -> c.id));
 
 		// Second pass: compute 1-based groupIndex per (monster, type) pair so it lines up
 		// with the trailing index in CA_TASK_<MONSTER>_<TYPE>_<INDEX>_COMPLETED varbits.
-		java.util.Map<String, Integer> groupCounters = new HashMap<>();
+		Map<String, Integer> groupCounters = new HashMap<>();
 		for (CaInfo info : all)
 		{
 			String groupKey = (info.monster == null ? "" : info.monster) + "|"

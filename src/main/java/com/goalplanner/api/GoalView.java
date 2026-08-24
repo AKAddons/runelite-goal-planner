@@ -3,6 +3,7 @@ package com.goalplanner.api;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Collections;
 
 /**
  * Public DTO for a goal - the canonical "render-friendly snapshot" returned by
@@ -79,7 +80,7 @@ public class GoalView
 	public boolean nestCollapsed;
 	/** Labels of DIRECT prerequisites the player hasn't met and that aren't in
 	 *  the plan - drives the "blocked" badge. Empty = no badge. */
-	public List<String> blockedRequirements = java.util.Collections.emptyList();
+	public List<String> blockedRequirements = Collections.emptyList();
 	/** Auto-generated tags from goal creation (boss/raid/tier/etc).
 	 *  Cannot be removed by the user; restored by Restore Defaults. */
 	public List<TagView> defaultTags;

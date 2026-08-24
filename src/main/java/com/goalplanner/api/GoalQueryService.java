@@ -11,6 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Experience;
+import java.awt.Color;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Encapsulates goal/section query methods extracted from {@link GoalPlannerApiImpl}.
@@ -64,8 +76,8 @@ class GoalQueryService
 		if (needle.isEmpty()) return all;
 
 		// Phase 1: find direct matches.
-		java.util.Set<String> matchedIds = new java.util.LinkedHashSet<>();
-		java.util.Map<String, GoalView> viewById = new java.util.LinkedHashMap<>();
+		Set<String> matchedIds = new LinkedHashSet<>();
+		Map<String, GoalView> viewById = new LinkedHashMap<>();
 		for (GoalView gv : all)
 		{
 			viewById.put(gv.id, gv);
@@ -74,8 +86,8 @@ class GoalQueryService
 
 		// Phase 2: expand to include the full relation tree (both directions)
 		// for every direct match. BFS from each matched goal.
-		java.util.Set<String> expanded = new java.util.LinkedHashSet<>(matchedIds);
-		java.util.ArrayDeque<String> queue = new java.util.ArrayDeque<>(matchedIds);
+		Set<String> expanded = new LinkedHashSet<>(matchedIds);
+		ArrayDeque<String> queue = new ArrayDeque<>(matchedIds);
 		while (!queue.isEmpty())
 		{
 			String id = queue.poll();
@@ -157,7 +169,7 @@ class GoalQueryService
 	{
 		log.debug("API.public queryAllSections()");
 		List<Section> source = new ArrayList<>(api.goalStore.getSections());
-		source.sort(java.util.Comparator.comparingInt(Section::getOrder));
+		source.sort(Comparator.comparingInt(Section::getOrder));
 		List<SectionView> out = new ArrayList<>(source.size());
 		for (Section s : source)
 		{
@@ -183,7 +195,7 @@ class GoalQueryService
 		v.repeatEvery = g.getRepeatEvery().name();
 		if (g.isRepeating())
 		{
-			java.time.Instant end = api.nextBoundaryFn.apply(g.getRepeatEvery());
+			Instant end = api.nextBoundaryFn.apply(g.getRepeatEvery());
 			v.resetsAt = end != null ? end.toEpochMilli() : 0L;
 			// Time REMAINING, not the wall-clock deadline. "by 00:00" says when
 			// the period ends but not whether you have ten minutes or ten hours,
@@ -197,7 +209,7 @@ class GoalQueryService
 			// bare clock time reads as local, so that is just wrong. The instant
 			// is identical either way; only the zone it is displayed in changes.
 			v.resetsAtClock = com.goalplanner.util.RepeatSchedule.formatDeadline(
-				end, java.time.ZoneId.systemDefault(), g.getRepeatEvery());
+				end, ZoneId.systemDefault(), g.getRepeatEvery());
 		}
 		v.completedAt = g.getCompletedAt();
 		v.sectionId = g.getSectionId();
@@ -209,7 +221,7 @@ class GoalQueryService
 
 		// Background color: type default + optional user override. DTO carries both
 		// so consumers can show "reset to default" affordances with the right preview.
-		java.awt.Color typeC = g.getType().getColor();
+		Color typeC = g.getType().getColor();
 		int typeRgb = (typeC.getRed() << 16) | (typeC.getGreen() << 8) | typeC.getBlue();
 		v.defaultBackgroundColorRgb = typeRgb;
 		if (g.getCustomColorRgb() >= 0)
@@ -225,8 +237,8 @@ class GoalQueryService
 
 		// Tag splitting: defaultTagIds is the snapshot from creation; the rest of
 		// tagIds are user-added. Each id is dereferenced via the tag store.
-		List<String> defaultIds = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
-		List<String> allIds = g.getTagIds() != null ? g.getTagIds() : java.util.Collections.emptyList();
+		List<String> defaultIds = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
+		List<String> allIds = g.getTagIds() != null ? g.getTagIds() : Collections.emptyList();
 
 		v.defaultTags = new ArrayList<>();
 		for (String id : defaultIds)
@@ -305,7 +317,7 @@ class GoalQueryService
 		}
 
 		// Type-specific attributes
-		v.attributes = new java.util.HashMap<>();
+		v.attributes = new HashMap<>();
 		switch (g.getType())
 		{
 			case SKILL:
@@ -458,10 +470,10 @@ class GoalQueryService
 	 * Topo-sort ALL sections in one pass. Returns a map of sectionId →
 	 * sorted GoalView list. Avoids repeated scans of the goals list.
 	 */
-	java.util.Map<String, List<GoalView>> queryAllGoalsTopologicallySorted()
+	Map<String, List<GoalView>> queryAllGoalsTopologicallySorted()
 	{
 		// Group goals by section in one scan.
-		java.util.Map<String, List<Goal>> goalsBySection = new java.util.LinkedHashMap<>();
+		Map<String, List<Goal>> goalsBySection = new LinkedHashMap<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (g.getSectionId() != null)
@@ -470,8 +482,8 @@ class GoalQueryService
 					.add(g);
 			}
 		}
-		java.util.Map<String, List<GoalView>> result = new java.util.LinkedHashMap<>();
-		for (java.util.Map.Entry<String, List<Goal>> entry : goalsBySection.entrySet())
+		Map<String, List<GoalView>> result = new LinkedHashMap<>();
+		for (Map.Entry<String, List<Goal>> entry : goalsBySection.entrySet())
 		{
 			result.put(entry.getKey(), topoSortSection(entry.getValue(), entry.getKey()));
 		}
@@ -494,16 +506,16 @@ class GoalQueryService
 		if (section != null && section.getBuiltInKind() == Section.BuiltInKind.COMPLETED)
 		{
 			List<Goal> byDate = new ArrayList<>(sectionGoals);
-			byDate.sort(java.util.Comparator
+			byDate.sort(Comparator
 				.comparingLong(Goal::getCompletedAt).reversed()
 				.thenComparingInt(Goal::getPriority));
 			for (Goal g : byDate) out.add(toGoalView(g));
 			return out;
 		}
 
-		sectionGoals.sort(java.util.Comparator.comparingInt(Goal::getPriority));
+		sectionGoals.sort(Comparator.comparingInt(Goal::getPriority));
 
-		java.util.Set<String> goalIds = new java.util.HashSet<>();
+		Set<String> goalIds = new HashSet<>();
 		for (Goal g : sectionGoals) goalIds.add(g.getId());
 
 		// Stable local-repair sort.
@@ -514,7 +526,7 @@ class GoalQueryService
 		while (!converged && iter++ < maxIter)
 		{
 			converged = true;
-			java.util.Map<String, Integer> pos = new java.util.HashMap<>();
+			Map<String, Integer> pos = new HashMap<>();
 			for (int i = 0; i < ordered.size(); i++) pos.put(ordered.get(i).getId(), i);
 
 			for (int i = 0; i < ordered.size(); i++)
@@ -559,7 +571,7 @@ class GoalQueryService
 			{
 				continue;
 			}
-			java.util.Set<String> orIds = new java.util.HashSet<>(parent.getOrRequiredGoalIds());
+			Set<String> orIds = new HashSet<>(parent.getOrRequiredGoalIds());
 			// Collect OR-prereqs that are in this section
 			List<Goal> orGroup = new ArrayList<>();
 			for (int j = grouped.size() - 1; j >= 0; j--)

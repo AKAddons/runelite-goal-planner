@@ -18,6 +18,12 @@ import java.awt.*;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.util.function.Consumer;
+import javax.swing.ButtonGroup;
+import javax.swing.JRadioButton;
 
 /**
  * Factory that builds and shows every goal/section dialog the panel needs.
@@ -66,9 +72,9 @@ class GoalDialogFactory
 	 *  plugin wires {@code clientThread::invokeLater}. The Max button reads the
 	 *  live account-metric ceiling (quest DB table / collection-log varp),
 	 *  which asserts the client thread. */
-	private java.util.function.Consumer<Runnable> clientThreadExec = Runnable::run;
+	private Consumer<Runnable> clientThreadExec = Runnable::run;
 
-	void setClientThreadExecutor(java.util.function.Consumer<Runnable> exec)
+	void setClientThreadExecutor(Consumer<Runnable> exec)
 	{
 		this.clientThreadExec = exec != null ? exec : Runnable::run;
 	}
@@ -93,23 +99,23 @@ class GoalDialogFactory
 
 		SkillTargetForm form = new SkillTargetForm(currentTargetLevel);
 
-		javax.swing.JRadioButton modeAbsolute = new javax.swing.JRadioButton("Reach X", true);
-		javax.swing.JRadioButton modeRelative = new javax.swing.JRadioButton("Gain X more");
+		JRadioButton modeAbsolute = new JRadioButton("Reach X", true);
+		JRadioButton modeRelative = new JRadioButton("Gain X more");
 		modeAbsolute.setOpaque(false);
 		modeRelative.setOpaque(false);
-		javax.swing.ButtonGroup grp = new javax.swing.ButtonGroup();
+		ButtonGroup grp = new ButtonGroup();
 		grp.add(modeAbsolute); grp.add(modeRelative);
-		JPanel modeRow = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0));
+		JPanel modeRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		modeRow.setOpaque(false);
 		modeRow.add(modeAbsolute);
 		modeRow.add(modeRelative);
 		modeAbsolute.addActionListener(ev -> form.setRelativeBaseline(-1));
 		modeRelative.addActionListener(ev -> form.setRelativeBaseline(currentXp));
 
-		JPanel panel = new JPanel(new java.awt.GridBagLayout());
-		java.awt.GridBagConstraints gbc = new java.awt.GridBagConstraints();
+		JPanel panel = new JPanel(new GridBagLayout());
+		GridBagConstraints gbc = new GridBagConstraints();
 		gbc.insets = new Insets(4, 4, 4, 4);
-		gbc.anchor = java.awt.GridBagConstraints.WEST;
+		gbc.anchor = GridBagConstraints.WEST;
 		gbc.gridx = 0; gbc.gridy = 0;
 		panel.add(new JLabel("Mode:"), gbc);
 		gbc.gridx = 1;

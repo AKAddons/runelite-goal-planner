@@ -16,6 +16,8 @@ import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.Graphics;
+import java.awt.Insets;
 
 /**
  * Reusable color picker widget for section / goal / tag color overrides.
@@ -82,7 +84,7 @@ public class ColorPickerField extends JPanel
 		previewSwatch = new JPanel()
 		{
 			@Override
-			protected void paintComponent(java.awt.Graphics g)
+			protected void paintComponent(Graphics g)
 			{
 				// Paint the fill ourselves so FlatLaf/UI delegates don't override it.
 				int rgb = selectedRgb >= 0 ? selectedRgb : defaultRgb;
@@ -116,7 +118,7 @@ public class ColorPickerField extends JPanel
 		actions.setOpaque(false);
 
 		JButton more = new JButton("More...");
-		more.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		more.setMargin(new Insets(2, 6, 2, 6));
 		more.addActionListener(e -> {
 			Color initial = selectedRgb >= 0 ? new Color(selectedRgb) : Color.GRAY;
 			Color picked = JColorChooser.showDialog(this, "Pick a color", initial);
@@ -125,7 +127,7 @@ public class ColorPickerField extends JPanel
 		actions.add(more);
 
 		JButton reset = new JButton("Reset to default");
-		reset.setMargin(new java.awt.Insets(2, 6, 2, 6));
+		reset.setMargin(new Insets(2, 6, 2, 6));
 		reset.addActionListener(e -> setSelectedRgb(-1));
 		actions.add(reset);
 
@@ -159,7 +161,7 @@ public class ColorPickerField extends JPanel
 		JPanel swatch = new JPanel()
 		{
 			@Override
-			protected void paintComponent(java.awt.Graphics g)
+			protected void paintComponent(Graphics g)
 			{
 				// Paint the fill ourselves so FlatLaf/UI delegates don't override it.
 				g.setColor(color);

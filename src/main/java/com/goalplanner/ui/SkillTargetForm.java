@@ -11,6 +11,9 @@ import java.awt.Dimension;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.ActionListener;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
 
 /**
  * A two-row form with synchronized Level and XP fields. Editing either field
@@ -182,11 +185,11 @@ public class SkillTargetForm extends JPanel
 	 */
 	public void onCommit(Runnable commit)
 	{
-		java.awt.event.FocusAdapter blur = new java.awt.event.FocusAdapter()
+		FocusAdapter blur = new FocusAdapter()
 		{
-			@Override public void focusLost(java.awt.event.FocusEvent e) { commit.run(); }
+			@Override public void focusLost(FocusEvent e) { commit.run(); }
 		};
-		java.awt.event.ActionListener enter = e -> commit.run();
+		ActionListener enter = e -> commit.run();
 		levelField.addFocusListener(blur);
 		xpField.addFocusListener(blur);
 		levelField.addActionListener(enter);

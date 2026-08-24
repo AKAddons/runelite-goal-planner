@@ -4,6 +4,13 @@ import net.runelite.api.gameval.VarbitID;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.util.function.IntUnaryOperator;
 
 /**
  * Metadata for achievement diaries: widget IDs, sprite icon, and the
@@ -87,14 +94,14 @@ public final class AchievementDiaryData
 
 	static
 	{
-		try (java.io.InputStream in = AchievementDiaryData.class.getResourceAsStream("diary-completion-varbits.tsv"))
+		try (InputStream in = AchievementDiaryData.class.getResourceAsStream("diary-completion-varbits.tsv"))
 		{
 			if (in == null)
 			{
 				throw new IllegalStateException("missing resource: diary-completion-varbits.tsv");
 			}
-			try (java.io.BufferedReader reader = new java.io.BufferedReader(
-				new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8)))
+			try (BufferedReader reader = new BufferedReader(
+				new InputStreamReader(in, StandardCharsets.UTF_8)))
 			{
 				String line;
 				while ((line = reader.readLine()) != null)
@@ -105,9 +112,9 @@ public final class AchievementDiaryData
 				}
 			}
 		}
-		catch (java.io.IOException e)
+		catch (IOException e)
 		{
-			throw new java.io.UncheckedIOException("failed to load diary-completion-varbits.tsv", e);
+			throw new UncheckedIOException("failed to load diary-completion-varbits.tsv", e);
 		}
 	}
 
@@ -133,7 +140,7 @@ public final class AchievementDiaryData
 	 * COMPLETE varbits, the tier task total for Karamja Easy/Medium/Hard
 	 * count varbits.
 	 */
-	public static int countCompletedTiers(java.util.function.IntUnaryOperator varbitReader)
+	public static int countCompletedTiers(IntUnaryOperator varbitReader)
 	{
 		int completed = 0;
 		for (String area : AREA_KEYS)

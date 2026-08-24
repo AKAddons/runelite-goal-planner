@@ -12,6 +12,10 @@ import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Quest;
 import net.runelite.api.Skill;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
  * Pre-defined quest → requirement associations.
@@ -90,10 +94,10 @@ public final class QuestRequirements
 	private static final Map<Quest, Reqs> TABLE = new EnumMap<>(Quest.class);
 
 	/** Miniquests - 0 QP, shorter, different description in the goal card. */
-	private static final java.util.Set<Quest> MINIQUESTS = java.util.EnumSet.noneOf(Quest.class);
+	private static final Set<Quest> MINIQUESTS = EnumSet.noneOf(Quest.class);
 
 	/** The complete set of F2P quests, used to auto-tag quest goals. */
-	private static final java.util.Set<Quest> F2P_QUESTS = java.util.EnumSet.noneOf(Quest.class);
+	private static final Set<Quest> F2P_QUESTS = EnumSet.noneOf(Quest.class);
 
 	// ============================================================
 	// XP reward tags: skills that a quest rewards XP in (fixed
@@ -107,7 +111,7 @@ public final class QuestRequirements
 	private static final Map<Quest, Integer> QP_REWARDS = new EnumMap<>(Quest.class);
 
 	/** Quests that reward an XP lamp (choice-based, not fixed skill). */
-	private static final java.util.Set<Quest> LAMP_REWARD_QUESTS = java.util.EnumSet.noneOf(Quest.class);
+	private static final Set<Quest> LAMP_REWARD_QUESTS = EnumSet.noneOf(Quest.class);
 
 	// ============================================================
 	// Recommended skills (wiki-sourced suggestions, not hard
@@ -311,9 +315,9 @@ public final class QuestRequirements
 				}
 			}
 		}
-		catch (java.io.IOException e)
+		catch (IOException e)
 		{
-			throw new java.io.UncheckedIOException("failed to load quest-requirements.tsv", e);
+			throw new UncheckedIOException("failed to load quest-requirements.tsv", e);
 		}
 	}
 

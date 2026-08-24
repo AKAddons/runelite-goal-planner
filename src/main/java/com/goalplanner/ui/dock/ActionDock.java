@@ -21,6 +21,13 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import com.goalplanner.ui.RoundedPaint;
 import net.runelite.client.ui.ColorScheme;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Locale;
+import javax.swing.BoxLayout;
+import javax.swing.JScrollBar;
 
 /**
  * The permanent control panel docked under the goal list (ADR-0007).
@@ -134,7 +141,7 @@ public class ActionDock extends JPanel
 		// the dock - a deliberate separator rather than a flat hairline (Task C).
 		setBorder(new DockDivider());
 
-		content.setLayout(new javax.swing.BoxLayout(content, javax.swing.BoxLayout.Y_AXIS));
+		content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
 		content.setOpaque(false);
 		leadHost.setOpaque(false);
 		leadHost.setVisible(false);
@@ -267,13 +274,13 @@ public class ActionDock extends JPanel
 		b.setToolTipText(tooltip);
 		b.setBackground(BTN_BG);
 		b.setForeground(BTN_FG);
-		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 11f));
+		b.setFont(b.getFont().deriveFont(Font.BOLD, 11f));
 		b.setBorder(BorderFactory.createEmptyBorder(5, 9, 5, 9));
-		b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		b.addMouseListener(new java.awt.event.MouseAdapter()
+		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		b.addMouseListener(new MouseAdapter()
 		{
-			@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(BTN_HOVER); }
-			@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(BTN_BG); }
+			@Override public void mouseEntered(MouseEvent e) { b.setBackground(BTN_HOVER); }
+			@Override public void mouseExited(MouseEvent e) { b.setBackground(BTN_BG); }
 		});
 		if (action != null)
 		{
@@ -333,26 +340,26 @@ public class ActionDock extends JPanel
 		// overflow buttons would be unreachable (scrollbars are suppressed to
 		// keep the fixed height honest).
 		sp.addMouseWheelListener(e -> {
-			javax.swing.JScrollBar h = sp.getHorizontalScrollBar();
+			JScrollBar h = sp.getHorizontalScrollBar();
 			h.setValue(h.getValue() + e.getWheelRotation() * 24);
 		});
 		return sp;
 	}
 
-	private static final java.awt.Color BTN_BG = new java.awt.Color(0x3B, 0x3B, 0x3B);
-	private static final java.awt.Color BTN_HOVER = new java.awt.Color(0x4C, 0x4C, 0x52);
-	private static final java.awt.Color BTN_FG = new java.awt.Color(0xDC, 0xDC, 0xDC);
-	private static final java.awt.Color BTN_FG_OFF = new java.awt.Color(0x77, 0x77, 0x77);
-	private static final java.awt.Color HINT_FG = new java.awt.Color(0x9A, 0x9A, 0x9A);
+	private static final Color BTN_BG = new Color(0x3B, 0x3B, 0x3B);
+	private static final Color BTN_HOVER = new Color(0x4C, 0x4C, 0x52);
+	private static final Color BTN_FG = new Color(0xDC, 0xDC, 0xDC);
+	private static final Color BTN_FG_OFF = new Color(0x77, 0x77, 0x77);
+	private static final Color HINT_FG = new Color(0x9A, 0x9A, 0x9A);
 
 	private void rebuildStrip(JPanel row, String hint, List<Item> items)
 	{
 		row.removeAll();
 		if (hint != null && !hint.isEmpty())
 		{
-			JLabel l = new JLabel(hint.toUpperCase(java.util.Locale.ROOT));
+			JLabel l = new JLabel(hint.toUpperCase(Locale.ROOT));
 			l.setForeground(HINT_FG);
-			l.setFont(l.getFont().deriveFont(java.awt.Font.BOLD, 10f));
+			l.setFont(l.getFont().deriveFont(Font.BOLD, 10f));
 			l.setBorder(BorderFactory.createEmptyBorder(0, 2, 0, 6));
 			row.add(l);
 		}
@@ -362,9 +369,9 @@ public class ActionDock extends JPanel
 			// label, so a scrolled strip still reads as clusters.
 			if (item.action == null)
 			{
-				JLabel sep = new JLabel(item.label.toUpperCase(java.util.Locale.ROOT));
+				JLabel sep = new JLabel(item.label.toUpperCase(Locale.ROOT));
 				sep.setForeground(HINT_FG);
-				sep.setFont(sep.getFont().deriveFont(java.awt.Font.BOLD, 9f));
+				sep.setFont(sep.getFont().deriveFont(Font.BOLD, 9f));
 				sep.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 2));
 				row.add(sep);
 				continue;
@@ -382,29 +389,29 @@ public class ActionDock extends JPanel
 		b.setForeground(item.enabled ? BTN_FG : BTN_FG_OFF);
 		b.setFont(b.getFont().deriveFont(11f));
 		b.setBorder(BorderFactory.createEmptyBorder(3, 9, 3, 9));
-		b.setCursor(java.awt.Cursor.getPredefinedCursor(
-			item.enabled ? java.awt.Cursor.HAND_CURSOR : java.awt.Cursor.DEFAULT_CURSOR));
+		b.setCursor(Cursor.getPredefinedCursor(
+			item.enabled ? Cursor.HAND_CURSOR : Cursor.DEFAULT_CURSOR));
 		b.setPreferredSize(new Dimension(
 			b.getPreferredSize().width + 2, ROW_H - 2));
 		if (item.enabled)
 		{
-			b.addMouseListener(new java.awt.event.MouseAdapter()
+			b.addMouseListener(new MouseAdapter()
 			{
-				@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(BTN_HOVER); }
-				@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(BTN_BG); }
+				@Override public void mouseEntered(MouseEvent e) { b.setBackground(BTN_HOVER); }
+				@Override public void mouseExited(MouseEvent e) { b.setBackground(BTN_BG); }
 			});
 			b.addActionListener(e -> item.action.run());
 		}
 		return b;
 	}
 
-	private static final java.awt.Color PEEK_CREATE_BG = new java.awt.Color(0x1D, 0x2A, 0x1F);
-	private static final java.awt.Color PEEK_CREATE_FG = new java.awt.Color(0xBF, 0xE0, 0xBF);
+	private static final Color PEEK_CREATE_BG = new Color(0x1D, 0x2A, 0x1F);
+	private static final Color PEEK_CREATE_FG = new Color(0xBF, 0xE0, 0xBF);
 	/** A hairline splitting the surface above from the permanent footer below. */
-	private static final java.awt.Color FOOTER_TOP_RULE = new java.awt.Color(0x2A, 0x2A, 0x2C);
+	private static final Color FOOTER_TOP_RULE = new Color(0x2A, 0x2A, 0x2C);
 
-	private static final java.awt.Color PEEK_SECTION_BG = new java.awt.Color(0x1E, 0x26, 0x30);
-	private static final java.awt.Color PEEK_SECTION_FG = new java.awt.Color(0xAF, 0xC8, 0xE6);
+	private static final Color PEEK_SECTION_BG = new Color(0x1E, 0x26, 0x30);
+	private static final Color PEEK_SECTION_FG = new Color(0xAF, 0xC8, 0xE6);
 
 	/** The permanent footer: Create Goal | Create Section. Both forward their tap
 	 *  to the panel-supplied callback; the panel decides whether that opens the
@@ -432,21 +439,21 @@ public class ActionDock extends JPanel
 		footerRow.add(createSectionBtn);
 	}
 
-	private void styleCreateButton(JButton b, java.awt.Color bg, java.awt.Color fg)
+	private void styleCreateButton(JButton b, Color bg, Color fg)
 	{
 		b.setFocusPainted(false);
 		b.setBorderPainted(false);
 		b.setBackground(bg);
 		b.setForeground(fg);
-		b.setFont(b.getFont().deriveFont(java.awt.Font.BOLD, 12f));
+		b.setFont(b.getFont().deriveFont(Font.BOLD, 12f));
 		b.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
 		b.setPreferredSize(new Dimension(0, PEEK_H));
-		b.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
-		java.awt.Color hover = bg.brighter();
-		b.addMouseListener(new java.awt.event.MouseAdapter()
+		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		Color hover = bg.brighter();
+		b.addMouseListener(new MouseAdapter()
 		{
-			@Override public void mouseEntered(java.awt.event.MouseEvent e) { b.setBackground(hover); }
-			@Override public void mouseExited(java.awt.event.MouseEvent e) { b.setBackground(bg); }
+			@Override public void mouseEntered(MouseEvent e) { b.setBackground(hover); }
+			@Override public void mouseExited(MouseEvent e) { b.setBackground(bg); }
 		});
 	}
 
@@ -526,17 +533,17 @@ public class ActionDock extends JPanel
 			setPreferredSize(d);
 			setMinimumSize(d);
 			setMaximumSize(new Dimension(Integer.MAX_VALUE, HANDLE_H));
-			setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.N_RESIZE_CURSOR));
+			setCursor(Cursor.getPredefinedCursor(Cursor.N_RESIZE_CURSOR));
 			setToolTipText("Drag down or click to dismiss");
-			java.awt.event.MouseAdapter ma = new java.awt.event.MouseAdapter()
+			MouseAdapter ma = new MouseAdapter()
 			{
-				@Override public void mousePressed(java.awt.event.MouseEvent e)
+				@Override public void mousePressed(MouseEvent e)
 				{
 					pressY = e.getYOnScreen();
 					fired = false;
 				}
 
-				@Override public void mouseDragged(java.awt.event.MouseEvent e)
+				@Override public void mouseDragged(MouseEvent e)
 				{
 					if (!fired && pressY >= 0
 						&& e.getYOnScreen() - pressY > DISMISS_DRAG_THRESHOLD)
@@ -546,12 +553,12 @@ public class ActionDock extends JPanel
 					}
 				}
 
-				@Override public void mouseReleased(java.awt.event.MouseEvent e)
+				@Override public void mouseReleased(MouseEvent e)
 				{
 					pressY = -1;
 				}
 
-				@Override public void mouseClicked(java.awt.event.MouseEvent e)
+				@Override public void mouseClicked(MouseEvent e)
 				{
 					// No-drag fallback: a click also collapses.
 					if (!fired)
@@ -560,13 +567,13 @@ public class ActionDock extends JPanel
 					}
 				}
 
-				@Override public void mouseEntered(java.awt.event.MouseEvent e)
+				@Override public void mouseEntered(MouseEvent e)
 				{
 					hover = true;
 					repaint();
 				}
 
-				@Override public void mouseExited(java.awt.event.MouseEvent e)
+				@Override public void mouseExited(MouseEvent e)
 				{
 					hover = false;
 					repaint();

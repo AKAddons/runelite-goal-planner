@@ -62,6 +62,18 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.util.ImageUtil;
 
 import java.awt.image.BufferedImage;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 @Slf4j
 @PluginDescriptor(
@@ -219,7 +231,7 @@ public class GoalPlannerPlugin extends Plugin
 		// Wire the API's UI-refresh hooks with debouncing.
 		// Multiple rapid onGoalsChanged calls (e.g. tracker updates for
 		// every skill chain goal) produce exactly one rebuild.
-		rebuildDebounce = new javax.swing.Timer(200, e -> panel.rebuild());
+		rebuildDebounce = new Timer(200, e -> panel.rebuild());
 		rebuildDebounce.setRepeats(false);
 
 		// Repeatable-goal rollover. A clock timer, NOT onGameTick: stage-1
@@ -228,7 +240,7 @@ public class GoalPlannerPlugin extends Plugin
 		// fires. One minute is deliberate: the check is idempotent so a missed
 		// run self-heals, and second-granularity would buy nothing but repaints.
 		repeatResetService = new com.goalplanner.service.RepeatResetService(goalStore);
-		repeatResetTimer = new javax.swing.Timer(60_000, e -> applyRepeatResets());
+		repeatResetTimer = new Timer(60_000, e -> applyRepeatResets());
 		repeatResetTimer.setRepeats(true);
 		repeatResetTimer.start();
 		// And once now, so a plugin that was closed overnight catches up on
@@ -237,14 +249,14 @@ public class GoalPlannerPlugin extends Plugin
 		wireRepeatBoundary();
 		goalTrackerApi.setOnGoalsChanged(() ->
 		{
-			javax.swing.SwingUtilities.invokeLater(rebuildDebounce::restart);
+			SwingUtilities.invokeLater(rebuildDebounce::restart);
 			// Any structural change (add/seed/import) may have introduced skill or
 			// account goals that need their first value sync - do it now rather
 			// than waiting for the next in-game XP event.
 			refreshSkillGoalsNow();
 		});
 		goalTrackerApi.setOnSelectionChanged(
-			() -> javax.swing.SwingUtilities.invokeLater(() -> panel.refreshSelection()));
+			() -> SwingUtilities.invokeLater(() -> panel.refreshSelection()));
 
 		BufferedImage icon;
 		try
@@ -333,7 +345,7 @@ public class GoalPlannerPlugin extends Plugin
 			return;
 		}
 		final int count = bundle.totalGoalCount();
-		javax.swing.SwingUtilities.invokeLater(() ->
+		SwingUtilities.invokeLater(() ->
 		{
 			String sectionId;
 			try
@@ -373,7 +385,7 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		if (monsterName == null || monsterName.isEmpty()) return;
 		clientThread.invokeLater(() -> eventBus.post(new PluginMessage(
-			"loadoutlab", "search", java.util.Map.of(
+			"loadoutlab", "search", Map.of(
 				"monster", monsterName,
 				"source", "goal-planner"))));
 	}
@@ -450,8 +462,8 @@ public class GoalPlannerPlugin extends Plugin
 					final String itemName = rawItemName != null && rawItemName.endsWith("(Members)")
 						? rawItemName.substring(0, rawItemName.length() - "(Members)".length()).trim()
 						: rawItemName;
-					java.util.List<ItemTag> autoTags = buildItemTags(canonicalId);
-					java.util.List<String> autoTagIds = new java.util.ArrayList<>();
+					List<ItemTag> autoTags = buildItemTags(canonicalId);
+					List<String> autoTagIds = new ArrayList<>();
 					for (ItemTag spec : autoTags)
 					{
 						com.goalplanner.model.Tag tag =
@@ -459,7 +471,7 @@ public class GoalPlannerPlugin extends Plugin
 						if (tag != null) autoTagIds.add(tag.getId());
 					}
 
-					javax.swing.SwingUtilities.invokeLater(() ->
+					SwingUtilities.invokeLater(() ->
 					{
 						// Set sectionId at build time so addGoal places the
 						// goal in the right section instead of defaulting to
@@ -473,8 +485,8 @@ public class GoalPlannerPlugin extends Plugin
 							.targetValue(targetQty)
 							.currentValue(-1)
 							.sectionId(preferredSectionId)  // null → addGoal falls back to Incomplete
-							.tagIds(new java.util.ArrayList<>(autoTagIds))
-							.defaultTagIds(new java.util.ArrayList<>(autoTagIds))
+							.tagIds(new ArrayList<>(autoTagIds))
+							.defaultTagIds(new ArrayList<>(autoTagIds))
 							.build();
 
 						// Route through the command path so this is undoable.
@@ -550,7 +562,7 @@ public class GoalPlannerPlugin extends Plugin
 		});
 	}
 
-	private java.util.List<ItemTag> buildItemTags(int itemId)
+	private List<ItemTag> buildItemTags(int itemId)
 	{
 		// Callers MUST pass an already-canonicalized item id and MUST invoke
 		// from the client thread. The earlier in-method canonicalize fallback
@@ -558,7 +570,7 @@ public class GoalPlannerPlugin extends Plugin
 		// and (b) calling itemManager.canonicalize from the Swing EDT throws
 		// AssertionError ("must be called on client thread"), which the EDT
 		// silently swallowed and dropped the goal-add silently.
-		java.util.List<ItemTag> tags = new java.util.ArrayList<>(ItemSourceData.getTags(itemId));
+		List<ItemTag> tags = new ArrayList<>(ItemSourceData.getTags(itemId));
 
 		// Check for inherited attributes. Slayer inheritance now comes from
 		// two independent signals unioned together:
@@ -622,7 +634,7 @@ public class GoalPlannerPlugin extends Plugin
 			PanelFonts.configure(config.fontFamily(), config.fontScale());
 			if (panel != null)
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 		}
 		// Global "indent dependencies" toggled - sync the flag (nested sections
@@ -635,7 +647,7 @@ public class GoalPlannerPlugin extends Plugin
 			goalStore.save();
 			if (panel != null)
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 		}
 		// Global auto-archive default changed - sync to the store, re-sort the
@@ -647,7 +659,7 @@ public class GoalPlannerPlugin extends Plugin
 			goalStore.save();
 			if (panel != null)
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 		}
 	}
@@ -677,7 +689,7 @@ public class GoalPlannerPlugin extends Plugin
 		lastMiscApproval = -1;
 		if (panel != null)
 		{
-			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+			SwingUtilities.invokeLater(panel::rebuild);
 		}
 	}
 
@@ -695,10 +707,10 @@ public class GoalPlannerPlugin extends Plugin
 
 	/** Debounce timer coalescing rapid rebuild requests. Hoisted to a field so
 	 *  shutDown() can stop it (otherwise its ActionListener pins the panel). */
-	private javax.swing.Timer rebuildDebounce;
+	private Timer rebuildDebounce;
 
 	/** Repeating one-minute rollover check for repeatable goals. */
-	private javax.swing.Timer repeatResetTimer;
+	private Timer repeatResetTimer;
 	private com.goalplanner.service.RepeatResetService repeatResetService;
 
 	/**
@@ -715,7 +727,7 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		goalTrackerApi.setNextBoundaryFn(
 			period -> com.goalplanner.util.RepeatSchedule.nextBoundary(
-				period, java.time.Instant.now(),
+				period, Instant.now(),
 				com.goalplanner.util.RepeatSchedule.zoneFor(config.resetBoundary()),
 				com.goalplanner.util.RepeatSchedule.hourFor(
 					config.resetBoundary(), config.resetHour())),
@@ -729,7 +741,7 @@ public class GoalPlannerPlugin extends Plugin
 			return;
 		}
 		int reset = repeatResetService.applyResets(
-			java.time.Instant.now(), config.resetBoundary(), config.resetHour());
+			Instant.now(), config.resetBoundary(), config.resetHour());
 		if (panel == null)
 		{
 			return;
@@ -742,7 +754,7 @@ public class GoalPlannerPlugin extends Plugin
 		// must mutate the label directly instead.
 		if (reset > 0 || hasRepeatingGoal())
 		{
-			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+			SwingUtilities.invokeLater(panel::rebuild);
 		}
 	}
 
@@ -812,7 +824,7 @@ public class GoalPlannerPlugin extends Plugin
 
 		// The add runs through the command system (EDT-owned selection + undo
 		// history), so marshal it off this client-thread drain onto the EDT.
-		javax.swing.SwingUtilities.invokeLater(() ->
+		SwingUtilities.invokeLater(() ->
 		{
 			String id = goalTrackerApi.addAccountGoal(AccountMetric.MISC_APPROVAL.name(),
 				com.goalplanner.tracker.MiscellaniaAutoGoal.FULL_APPROVAL);
@@ -896,7 +908,7 @@ public class GoalPlannerPlugin extends Plugin
 			lastMiscApproval = -1;
 			if (panel != null)
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 			return false; // this drain waits; next one sees the settled state
 		}
@@ -958,7 +970,7 @@ public class GoalPlannerPlugin extends Plugin
 	 */
 	private String detectProfile()
 	{
-		java.util.Set<net.runelite.api.WorldType> wt = client.getWorldType();
+		Set<net.runelite.api.WorldType> wt = client.getWorldType();
 		// Deadman first: a DMM world could conceivably also read as seasonal,
 		// and its progress must never bleed into the leagues plan.
 		if (wt != null && wt.contains(net.runelite.api.WorldType.DEADMAN))
@@ -1012,7 +1024,7 @@ public class GoalPlannerPlugin extends Plugin
 			// triggers a rebuild - the "appears after a little bit" bug.
 			if ((profileSwitched || migrated) && panel != null)
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 			return;
 		}
@@ -1026,7 +1038,7 @@ public class GoalPlannerPlugin extends Plugin
 		lastMiscApproval = -1;
 		if (panel != null)
 		{
-			javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+			SwingUtilities.invokeLater(panel::rebuild);
 		}
 	}
 
@@ -1109,10 +1121,10 @@ public class GoalPlannerPlugin extends Plugin
 	 * corresponding {@link net.runelite.api.Skill}. Used by the right-click handler
 	 * to inject "Add Goal" on a hovered skill row.
 	 */
-	private static final java.util.Map<Integer, net.runelite.api.Skill> SKILL_TAB_WIDGET_TO_SKILL;
+	private static final Map<Integer, net.runelite.api.Skill> SKILL_TAB_WIDGET_TO_SKILL;
 	static
 	{
-		java.util.Map<Integer, net.runelite.api.Skill> m = new java.util.HashMap<>();
+		Map<Integer, net.runelite.api.Skill> m = new HashMap<>();
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.ATTACK, net.runelite.api.Skill.ATTACK);
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.STRENGTH, net.runelite.api.Skill.STRENGTH);
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.DEFENCE, net.runelite.api.Skill.DEFENCE);
@@ -1137,7 +1149,7 @@ public class GoalPlannerPlugin extends Plugin
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.WOODCUTTING, net.runelite.api.Skill.WOODCUTTING);
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.FARMING, net.runelite.api.Skill.FARMING);
 		m.put(net.runelite.api.gameval.InterfaceID.Stats.SAILING, net.runelite.api.Skill.SAILING);
-		SKILL_TAB_WIDGET_TO_SKILL = java.util.Collections.unmodifiableMap(m);
+		SKILL_TAB_WIDGET_TO_SKILL = Collections.unmodifiableMap(m);
 	}
 
 	/**
@@ -1148,18 +1160,18 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		com.goalplanner.ui.SkillTargetForm form = new com.goalplanner.ui.SkillTargetForm(99);
 
-		int result = javax.swing.JOptionPane.showConfirmDialog(panel, form,
+		int result = JOptionPane.showConfirmDialog(panel, form,
 			"Add " + skill.getName() + " Goal",
-			javax.swing.JOptionPane.OK_CANCEL_OPTION,
-			javax.swing.JOptionPane.PLAIN_MESSAGE);
-		if (result != javax.swing.JOptionPane.OK_OPTION) return;
+			JOptionPane.OK_CANCEL_OPTION,
+			JOptionPane.PLAIN_MESSAGE);
+		if (result != JOptionPane.OK_OPTION) return;
 
 		int targetXp = form.getTargetXp();
 		if (targetXp < 0)
 		{
-			javax.swing.JOptionPane.showMessageDialog(panel,
+			JOptionPane.showMessageDialog(panel,
 				"Enter a valid level (1-99) or XP (0-200,000,000).",
-				"Invalid", javax.swing.JOptionPane.WARNING_MESSAGE);
+				"Invalid", JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		goalTrackerApi.addSkillGoal(skill, targetXp);
@@ -1172,10 +1184,10 @@ public class GoalPlannerPlugin extends Plugin
 			// CA Points: show tier picker
 			String[] options = new String[com.goalplanner.model.AccountMetric.CA_TIER_NAMES.length];
 			System.arraycopy(com.goalplanner.model.AccountMetric.CA_TIER_NAMES, 0, options, 0, options.length);
-			String choice = (String) javax.swing.JOptionPane.showInputDialog(panel,
+			String choice = (String) JOptionPane.showInputDialog(panel,
 				"Select CA tier target:",
 				"Add CA Points Goal",
-				javax.swing.JOptionPane.PLAIN_MESSAGE,
+				JOptionPane.PLAIN_MESSAGE,
 				null, options, options[0]);
 			if (choice == null) return;
 			for (int i = 0; i < com.goalplanner.model.AccountMetric.CA_TIER_NAMES.length; i++)
@@ -1191,28 +1203,28 @@ public class GoalPlannerPlugin extends Plugin
 		else
 		{
 			// Other metrics: target input with max hint
-			String input = javax.swing.JOptionPane.showInputDialog(panel,
+			String input = JOptionPane.showInputDialog(panel,
 				"Target " + metric.getDisplayName() + " (max " + metric.effectiveMaxTarget(client) + "):",
 				"Add " + metric.getDisplayName() + " Goal",
-				javax.swing.JOptionPane.PLAIN_MESSAGE);
+				JOptionPane.PLAIN_MESSAGE);
 			if (input == null || input.trim().isEmpty()) return;
 			try
 			{
 				int target = Integer.parseInt(input.trim().replace(",", ""));
 				if (target <= 0)
 				{
-					javax.swing.JOptionPane.showMessageDialog(panel,
+					JOptionPane.showMessageDialog(panel,
 						"Target must be greater than 0.",
-						"Invalid", javax.swing.JOptionPane.WARNING_MESSAGE);
+						"Invalid", JOptionPane.WARNING_MESSAGE);
 					return;
 				}
 				goalTrackerApi.addAccountGoal(metric.name(), target);
 			}
 			catch (NumberFormatException e)
 			{
-				javax.swing.JOptionPane.showMessageDialog(panel,
+				JOptionPane.showMessageDialog(panel,
 					"Enter a valid number.",
-					"Invalid", javax.swing.JOptionPane.WARNING_MESSAGE);
+					"Invalid", JOptionPane.WARNING_MESSAGE);
 			}
 		}
 	}
@@ -1340,7 +1352,7 @@ public class GoalPlannerPlugin extends Plugin
 		// bit-packed CA_TASK_COMPLETED varplayers. -1 = unknown.
 		int caTaskId = (wiki != null) ? wiki.id : -1;
 
-		java.util.List<String> tagIds = new java.util.ArrayList<>();
+		List<String> tagIds = new ArrayList<>();
 		if (monster != null)
 		{
 			boolean isRaid = CombatAchievementData.isRaidBoss(monster);
@@ -1369,8 +1381,8 @@ public class GoalPlannerPlugin extends Plugin
 			.currentValue(0)
 			.spriteId(tierSpriteId > 0 ? tierSpriteId : 0)
 			.caTaskId(caTaskId)
-			.tagIds(new java.util.ArrayList<>(tagIds))
-			.defaultTagIds(new java.util.ArrayList<>(tagIds))
+			.tagIds(new ArrayList<>(tagIds))
+			.defaultTagIds(new ArrayList<>(tagIds))
 			.build();
 	}
 
@@ -1527,7 +1539,7 @@ public class GoalPlannerPlugin extends Plugin
 					.setOption("Add Goal")
 					.setTarget("<col=ff9040>" + skill.getName() + "</col>")
 					.setType(MenuAction.RUNELITE)
-					.onClick(e -> javax.swing.SwingUtilities.invokeLater(() ->
+					.onClick(e -> SwingUtilities.invokeLater(() ->
 						promptAndAddSkillGoal(skill)));
 				break;
 			}
@@ -1631,7 +1643,7 @@ public class GoalPlannerPlugin extends Plugin
 					Goal.builder().type(GoalType.QUEST).questName(quest.name()).build(),
 					quest.getName(),
 					/*defaultAdd=*/() -> goalTrackerApi.addQuestGoal(quest),
-					/*sectionAdd=*/() -> goalTrackerApi.addQuestGoalWithPrereqs(quest, java.util.Collections.emptyList()));
+					/*sectionAdd=*/() -> goalTrackerApi.addQuestGoalWithPrereqs(quest, Collections.emptyList()));
 				break;
 			}
 
@@ -1655,7 +1667,7 @@ public class GoalPlannerPlugin extends Plugin
 					.setTarget(entry.getTarget())
 					.setType(MenuAction.RUNELITE)
 					.createSubMenu();
-				final java.util.function.Supplier<String> caAdd = () ->
+				final Supplier<String> caAdd = () ->
 				{
 					Goal g = buildCombatAchievementGoal(row);
 					return g == null ? null : goalTrackerApi.addCombatAchievementGoal(g.getCaTaskId());
@@ -1673,7 +1685,7 @@ public class GoalPlannerPlugin extends Plugin
 					.setOption("Add Goal")
 					.setTarget("<col=ff9040>Total Level</col>")
 					.setType(MenuAction.RUNELITE)
-					.onClick(e -> javax.swing.SwingUtilities.invokeLater(() ->
+					.onClick(e -> SwingUtilities.invokeLater(() ->
 						promptAndAddAccountGoal(com.goalplanner.model.AccountMetric.TOTAL_LEVEL)));
 				break;
 			}
@@ -1690,7 +1702,7 @@ public class GoalPlannerPlugin extends Plugin
 						.setOption("Add Goal")
 						.setTarget("<col=ff9040>Quest Points</col>")
 						.setType(MenuAction.RUNELITE)
-						.onClick(e -> javax.swing.SwingUtilities.invokeLater(() ->
+						.onClick(e -> SwingUtilities.invokeLater(() ->
 							promptAndAddAccountGoal(com.goalplanner.model.AccountMetric.QUEST_POINTS)));
 					break;
 				}
@@ -1732,7 +1744,7 @@ public class GoalPlannerPlugin extends Plugin
 			if (isCollectionLog)
 			{
 				String targetName = stripColorTags(entry.getTarget());
-				java.util.List<String> bossCandidates = com.goalplanner.data.BossKillData.resolveCollectionLogName(targetName);
+				List<String> bossCandidates = com.goalplanner.data.BossKillData.resolveCollectionLogName(targetName);
 				if (!bossCandidates.isEmpty())
 				{
 					for (String resolvedName : bossCandidates)
@@ -1746,7 +1758,7 @@ public class GoalPlannerPlugin extends Plugin
 						// there and runWhenSynced preserves it (immediate or tick-drained).
 						final Goal bossProbe = Goal.builder()
 							.type(GoalType.BOSS).bossName(bossName).build();
-						final java.util.function.Supplier<String> bossAdd =
+						final Supplier<String> bossAdd =
 							() -> goalTrackerApi.addBossGoal(bossName, 1);
 						if (!userSections().isEmpty())
 						{
@@ -1871,7 +1883,7 @@ public class GoalPlannerPlugin extends Plugin
 	{
 		if (!trackersDirty || isTrackingSuspended()) return;
 		trackersDirty = false;
-		java.util.List<Goal> goals = goalStore.getGoals();
+		List<Goal> goals = goalStore.getGoals();
 		boolean updated = skillTracker.checkGoals(goals);
 		updated |= questTracker.checkGoals(goals);
 		updated |= diaryTracker.checkGoals(goals);
@@ -1908,7 +1920,7 @@ public class GoalPlannerPlugin extends Plugin
 		clientThread.invokeLater(() ->
 		{
 			if (client.getGameState() != GameState.LOGGED_IN) return;
-			java.util.List<Goal> goals = goalStore.getGoals();
+			List<Goal> goals = goalStore.getGoals();
 			boolean updated = skillTracker.checkGoals(goals);
 			updated |= accountTracker.checkGoals(goals);
 			flushIfUpdated(updated);
@@ -1917,7 +1929,7 @@ public class GoalPlannerPlugin extends Plugin
 			// the badges update. Doesn't fire onGoalsChanged, so no refresh loop.
 			if (goalTrackerApi.recomputeBlockedRequirements())
 			{
-				javax.swing.SwingUtilities.invokeLater(panel::rebuild);
+				SwingUtilities.invokeLater(panel::rebuild);
 			}
 		});
 	}
@@ -1942,10 +1954,10 @@ public class GoalPlannerPlugin extends Plugin
 	 */
 	private void addAllUnfinishedQuests(boolean f2pOnly)
 	{
-		java.util.List<net.runelite.api.Quest> toAdd = new java.util.ArrayList<>();
+		List<net.runelite.api.Quest> toAdd = new ArrayList<>();
 
 		// Quests in the RuneLite enum but not yet released in-game.
-		java.util.Set<net.runelite.api.Quest> UNRELEASED = java.util.EnumSet.of(
+		Set<net.runelite.api.Quest> UNRELEASED = EnumSet.of(
 			net.runelite.api.Quest.THE_RED_REEF
 		);
 
@@ -2019,9 +2031,9 @@ public class GoalPlannerPlugin extends Plugin
 	// =====================================================================
 
 	/** The user's (non-built-in) sections, in panel order. Empty if none. */
-	private java.util.List<com.goalplanner.api.SectionView> userSections()
+	private List<com.goalplanner.api.SectionView> userSections()
 	{
-		java.util.List<com.goalplanner.api.SectionView> out = new java.util.ArrayList<>();
+		List<com.goalplanner.api.SectionView> out = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : goalTrackerApi.queryAllSections())
 		{
 			if (!sv.builtIn)
@@ -2040,7 +2052,7 @@ public class GoalPlannerPlugin extends Plugin
 	 * completed goals inline). Seed-free - the user is curating exact goals.
 	 */
 	private void addToSection(String sectionId, Goal probe, String label,
-		java.util.function.Supplier<String> bareAdd)
+		Supplier<String> bareAdd)
 	{
 		// Per-section dedup: if this section already holds the goal, do nothing
 		// (prevents creating an orphan default goal when the target already has it).
@@ -2086,10 +2098,10 @@ public class GoalPlannerPlugin extends Plugin
 	// adjustable afterward through the card's Change Amount action.
 	private void promptAddItemGoal(int realItemId, String itemName, String sectionId)
 	{
-		final java.util.List<String> autoTagIds = resolveItemTagIds(realItemId);
-		javax.swing.SwingUtilities.invokeLater(() ->
+		final List<String> autoTagIds = resolveItemTagIds(realItemId);
+		SwingUtilities.invokeLater(() ->
 		{
-			String input = javax.swing.JOptionPane.showInputDialog(
+			String input = JOptionPane.showInputDialog(
 				panel, "Target quantity for " + itemName + ":", "1");
 			if (input == null) return;
 			int qty;
@@ -2105,17 +2117,17 @@ public class GoalPlannerPlugin extends Plugin
 
 	private void quickAddItemGoal(int realItemId, String itemName, String sectionId)
 	{
-		final java.util.List<String> autoTagIds = resolveItemTagIds(realItemId);
-		javax.swing.SwingUtilities.invokeLater(
+		final List<String> autoTagIds = resolveItemTagIds(realItemId);
+		SwingUtilities.invokeLater(
 			() -> addItemGoalInternal(realItemId, itemName, sectionId, 1, autoTagIds));
 	}
 
 	// Resolve auto-tags on the calling (client) thread - buildItemTags reads item
 	// metadata that must not run on the EDT.
-	private java.util.List<String> resolveItemTagIds(int realItemId)
+	private List<String> resolveItemTagIds(int realItemId)
 	{
-		java.util.List<ItemTag> autoTags = buildItemTags(realItemId);
-		java.util.List<String> autoTagIds = new java.util.ArrayList<>();
+		List<ItemTag> autoTags = buildItemTags(realItemId);
+		List<String> autoTagIds = new ArrayList<>();
 		for (ItemTag spec : autoTags)
 		{
 			com.goalplanner.model.Tag tag =
@@ -2127,7 +2139,7 @@ public class GoalPlannerPlugin extends Plugin
 
 	// Build + add the item goal. Must run on the EDT (addGoalUndoable / refresh).
 	private void addItemGoalInternal(int realItemId, String itemName, String sectionId,
-		int qty, java.util.List<String> autoTagIds)
+		int qty, List<String> autoTagIds)
 	{
 		Goal goal = Goal.builder()
 			.type(GoalType.ITEM_GRIND)
@@ -2137,16 +2149,16 @@ public class GoalPlannerPlugin extends Plugin
 			.targetValue(qty)
 			.currentValue(-1)
 			.sectionId(sectionId)
-			.tagIds(new java.util.ArrayList<>(autoTagIds))
-			.defaultTagIds(new java.util.ArrayList<>(autoTagIds))
+			.tagIds(new ArrayList<>(autoTagIds))
+			.defaultTagIds(new ArrayList<>(autoTagIds))
 			.build();
 		addGoalUndoable(goal, "Add goal: " + itemName);
 		refreshItemGoalsNow();
 	}
 
 	private void addGoalSectionItems(net.runelite.api.Menu sub, Goal probe, String label,
-		java.util.function.Supplier<String> defaultAdd,
-		java.util.function.Supplier<String> sectionAdd)
+		Supplier<String> defaultAdd,
+		Supplier<String> sectionAdd)
 	{
 		sub.createMenuEntry(0)
 			.setOption("Default")
@@ -2163,9 +2175,9 @@ public class GoalPlannerPlugin extends Plugin
 	}
 
 	private void addSectionMenuEntries(String baseOption, String menuTarget, Goal probe, String label,
-		java.util.function.Supplier<String> bareAdd)
+		Supplier<String> bareAdd)
 	{
-		java.util.List<com.goalplanner.api.SectionView> sections = userSections();
+		List<com.goalplanner.api.SectionView> sections = userSections();
 		if (sections.isEmpty())
 		{
 			return;
@@ -2206,7 +2218,7 @@ public class GoalPlannerPlugin extends Plugin
 		{
 			boolean sectionChanged = goalStore.reconcileDerivedSections();
 			// Snapshot dirty IDs before save clears them
-			java.util.Set<String> dirtyIds = goalStore.getDirtyGoalIds();
+			Set<String> dirtyIds = goalStore.getDirtyGoalIds();
 			goalStore.saveDirtyGoals();
 
 			if (sectionChanged)
@@ -2214,12 +2226,12 @@ public class GoalPlannerPlugin extends Plugin
 				// Goals moved between sections - need a full rebuild. fireGoalsChanged
 				// touches selection + command history (EDT-owned state) and triggers
 				// the rebuild, so run it on the EDT rather than this client thread.
-				javax.swing.SwingUtilities.invokeLater(() -> goalTrackerApi.fireGoalsChanged());
+				SwingUtilities.invokeLater(() -> goalTrackerApi.fireGoalsChanged());
 			}
 			else
 			{
 				// O(dirty) incremental card update - no full rebuild
-				javax.swing.SwingUtilities.invokeLater(() -> panel.refreshProgress(dirtyIds));
+				SwingUtilities.invokeLater(() -> panel.refreshProgress(dirtyIds));
 			}
 		}
 	}

@@ -23,6 +23,55 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Desktop;
+import java.awt.Graphics2D;
+import java.awt.Graphics;
+import java.awt.Insets;
+import java.awt.LayoutManager;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.ActionEvent;
+import java.awt.event.FocusAdapter;
+import java.awt.event.FocusEvent;
+import java.awt.event.KeyEvent;
+import java.net.URI;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
+import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.IntConsumer;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
+import javax.swing.DefaultListCellRenderer;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JCheckBox;
+import javax.swing.JOptionPane;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.Scrollable;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 /**
  * Sidebar panel - priority list of goals with gradient cards and arrow reordering.
@@ -69,7 +118,7 @@ public class GoalPanel extends PluginPanel
 	/** A validated goal-create awaiting its landing section (note 3): the consumer
 	 *  performs the actual create + move once the user picks a sectionId in the
 	 *  SECTION_PICK sub-view. Cleared once run or when navigation leaves the flow. */
-	private java.util.function.Consumer<String> dockPendingCreate = null;
+	private Consumer<String> dockPendingCreate = null;
 	/** Prefill for a freshly-opened create form (note 5): "Make repeatable" on a
 	 *  plain grind hands off to the create flow pre-seeded for a repeatable goal.
 	 *  Consumed once when the matching form builds, then cleared. */
@@ -195,7 +244,7 @@ public class GoalPanel extends PluginPanel
 	 *  whichever surface it was opened from. */
 	private enum ShareScope { GOALS, SECTION, ALL }
 	private ShareScope dockShareScope = null;
-	private java.util.List<String> dockShareGoalIds = null;
+	private List<String> dockShareGoalIds = null;
 	private String dockShareSectionId = null;
 	private boolean dockShareMounted = false;
 	/** Inline Import overlay (import-inline pass): a paste-a-code surface mounted
@@ -219,7 +268,7 @@ public class GoalPanel extends PluginPanel
 	 *  leaving the underlying selection intact so picking (or Back) returns to it.
 	 *  {@link #dockMoveGoalIds} is captured at open time. */
 	private MoveMode dockMoveMode = null;
-	private java.util.LinkedHashSet<String> dockMoveGoalIds = null;
+	private LinkedHashSet<String> dockMoveGoalIds = null;
 	private boolean dockMoveMounted = false;
 	private final com.goalplanner.GoalPlannerConfig config;
 	private final SkillIconManager skillIconManager;
@@ -259,7 +308,7 @@ public class GoalPanel extends PluginPanel
 	private final Map<String, String> cardSig = new HashMap<>();
 	/** Section header rows by section id - selection changes refresh their
 	 *  select-all toggle without a full rebuild (mirrors cardMap). */
-	private final java.util.List<SectionHeaderRow> headerRows = new java.util.ArrayList<>();
+	private final List<SectionHeaderRow> headerRows = new ArrayList<>();
 	/** Free-text filter applied to the goal list. Empty = show all. */
 	private String searchFilter = "";
 	/** Most recent simple-click goal id, used as the anchor for shift-click range
@@ -269,7 +318,7 @@ public class GoalPanel extends PluginPanel
 	 *  not in relation-pick mode. The single-goal "Requires..."/"Required
 	 *  by..." path adds one id; the bulk Customize > Relations path adds
 	 *  every selected goal. Cleared on target click, cancel, or ESC. */
-	java.util.Set<String> pendingRelationSourceIds = new java.util.LinkedHashSet<>();
+	Set<String> pendingRelationSourceIds = new LinkedHashSet<>();
 	/** Direction flag for relation-pick mode. When true, each clicked
 	 *  target becomes a REQUIREMENT of every source (edge source → target).
 	 *  When false, each source becomes a DEPENDENT of the target (edge
@@ -294,7 +343,7 @@ public class GoalPanel extends PluginPanel
 	 *  Auto-dismisses via {@link #infoNoticeTimer}. */
 	private JPanel infoNoticeBanner;
 	private JLabel infoNoticeLabel;
-	private javax.swing.Timer infoNoticeTimer;
+	private Timer infoNoticeTimer;
 	/** A goal just created via the dock create flow, to reveal once it settles
 	 *  into its section (armed by {@link #armCreateReveal()}). A complete-on-add
 	 *  goal (diary/quest/CA/boss/item/skill already at target) reconciles into the
@@ -315,7 +364,7 @@ public class GoalPanel extends PluginPanel
 	// setClient). Null until then; the Options menu omits share entries if unset.
 	private com.goalplanner.share.ShareCodec shareCodec;
 	private com.goalplanner.persistence.SavedPlanStore savedPlanStore;
-	private java.util.function.Supplier<String> playerNameSupplier;
+	private Supplier<String> playerNameSupplier;
 
 	public GoalPanel(GoalStore goalStore, SkillIconManager skillIconManager, ItemManager itemManager,
 					 net.runelite.client.game.SpriteManager spriteManager,
@@ -396,9 +445,9 @@ public class GoalPanel extends PluginPanel
 			removeDupes.addActionListener(ev -> {
 				int n = api.removeDuplicateGoals();
 				rebuild();
-				javax.swing.JOptionPane.showMessageDialog(GoalPanel.this,
+				JOptionPane.showMessageDialog(GoalPanel.this,
 					n == 0 ? "No duplicate goals found." : "Removed " + n + " duplicate goal(s).",
-					"Remove Duplicates", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+					"Remove Duplicates", JOptionPane.INFORMATION_MESSAGE);
 			});
 			popup.add(removeDupes);
 
@@ -413,20 +462,20 @@ public class GoalPanel extends PluginPanel
 			deleteEmptySections.addActionListener(ev -> {
 				int n = api.removeEmptyUserSections();
 				rebuild();
-				javax.swing.JOptionPane.showMessageDialog(GoalPanel.this,
+				JOptionPane.showMessageDialog(GoalPanel.this,
 					n == 0 ? "No empty sections found." : "Deleted " + n + " empty section(s).",
-					"Delete Empty Sections", javax.swing.JOptionPane.INFORMATION_MESSAGE);
+					"Delete Empty Sections", JOptionPane.INFORMATION_MESSAGE);
 			});
 			popup.add(deleteEmptySections);
 
 			JMenuItem deleteEverything = new JMenuItem("Delete all goals and sections");
 			deleteEverything.setToolTipText("Wipe every goal and section (completed goals included). Undoable.");
 			deleteEverything.addActionListener(ev -> {
-				int choice = javax.swing.JOptionPane.showConfirmDialog(GoalPanel.this,
+				int choice = JOptionPane.showConfirmDialog(GoalPanel.this,
 					"Delete all goals and sections?\nThis wipes every goal (completed included) and every section. This can be undone.",
-					"Delete All Goals and Sections", javax.swing.JOptionPane.YES_NO_OPTION,
-					javax.swing.JOptionPane.WARNING_MESSAGE);
-				if (choice == javax.swing.JOptionPane.YES_OPTION)
+					"Delete All Goals and Sections", JOptionPane.YES_NO_OPTION,
+					JOptionPane.WARNING_MESSAGE);
+				if (choice == JOptionPane.YES_OPTION)
 				{
 					api.removeAllGoalsAndSections();
 					rebuild();
@@ -469,22 +518,22 @@ public class GoalPanel extends PluginPanel
 		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
 		searchRow.setBackground(ColorScheme.DARK_GRAY_COLOR);
 		searchRow.setBorder(new EmptyBorder(0, 8, 8, 8));
-		final javax.swing.JTextField searchField = new javax.swing.JTextField();
+		final JTextField searchField = new JTextField();
 		searchField.setToolTipText("Search goals by name, description, tag, category, type, or section");
 		// Debounce: rebuild() is a full teardown; rebuilding on every keystroke
 		// makes typing janky. Coalesce rapid edits into one rebuild.
-		final javax.swing.Timer searchDebounce = new javax.swing.Timer(150, e -> rebuild());
+		final Timer searchDebounce = new Timer(150, e -> rebuild());
 		searchDebounce.setRepeats(false);
-		searchField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener()
+		searchField.getDocument().addDocumentListener(new DocumentListener()
 		{
 			private void update()
 			{
 				searchFilter = searchField.getText();
 				searchDebounce.restart();
 			}
-			@Override public void insertUpdate(javax.swing.event.DocumentEvent e) { update(); }
-			@Override public void removeUpdate(javax.swing.event.DocumentEvent e) { update(); }
-			@Override public void changedUpdate(javax.swing.event.DocumentEvent e) { update(); }
+			@Override public void insertUpdate(DocumentEvent e) { update(); }
+			@Override public void removeUpdate(DocumentEvent e) { update(); }
+			@Override public void changedUpdate(DocumentEvent e) { update(); }
 		});
 		JButton clearSearchBtn = new JButton(ShapeIcons.closeX(10, new Color(200, 200, 200)));
 		clearSearchBtn.setToolTipText("Clear search");
@@ -595,13 +644,13 @@ public class GoalPanel extends PluginPanel
 		// ESC cancels whichever pick mode is active. Registered on the
 		// whole panel so the key fires regardless of focus within the
 		// scrollable goal list.
-		javax.swing.KeyStroke escStroke =
-			javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0);
+		KeyStroke escStroke =
+			KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0);
 		getInputMap(WHEN_IN_FOCUSED_WINDOW).put(escStroke, "cancelPickMode");
-		getActionMap().put("cancelPickMode", new javax.swing.AbstractAction()
+		getActionMap().put("cancelPickMode", new AbstractAction()
 		{
 			@Override
-			public void actionPerformed(java.awt.event.ActionEvent e)
+			public void actionPerformed(ActionEvent e)
 			{
 				if (!pendingRelationSourceIds.isEmpty()) exitRelationMode();
 				else if (pendingMoveSourceId != null) exitMoveMode();
@@ -624,7 +673,7 @@ public class GoalPanel extends PluginPanel
 	 */
 	public void setShareSupport(
 		com.goalplanner.share.ShareCodec shareCodec,
-		java.util.function.Supplier<String> playerName,
+		Supplier<String> playerName,
 		com.goalplanner.persistence.SavedPlanStore savedPlanStore)
 	{
 		this.shareCodec = shareCodec;
@@ -658,12 +707,12 @@ public class GoalPanel extends PluginPanel
 
 	// Loadout Lab link-in - state supplier + search callback; null until
 	// the plugin wires it (dialog-only tests leave it unset, hiding the item).
-	private java.util.function.Supplier<LoadoutLabState> loadoutLabStateSupplier;
-	private java.util.function.Consumer<String> searchLoadoutLabCallback;
+	private Supplier<LoadoutLabState> loadoutLabStateSupplier;
+	private Consumer<String> searchLoadoutLabCallback;
 
 	public void setLoadoutLabSupport(
-		java.util.function.Supplier<LoadoutLabState> loadoutLabState,
-		java.util.function.Consumer<String> searchLoadoutLab)
+		Supplier<LoadoutLabState> loadoutLabState,
+		Consumer<String> searchLoadoutLab)
 	{
 		this.loadoutLabStateSupplier = loadoutLabState;
 		this.searchLoadoutLabCallback = searchLoadoutLab;
@@ -691,10 +740,10 @@ public class GoalPanel extends PluginPanel
 	 *  dialog actions that read live Client state (skill levels, quest states,
 	 *  the quest DB table) - those reads ASSERT the client thread and silently
 	 *  die on the EDT (see CONTRIBUTING "EDT vs client thread"). */
-	private java.util.function.Consumer<Runnable> clientThreadExec = Runnable::run;
+	private Consumer<Runnable> clientThreadExec = Runnable::run;
 
 	/** Wire the client-thread executor (plugin: {@code clientThread::invokeLater}). */
-	public void setClientThreadExecutor(java.util.function.Consumer<Runnable> exec)
+	public void setClientThreadExecutor(Consumer<Runnable> exec)
 	{
 		this.clientThreadExec = exec != null ? exec : Runnable::run;
 		dialogFactory.setClientThreadExecutor(this.clientThreadExec);
@@ -736,7 +785,7 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** Copy a share code for the given goals to the clipboard. */
-	public void copyGoalsShareCode(java.util.List<String> goalIds)
+	public void copyGoalsShareCode(List<String> goalIds)
 	{
 		if (shareCodec == null)
 		{
@@ -782,7 +831,7 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** Bookmark a selection's share code into the Saved Plans library. */
-	public void saveGoalsPlan(java.util.List<String> goalIds)
+	public void saveGoalsPlan(List<String> goalIds)
 	{
 		if (!isSavedPlansAvailable())
 		{
@@ -813,7 +862,7 @@ public class GoalPanel extends PluginPanel
 	 * O(dirtyIds) - looks up each card in the map and refreshes its view.
 	 * Falls back to full rebuild if a card isn't found (goal was added/removed).
 	 */
-	public void refreshProgress(java.util.Set<String> dirtyGoalIds)
+	public void refreshProgress(Set<String> dirtyGoalIds)
 	{
 		if (dirtyGoalIds == null || dirtyGoalIds.isEmpty()) return;
 		for (String goalId : dirtyGoalIds)
@@ -838,8 +887,8 @@ public class GoalPanel extends PluginPanel
 
 	public void refreshSelection()
 	{
-		java.util.Set<String> selected = api.getSelectedGoalIds();
-		for (java.util.Map.Entry<String, GoalCard> entry : cardMap.entrySet())
+		Set<String> selected = api.getSelectedGoalIds();
+		for (Map.Entry<String, GoalCard> entry : cardMap.entrySet())
 		{
 			entry.getValue().setSelected(selected.contains(entry.getKey()));
 		}
@@ -863,7 +912,7 @@ public class GoalPanel extends PluginPanel
 		{
 			infoNoticeTimer.stop();
 		}
-		infoNoticeTimer = new javax.swing.Timer(6_000, e -> hideInfoNotice());
+		infoNoticeTimer = new Timer(6_000, e -> hideInfoNotice());
 		infoNoticeTimer.setRepeats(false);
 		infoNoticeTimer.start();
 	}
@@ -887,7 +936,7 @@ public class GoalPanel extends PluginPanel
 	 *  silently. */
 	private void armCreateReveal()
 	{
-		java.util.Set<String> selected = api.getSelectedGoalIds();
+		Set<String> selected = api.getSelectedGoalIds();
 		if (selected.size() == 1)
 		{
 			pendingRevealGoalId = selected.iterator().next();
@@ -969,7 +1018,7 @@ public class GoalPanel extends PluginPanel
 	/** True when the section has goals and every one of them is selected. */
 	private boolean isAllSelectedInSection(String sectionId)
 	{
-		java.util.Set<String> selected = api.getSelectedGoalIds();
+		Set<String> selected = api.getSelectedGoalIds();
 		boolean any = false;
 		for (com.goalplanner.api.GoalView v : api.queryAllGoals())
 		{
@@ -1041,7 +1090,7 @@ public class GoalPanel extends PluginPanel
 		return sb.toString();
 	}
 
-	private static void appendTagSig(StringBuilder sb, java.util.List<com.goalplanner.api.TagView> tags)
+	private static void appendTagSig(StringBuilder sb, List<com.goalplanner.api.TagView> tags)
 	{
 		sb.append("t[");
 		if (tags != null)
@@ -1055,7 +1104,7 @@ public class GoalPanel extends PluginPanel
 		sb.append(']');
 	}
 
-	private static void appendRelSig(StringBuilder sb, java.util.List<com.goalplanner.api.GoalView.RelationView> rels)
+	private static void appendRelSig(StringBuilder sb, List<com.goalplanner.api.GoalView.RelationView> rels)
 	{
 		sb.append("r[");
 		if (rels != null)
@@ -1099,20 +1148,20 @@ public class GoalPanel extends PluginPanel
 		// the priority change). This is a known limitation of the session 2
 		// checkpoint; topo-aware reordering is a follow-up.
 		boolean filterActive = searchFilter != null && !searchFilter.trim().isEmpty();
-		java.util.List<com.goalplanner.api.GoalView> goalViews = filterActive
+		List<com.goalplanner.api.GoalView> goalViews = filterActive
 			? api.searchGoals(searchFilter) : api.queryAllGoals();
-		java.util.List<com.goalplanner.api.SectionView> sectionViews = api.queryAllSections();
+		List<com.goalplanner.api.SectionView> sectionViews = api.queryAllSections();
 
 		// Flat-priority index lookup for arrow-button bounds.
-		java.util.Map<String, Integer> flatIndexById = new java.util.HashMap<>();
+		Map<String, Integer> flatIndexById = new HashMap<>();
 		for (int i = 0; i < goalViews.size(); i++)
 		{
 			flatIndexById.put(goalViews.get(i).id, i);
 		}
-		java.util.Set<String> visibleIds = flatIndexById.keySet();
+		Set<String> visibleIds = flatIndexById.keySet();
 
 		// Batch topo-sort all sections in one pass.
-		java.util.Map<String, java.util.List<com.goalplanner.api.GoalView>> allTopoOrders =
+		Map<String, List<com.goalplanner.api.GoalView>> allTopoOrders =
 			api.queryAllGoalsTopologicallySorted();
 
 		// "New Section" drop target - only rendered while move-pick mode is
@@ -1124,11 +1173,11 @@ public class GoalPanel extends PluginPanel
 			JLabel newSectionRow = new JLabel("+ New Section");
 			newSectionRow.setForeground(new Color(0x33, 0x99, 0xFF));
 			newSectionRow.setFont(PanelFonts.derive(Font.BOLD, 12f));
-			newSectionRow.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-				javax.swing.BorderFactory.createDashedBorder(new Color(0x33, 0x99, 0xFF), 1.5f, 4f, 2f, true),
+			newSectionRow.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createDashedBorder(new Color(0x33, 0x99, 0xFF), 1.5f, 4f, 2f, true),
 				new EmptyBorder(8, 10, 8, 10)));
 			newSectionRow.setAlignmentX(Component.CENTER_ALIGNMENT);
-			newSectionRow.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+			newSectionRow.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 			newSectionRow.addMouseListener(new MouseAdapter()
 			{
 				@Override
@@ -1157,11 +1206,11 @@ public class GoalPanel extends PluginPanel
 			int sectionCount = (sectionStart == -1) ? 0 : (sectionEnd - sectionStart + 1);
 
 			// Use pre-computed topo order for this section.
-			java.util.List<com.goalplanner.api.GoalView> topoOrder =
-				allTopoOrders.getOrDefault(section.id, java.util.Collections.emptyList());
+			List<com.goalplanner.api.GoalView> topoOrder =
+				allTopoOrders.getOrDefault(section.id, Collections.emptyList());
 			if (filterActive)
 			{
-				java.util.List<com.goalplanner.api.GoalView> filtered = new java.util.ArrayList<>();
+				List<com.goalplanner.api.GoalView> filtered = new ArrayList<>();
 				for (com.goalplanner.api.GoalView v : topoOrder)
 				{
 					if (visibleIds.contains(v.id)) filtered.add(v);
@@ -1259,19 +1308,19 @@ public class GoalPanel extends PluginPanel
 			boolean nestedView = section.nestedOverride != null
 				? section.nestedOverride
 				: config.showDependenciesIndented();
-			java.util.Set<String> sectionGoalIdSet = null;
+			Set<String> sectionGoalIdSet = null;
 			com.goalplanner.ui.nest.NestIndentAssigner.Result nestResult = null;
 			if (nestedView)
 			{
-				sectionGoalIdSet = new java.util.HashSet<>();
+				sectionGoalIdSet = new HashSet<>();
 				for (com.goalplanner.api.GoalView v : topoOrder) sectionGoalIdSet.add(v.id);
 
 				// In-section direct prereq edges for any goal id.
-				final java.util.Set<String> inSection = sectionGoalIdSet;
-				java.util.function.Function<String, java.util.List<String>> inSectionEdges = gid ->
+				final Set<String> inSection = sectionGoalIdSet;
+				Function<String, List<String>> inSectionEdges = gid ->
 				{
 					Goal gg = goalStore.findGoalById(gid);
-					java.util.List<String> edges = new java.util.ArrayList<>();
+					List<String> edges = new ArrayList<>();
 					if (gg != null)
 					{
 						for (String rid : gg.getRequiredGoalIds())
@@ -1283,13 +1332,13 @@ public class GoalPanel extends PluginPanel
 				};
 				// Completed goals sink to the bottom, not nested - but chains must
 				// survive THROUGH them: A → B(done) → C still nests A under C.
-				java.util.function.Predicate<String> sunk = gid ->
+				Predicate<String> sunk = gid ->
 				{
 					Goal gg = goalStore.findGoalById(gid);
 					return gg == null || gg.isComplete();
 				};
-				java.util.List<com.goalplanner.ui.nest.NestIndentAssigner.Node> nestNodes =
-					new java.util.ArrayList<>();
+				List<com.goalplanner.ui.nest.NestIndentAssigner.Node> nestNodes =
+					new ArrayList<>();
 				for (com.goalplanner.api.GoalView v : topoOrder)
 				{
 					if (sunk.test(v.id)) continue;
@@ -1303,7 +1352,7 @@ public class GoalPanel extends PluginPanel
 
 			// Goals that are a nest PARENT (some visible goal nests under them) -
 			// these get a collapse chevron + right-click toggle.
-			final java.util.Set<String> nestParents = new java.util.HashSet<>();
+			final Set<String> nestParents = new HashSet<>();
 			if (nestResult != null)
 			{
 				for (String gid : nestResult.ordered)
@@ -1384,12 +1433,12 @@ public class GoalPanel extends PluginPanel
 				// Relation-pick (orange) / move-pick (blue) source highlight.
 				if (relSource)
 				{
-					card.setBorder(javax.swing.BorderFactory.createLineBorder(
+					card.setBorder(BorderFactory.createLineBorder(
 						new Color(0xFF, 0x99, 0x33), 2));
 				}
 				else if (moveSource)
 				{
-					card.setBorder(javax.swing.BorderFactory.createLineBorder(
+					card.setBorder(BorderFactory.createLineBorder(
 						new Color(0x33, 0x99, 0xFF), 2));
 				}
 				}
@@ -1420,8 +1469,8 @@ public class GoalPanel extends PluginPanel
 			// its nested position on the next rebuild.
 			if (nestedView)
 			{
-				java.util.List<com.goalplanner.ui.nest.SectionNestContainer.Row> nestRows =
-					new java.util.ArrayList<>();
+				List<com.goalplanner.ui.nest.SectionNestContainer.Row> nestRows =
+					new ArrayList<>();
 				if (nestResult != null)
 				{
 					int hideBelowLevel = Integer.MAX_VALUE;
@@ -1437,11 +1486,11 @@ public class GoalPanel extends PluginPanel
 						if (extra > 0)
 						{
 							String primaryId = nestResult.primaryParent.get(gid);
-							java.util.List<String> extraNames = new java.util.ArrayList<>();
+							List<String> extraNames = new ArrayList<>();
 							Goal cg = goalStore.findGoalById(gid);
 							if (cg != null)
 							{
-								java.util.List<String> all = new java.util.ArrayList<>(cg.getRequiredGoalIds());
+								List<String> all = new ArrayList<>(cg.getRequiredGoalIds());
 								all.addAll(cg.getOrRequiredGoalIds());
 								for (String rid : all)
 								{
@@ -1524,7 +1573,7 @@ public class GoalPanel extends PluginPanel
 		// reveal can scroll its card into view.
 		if (pendingRevealGoalId != null)
 		{
-			javax.swing.SwingUtilities.invokeLater(this::maybeRevealPendingCreate);
+			SwingUtilities.invokeLater(this::maybeRevealPendingCreate);
 		}
 		long elapsed = System.currentTimeMillis() - start;
 		if (elapsed > 50)
@@ -1564,7 +1613,7 @@ public class GoalPanel extends PluginPanel
 	 */
 	void enterRelationMode(String sourceGoalId, boolean sourceRequiresTarget)
 	{
-		enterRelationMode(java.util.Collections.singleton(sourceGoalId), sourceRequiresTarget);
+		enterRelationMode(Collections.singleton(sourceGoalId), sourceRequiresTarget);
 	}
 
 	/**
@@ -1572,7 +1621,7 @@ public class GoalPanel extends PluginPanel
 	 * clicked target on completion. Cycle / duplicate rejections fail
 	 * open per source - others still succeed.
 	 */
-	void enterRelationMode(java.util.Set<String> sourceGoalIds, boolean sourceRequiresTarget)
+	void enterRelationMode(Set<String> sourceGoalIds, boolean sourceRequiresTarget)
 	{
 		if (sourceGoalIds == null || sourceGoalIds.isEmpty()) return;
 		// Pick modes are about a single source set. Any pre-existing multi-
@@ -1630,7 +1679,7 @@ public class GoalPanel extends PluginPanel
 			exitRelationMode();
 			return;
 		}
-		java.util.List<String> sources = new java.util.ArrayList<>(pendingRelationSourceIds);
+		List<String> sources = new ArrayList<>(pendingRelationSourceIds);
 		boolean requires = pendingRelationSourceRequiresTarget;
 		int attempted = sources.size();
 		int succeeded = 0;
@@ -1722,7 +1771,7 @@ public class GoalPanel extends PluginPanel
 		// off-by-one when source is above target, making the move a no-op.
 		// With source counted, the move is symmetric: source always ends
 		// up at target's row, and target shifts to make room.
-		java.util.List<com.goalplanner.api.GoalView> all = api.queryAllGoals();
+		List<com.goalplanner.api.GoalView> all = api.queryAllGoals();
 		int positionInSection = 0;
 		for (com.goalplanner.api.GoalView v : all)
 		{
@@ -1828,10 +1877,10 @@ public class GoalPanel extends PluginPanel
 				boolean shift = e.isShiftDown();
 				if (shift && selectionAnchorId != null && !cmdCtrl)
 				{
-					java.util.Set<String> range = computeRangeSelection(selectionAnchorId, goalId);
+					Set<String> range = computeRangeSelection(selectionAnchorId, goalId);
 					if (!range.isEmpty())
 					{
-						java.util.Set<String> current = new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+						Set<String> current = new LinkedHashSet<>(api.getSelectedGoalIds());
 						if (isSelected)
 						{
 							// Shift-click on selected goal: deselect the range.
@@ -1856,7 +1905,7 @@ public class GoalPanel extends PluginPanel
 				else
 				{
 					if (isSelected) api.clearGoalSelection();
-					else api.replaceGoalSelection(java.util.Collections.singleton(goalId));
+					else api.replaceGoalSelection(Collections.singleton(goalId));
 					selectionAnchorId = goalId;
 				}
 			}
@@ -1879,10 +1928,10 @@ public class GoalPanel extends PluginPanel
 	{
 		try
 		{
-			if (java.awt.Desktop.isDesktopSupported()
-				&& java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE))
+			if (Desktop.isDesktopSupported()
+				&& Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
 			{
-				java.awt.Desktop.getDesktop().browse(java.net.URI.create(DISCORD_URL));
+				Desktop.getDesktop().browse(URI.create(DISCORD_URL));
 			}
 			else
 			{
@@ -1930,13 +1979,13 @@ public class GoalPanel extends PluginPanel
 	 * RENDERED card order (topo-sorted per section), not flat priority.
 	 * Uses the cardMap insertion order which matches the visual layout.
 	 */
-	private java.util.Set<String> computeRangeSelection(String anchorId, String clickedId)
+	private Set<String> computeRangeSelection(String anchorId, String clickedId)
 	{
 		// Walk the rendered card order (cardMap is LinkedHashMap-like via
 		// insertion order during rebuild). Use goalListPanel's components
 		// to get the actual visual order.
-		java.util.List<String> renderedOrder = new java.util.ArrayList<>();
-		for (java.awt.Component comp : goalListPanel.getComponents())
+		List<String> renderedOrder = new ArrayList<>();
+		for (Component comp : goalListPanel.getComponents())
 		{
 			if (comp instanceof GoalCard)
 			{
@@ -1951,9 +2000,9 @@ public class GoalPanel extends PluginPanel
 			if (id.equals(anchorId)) aIdx = i;
 			if (id.equals(clickedId)) bIdx = i;
 		}
-		if (aIdx < 0 || bIdx < 0) return java.util.Collections.emptySet();
+		if (aIdx < 0 || bIdx < 0) return Collections.emptySet();
 		int lo = Math.min(aIdx, bIdx), hi = Math.max(aIdx, bIdx);
-		java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+		LinkedHashSet<String> out = new LinkedHashSet<>();
 		for (int i = lo; i <= hi; i++) out.add(renderedOrder.get(i));
 		return out;
 	}
@@ -2078,7 +2127,7 @@ public class GoalPanel extends PluginPanel
 		// pattern as the tag surfaces. Drops itself if the goal vanished.
 		if (dockReqRemoveTarget != null)
 		{
-			java.util.List<String> reqEdges = dockReqDependents
+			List<String> reqEdges = dockReqDependents
 				? api.getDependents(dockReqRemoveTarget)
 				: api.getRequirements(dockReqRemoveTarget);
 			if (goalStore.findGoalById(dockReqRemoveTarget) == null || reqEdges.isEmpty())
@@ -2241,8 +2290,8 @@ public class GoalPanel extends PluginPanel
 			dockEditGroup = null;
 		}
 
-		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> top = new java.util.ArrayList<>();
-		java.util.List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new java.util.ArrayList<>();
+		List<com.goalplanner.ui.dock.ActionDock.Item> top = new ArrayList<>();
+		List<com.goalplanner.ui.dock.ActionDock.Item> bottom = new ArrayList<>();
 		String hint = null;
 		// Optional full-width lead button above the strips (MULTI "Deselect (N)").
 		com.goalplanner.ui.dock.ActionDock.Item lead = null;
@@ -2288,8 +2337,8 @@ public class GoalPanel extends PluginPanel
 			{
 				int n = ctx.getCount();
 				hint = n + " selected";
-				java.util.Set<String> ids =
-					new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+				Set<String> ids =
+					new LinkedHashSet<>(api.getSelectedGoalIds());
 				buildMultiDock(ids, top, bottom);
 				// Full-width "Deselect (N)" pinned at the top of the multi surface.
 				lead = new com.goalplanner.ui.dock.ActionDock.Item("Deselect (" + n + ")",
@@ -2466,8 +2515,8 @@ public class GoalPanel extends PluginPanel
 	 * grouped by separators and reached by horizontal scroll when it overflows.
 	 */
 	private void buildGoalDock(Goal g,
-		java.util.List<ActionDock.Item> top,
-		java.util.List<ActionDock.Item> bottom)
+		List<ActionDock.Item> top,
+		List<ActionDock.Item> bottom)
 	{
 		final String gid = g.getId();
 		final GoalType type = g.getType();
@@ -2520,7 +2569,7 @@ public class GoalPanel extends PluginPanel
 		// Tags.
 		bottom.add(sep("tag"));
 		bottom.add(item("Add tag", "Add a tag to this goal", () -> openTagAddSurfaceForGoal(gid)));
-		java.util.List<Tag> removable = removableTagsFor(g);
+		List<Tag> removable = removableTagsFor(g);
 		if (!removable.isEmpty())
 		{
 			bottom.add(item("Drop tags", "Remove tags from this goal",
@@ -2558,13 +2607,13 @@ public class GoalPanel extends PluginPanel
 		// Move / duplicate / restore.
 		bottom.add(sep("organize"));
 		bottom.add(item("Move to section", "Move this goal to another section",
-			() -> openMoveSurface(MoveMode.MOVE, java.util.Collections.singletonList(gid))));
+			() -> openMoveSurface(MoveMode.MOVE, Collections.singletonList(gid))));
 		bottom.add(item("Copy to section", "Duplicate this goal into another section",
-			() -> openMoveSurface(MoveMode.COPY, java.util.Collections.singletonList(gid))));
+			() -> openMoveSurface(MoveMode.COPY, Collections.singletonList(gid))));
 		if (api.isGoalOverridden(gid))
 		{
 			bottom.add(item("Restore defaults", "Reset tags and color to their defaults",
-				() -> api.bulkRestoreDefaults(java.util.Collections.singleton(gid))));
+				() -> api.bulkRestoreDefaults(Collections.singleton(gid))));
 		}
 
 		// Loadout Lab link-in - BOSS goals only, install-aware (mirrors the menu).
@@ -2589,7 +2638,7 @@ public class GoalPanel extends PluginPanel
 		// Share this single goal as a paste-anywhere code (inline Share surface).
 		if (isShareAvailable())
 		{
-			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
+			final List<String> shareIds = Collections.singletonList(gid);
 			bottom.add(sep("share"));
 			bottom.add(item("Share", "Copy or save a share code for this goal",
 				() -> openShareForGoals(shareIds)));
@@ -2606,12 +2655,12 @@ public class GoalPanel extends PluginPanel
 	 * menu: bulk lifecycle in the top row, bulk organize (move/duplicate, tags,
 	 * restore, share) in the bottom row.
 	 */
-	private void buildMultiDock(java.util.Set<String> ids,
-		java.util.List<ActionDock.Item> top,
-		java.util.List<ActionDock.Item> bottom)
+	private void buildMultiDock(Set<String> ids,
+		List<ActionDock.Item> top,
+		List<ActionDock.Item> bottom)
 	{
-		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
-		java.util.List<Goal> goals = new ArrayList<>();
+		final LinkedHashSet<String> sel = new LinkedHashSet<>(ids);
+		List<Goal> goals = new ArrayList<>();
 		for (Goal g : goalStore.getGoals())
 		{
 			if (sel.contains(g.getId()))
@@ -2637,7 +2686,7 @@ public class GoalPanel extends PluginPanel
 		}
 		if (allCustom)
 		{
-			final java.util.List<Goal> completeTargets = new ArrayList<>(goals);
+			final List<Goal> completeTargets = new ArrayList<>(goals);
 			top.add(item("Complete", "Mark every selected goal complete (one undo)",
 				() -> {
 					api.beginCompound("Mark " + completeTargets.size() + " complete");
@@ -2655,7 +2704,7 @@ public class GoalPanel extends PluginPanel
 				}));
 		}
 		// Mark optional / required - applies to the non-completed goals.
-		final java.util.List<Goal> optionalTargets = new ArrayList<>();
+		final List<Goal> optionalTargets = new ArrayList<>();
 		for (Goal g : goals)
 		{
 			if (!g.isComplete())
@@ -2674,7 +2723,7 @@ public class GoalPanel extends PluginPanel
 			() -> api.bulkRemoveGoals(sel)));
 
 		// --- BOTTOM: bulk organize ---
-		final java.util.List<Goal> recolor = new ArrayList<>(goals);
+		final List<Goal> recolor = new ArrayList<>(goals);
 		if (!recolor.isEmpty())
 		{
 			bottom.add(sep("edit"));
@@ -2683,8 +2732,8 @@ public class GoalPanel extends PluginPanel
 		}
 
 		// Tags.
-		final java.util.List<Goal> tagAdd = new ArrayList<>(goals);
-		java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> removableOpts =
+		final List<Goal> tagAdd = new ArrayList<>(goals);
+		List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> removableOpts =
 			api.getRemovableTagsForSelection(sel);
 		if (!tagAdd.isEmpty() || !removableOpts.isEmpty())
 		{
@@ -2726,7 +2775,7 @@ public class GoalPanel extends PluginPanel
 		// Share the selection as one code (inline Share surface).
 		if (isShareAvailable())
 		{
-			final java.util.List<String> shareIds = new ArrayList<>(sel);
+			final List<String> shareIds = new ArrayList<>(sel);
 			bottom.add(sep("share"));
 			bottom.add(item("Share", "Copy or save one share code for the selected goals",
 				() -> openShareForGoals(shareIds)));
@@ -2737,7 +2786,7 @@ public class GoalPanel extends PluginPanel
 		// lead in refreshDock's MULTI case.
 	}
 
-	private void bulkSetOptional(java.util.List<Goal> targets, boolean optional)
+	private void bulkSetOptional(List<Goal> targets, boolean optional)
 	{
 		api.beginCompound("Mark " + targets.size() + (optional ? " optional" : " required"));
 		try
@@ -2760,15 +2809,15 @@ public class GoalPanel extends PluginPanel
 	/** A single-choice picker rendered as a combo prompt - the dock's stand-in
 	 *  for a menu submenu (Move to Section, Repeat period, etc.). Runs the action
 	 *  parallel to the chosen label; a cancel is a no-op. */
-	private void dockChooser(String title, java.util.List<String> labels,
-		java.util.List<Runnable> actions)
+	private void dockChooser(String title, List<String> labels,
+		List<Runnable> actions)
 	{
 		if (labels.isEmpty())
 		{
 			return;
 		}
-		Object sel = javax.swing.JOptionPane.showInputDialog(this, title, title,
-			javax.swing.JOptionPane.PLAIN_MESSAGE, null,
+		Object sel = JOptionPane.showInputDialog(this, title, title,
+			JOptionPane.PLAIN_MESSAGE, null,
 			labels.toArray(), labels.get(0));
 		if (sel == null)
 		{
@@ -2791,7 +2840,7 @@ public class GoalPanel extends PluginPanel
 			return;
 		}
 		String noun = g.getType() == GoalType.BOSS ? "kill count" : "quantity";
-		String input = javax.swing.JOptionPane.showInputDialog(this,
+		String input = JOptionPane.showInputDialog(this,
 			"New target " + noun + " for " + g.getName() + ":",
 			String.valueOf(g.getTargetValue()));
 		if (input == null)
@@ -2813,7 +2862,7 @@ public class GoalPanel extends PluginPanel
 
 	private void dockChangeName(Goal g)
 	{
-		String input = javax.swing.JOptionPane.showInputDialog(this, "New name:", g.getName());
+		String input = JOptionPane.showInputDialog(this, "New name:", g.getName());
 		if (input != null && !input.trim().isEmpty())
 		{
 			api.editCustomGoal(g.getId(), input.trim(), null);
@@ -2822,7 +2871,7 @@ public class GoalPanel extends PluginPanel
 
 	private void dockChangeDescription(Goal g)
 	{
-		String input = javax.swing.JOptionPane.showInputDialog(this, "New description:",
+		String input = JOptionPane.showInputDialog(this, "New description:",
 			g.getDescription() != null ? g.getDescription() : "");
 		if (input != null)
 		{
@@ -2832,15 +2881,15 @@ public class GoalPanel extends PluginPanel
 
 	/** Tags removable from a goal: any tag for CUSTOM, else only user-added
 	 *  (non-default) tags. Mirrors the single-item menu's rule. */
-	private java.util.List<Tag> removableTagsFor(Goal g)
+	private List<Tag> removableTagsFor(Goal g)
 	{
-		java.util.List<Tag> removable = new ArrayList<>();
+		List<Tag> removable = new ArrayList<>();
 		if (g.getTagIds() == null || g.getTagIds().isEmpty())
 		{
 			return removable;
 		}
-		java.util.List<String> defaults = g.getDefaultTagIds() != null
-			? g.getDefaultTagIds() : java.util.Collections.emptyList();
+		List<String> defaults = g.getDefaultTagIds() != null
+			? g.getDefaultTagIds() : Collections.emptyList();
 		for (String tagId : g.getTagIds())
 		{
 			Tag t = goalStore.findTag(tagId);
@@ -2910,9 +2959,9 @@ public class GoalPanel extends PluginPanel
 		final String gid = g.getId();
 		final boolean diary = g.getType() == GoalType.DIARY;
 		final boolean boss = g.getType() == GoalType.BOSS;
-		java.util.List<String> labels = java.util.Arrays.asList(
+		List<String> labels = Arrays.asList(
 			"Incomplete only", "All (whole tree)");
-		java.util.List<Runnable> actions = java.util.Arrays.asList(
+		List<Runnable> actions = Arrays.asList(
 			() -> seedReqsOnClientThread(gid, false, diary, boss),
 			() -> seedReqsOnClientThread(gid, true, diary, boss));
 		dockChooser("Add requirements to this section", labels, actions);
@@ -2966,16 +3015,16 @@ public class GoalPanel extends PluginPanel
 		return null;
 	}
 
-	private java.util.List<RepeatPeriod> derivePeriods()
+	private List<RepeatPeriod> derivePeriods()
 	{
-		return java.util.Arrays.asList(
+		return Arrays.asList(
 			RepeatPeriod.DAILY, RepeatPeriod.WEEKLY, RepeatPeriod.MONTHLY);
 	}
 
 	private void dockSetCustomRepeat(Goal g)
 	{
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		for (RepeatPeriod period : RepeatPeriod.values())
 		{
 			final RepeatPeriod p = period;
@@ -2989,8 +3038,8 @@ public class GoalPanel extends PluginPanel
 	 *  per-period amount. Mirrors the menu's Repeats / Amount submenus. */
 	private void dockEditRepeat(Goal g)
 	{
-		java.util.List<String> labels = java.util.Arrays.asList("Change how often", "Change how much");
-		java.util.List<Runnable> actions = java.util.Arrays.asList(
+		List<String> labels = Arrays.asList("Change how often", "Change how much");
+		List<Runnable> actions = Arrays.asList(
 			() -> dockEditRepeatPeriod(g),
 			() -> dockEditRepeatAmount(g));
 		dockChooser("Repeat", labels, actions);
@@ -2998,8 +3047,8 @@ public class GoalPanel extends PluginPanel
 
 	private void dockEditRepeatPeriod(Goal g)
 	{
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		for (RepeatPeriod period : derivePeriods())
 		{
 			final RepeatPeriod p = period;
@@ -3014,8 +3063,8 @@ public class GoalPanel extends PluginPanel
 		boolean skill = g.getType() == GoalType.SKILL;
 		int[] sizes = skill ? DOCK_XP_CHUNKS : DOCK_KILL_CHUNKS;
 		String unit = skill ? "XP" : "kills";
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		for (int size : sizes)
 		{
 			final int s = size;
@@ -3072,16 +3121,16 @@ public class GoalPanel extends PluginPanel
 	{
 		boolean skill = g.getType() == GoalType.SKILL;
 		final String unit = skill ? "XP" : "kills";
-		java.util.List<String> periodLabels = new ArrayList<>();
-		java.util.List<Runnable> periodActions = new ArrayList<>();
+		List<String> periodLabels = new ArrayList<>();
+		List<Runnable> periodActions = new ArrayList<>();
 		for (RepeatPeriod period : derivePeriods())
 		{
 			final RepeatPeriod p = period;
 			periodLabels.add(period.getLabel());
 			periodActions.add(() -> {
 				int[] sizes = skill ? DOCK_XP_CHUNKS : DOCK_KILL_CHUNKS;
-				java.util.List<String> labels = new ArrayList<>();
-				java.util.List<Runnable> actions = new ArrayList<>();
+				List<String> labels = new ArrayList<>();
+				List<Runnable> actions = new ArrayList<>();
 				for (int size : sizes)
 				{
 					final int s = size;
@@ -3110,7 +3159,7 @@ public class GoalPanel extends PluginPanel
 	 *  slots); pick which one to farm, then derive as usual. */
 	private void dockDeriveItemRepeat(Goal g)
 	{
-		java.util.List<com.goalplanner.data.ItemActivityResolver.Activity> activities =
+		List<com.goalplanner.data.ItemActivityResolver.Activity> activities =
 			com.goalplanner.data.ItemActivityResolver.resolve(g.getItemId());
 		if (activities.isEmpty())
 		{
@@ -3121,8 +3170,8 @@ public class GoalPanel extends PluginPanel
 			dockDeriveRepeat(g, activities.get(0).getName());
 			return;
 		}
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		for (com.goalplanner.data.ItemActivityResolver.Activity a : activities)
 		{
 			final String name = a.getName();
@@ -3136,9 +3185,9 @@ public class GoalPanel extends PluginPanel
 	 *  Returns null on cancel or invalid input (with a nudge on invalid). */
 	private Integer promptChunk(String unit)
 	{
-		String input = javax.swing.JOptionPane.showInputDialog(this,
+		String input = JOptionPane.showInputDialog(this,
 			"How much " + unit + " per period?", "Repeatable goal",
-			javax.swing.JOptionPane.PLAIN_MESSAGE);
+			JOptionPane.PLAIN_MESSAGE);
 		if (input == null)
 		{
 			return null;
@@ -3151,16 +3200,16 @@ public class GoalPanel extends PluginPanel
 		}
 		catch (NumberFormatException ex)
 		{
-			javax.swing.JOptionPane.showMessageDialog(this,
+			JOptionPane.showMessageDialog(this,
 				"Enter a whole number, for example 300000.",
-				"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				"Repeatable goal", JOptionPane.WARNING_MESSAGE);
 			return null;
 		}
 		if (chunk <= 0)
 		{
-			javax.swing.JOptionPane.showMessageDialog(this,
+			JOptionPane.showMessageDialog(this,
 				"Enter an amount greater than zero.",
-				"Repeatable goal", javax.swing.JOptionPane.WARNING_MESSAGE);
+				"Repeatable goal", JOptionPane.WARNING_MESSAGE);
 			return null;
 		}
 		return chunk;
@@ -3170,9 +3219,9 @@ public class GoalPanel extends PluginPanel
 
 	/** Prompt for a new section name; on a non-blank name that creates cleanly,
 	 *  run the action with the new section id. Shared by move/duplicate. */
-	private void promptNewSectionThen(java.util.function.Consumer<String> action)
+	private void promptNewSectionThen(Consumer<String> action)
 	{
-		String input = javax.swing.JOptionPane.showInputDialog(this, "New section name:", "");
+		String input = JOptionPane.showInputDialog(this, "New section name:", "");
 		if (input != null && !input.trim().isEmpty())
 		{
 			String newId = api.createSection(input.trim());
@@ -3185,10 +3234,10 @@ public class GoalPanel extends PluginPanel
 
 	private void dockMoveToSection(Goal g)
 	{
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		boolean goalInDefault = false;
-		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
 		{
 			if (sv.builtIn)
@@ -3208,7 +3257,7 @@ public class GoalPanel extends PluginPanel
 		if (!goalInDefault)
 		{
 			labels.add("Default (Incomplete / Completed)");
-			actions.add(() -> api.moveGoalsToDefault(java.util.Collections.singletonList(g.getId())));
+			actions.add(() -> api.moveGoalsToDefault(Collections.singletonList(g.getId())));
 		}
 		for (com.goalplanner.api.SectionView dest : destinations)
 		{
@@ -3223,11 +3272,11 @@ public class GoalPanel extends PluginPanel
 
 	private void dockDuplicateToSection(Goal g)
 	{
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		String defaultIncompleteId = null;
 		boolean goalInDefault = false;
-		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
 		{
 			if ("INCOMPLETE".equals(sv.kind))
@@ -3253,29 +3302,29 @@ public class GoalPanel extends PluginPanel
 			final String defId = defaultIncompleteId;
 			labels.add("Default (Incomplete / Completed)");
 			actions.add(() -> api.duplicateGoalsToSection(
-				java.util.Collections.singletonList(g.getId()), defId));
+				Collections.singletonList(g.getId()), defId));
 		}
 		for (com.goalplanner.api.SectionView dest : destinations)
 		{
 			final String destId = dest.id;
 			labels.add(dest.name);
 			actions.add(() -> api.duplicateGoalsToSection(
-				java.util.Collections.singletonList(g.getId()), destId));
+				Collections.singletonList(g.getId()), destId));
 		}
 		labels.add("New section...");
 		actions.add(() -> promptNewSectionThen(newId -> api.duplicateGoalsToSection(
-			java.util.Collections.singletonList(g.getId()), newId)));
+			Collections.singletonList(g.getId()), newId)));
 		dockChooser("Duplicate to section", labels, actions);
 	}
 
-	private void dockBulkMoveToSection(java.util.List<Goal> goals, java.util.Set<String> ids)
+	private void dockBulkMoveToSection(List<Goal> goals, Set<String> ids)
 	{
-		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		final LinkedHashSet<String> sel = new LinkedHashSet<>(ids);
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		String defaultIncompleteId = null;
 		String defaultCompletedId = null;
-		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if ("INCOMPLETE".equals(sv.kind))
@@ -3287,7 +3336,7 @@ public class GoalPanel extends PluginPanel
 				defaultCompletedId = sv.id;
 			}
 		}
-		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if (sv.builtIn)
@@ -3335,14 +3384,14 @@ public class GoalPanel extends PluginPanel
 		dockChooser("Move " + goals.size() + " to section", labels, actions);
 	}
 
-	private void dockBulkDuplicateToSection(java.util.List<Goal> goals, java.util.Set<String> ids)
+	private void dockBulkDuplicateToSection(List<Goal> goals, Set<String> ids)
 	{
-		final java.util.LinkedHashSet<String> sel = new java.util.LinkedHashSet<>(ids);
-		java.util.List<String> labels = new ArrayList<>();
-		java.util.List<Runnable> actions = new ArrayList<>();
+		final LinkedHashSet<String> sel = new LinkedHashSet<>(ids);
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
 		String defaultIncompleteId = null;
 		String defaultCompletedId = null;
-		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if ("INCOMPLETE".equals(sv.kind))
@@ -3354,7 +3403,7 @@ public class GoalPanel extends PluginPanel
 				defaultCompletedId = sv.id;
 			}
 		}
-		java.util.List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
+		List<com.goalplanner.api.SectionView> destinations = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if (sv.builtIn)
@@ -3411,10 +3460,10 @@ public class GoalPanel extends PluginPanel
 	// picking a section (or Back) returns to the goal / multi surface.
 
 	/** Open the inline section picker for the given mode over the captured ids. */
-	private void openMoveSurface(MoveMode mode, java.util.Collection<String> goalIds)
+	private void openMoveSurface(MoveMode mode, Collection<String> goalIds)
 	{
 		dockMoveMode = mode;
-		dockMoveGoalIds = new java.util.LinkedHashSet<>(goalIds);
+		dockMoveGoalIds = new LinkedHashSet<>(goalIds);
 		dockMoveMounted = false;
 		refreshDock();
 	}
@@ -3438,8 +3487,8 @@ public class GoalPanel extends PluginPanel
 	 *  to notice that the selection moved under an open overlay. */
 	private String dockSelectionKey()
 	{
-		java.util.List<String> ids = new ArrayList<>(api.getSelectedGoalIds());
-		java.util.Collections.sort(ids);
+		List<String> ids = new ArrayList<>(api.getSelectedGoalIds());
+		Collections.sort(ids);
 		return String.join(",", ids) + "|" + (selectedSectionId == null ? "" : selectedSectionId);
 	}
 
@@ -3507,8 +3556,8 @@ public class GoalPanel extends PluginPanel
 		final MoveMode mode = dockMoveMode;
 		final boolean copy = mode == MoveMode.COPY || mode == MoveMode.BULK_COPY;
 		final boolean bulk = mode == MoveMode.BULK_MOVE || mode == MoveMode.BULK_COPY;
-		final java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
-		final java.util.List<Goal> goals = new ArrayList<>();
+		final LinkedHashSet<String> ids = new LinkedHashSet<>();
+		final List<Goal> goals = new ArrayList<>();
 		for (String id : dockMoveGoalIds)
 		{
 			Goal g = goalStore.findGoalById(id);
@@ -3521,7 +3570,7 @@ public class GoalPanel extends PluginPanel
 
 		String incompleteId = null;
 		String completedId = null;
-		java.util.List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
+		List<com.goalplanner.api.SectionView> allSections = api.queryAllSections();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if ("INCOMPLETE".equals(sv.kind))
@@ -3535,7 +3584,7 @@ public class GoalPanel extends PluginPanel
 		}
 
 		// Skip any user section that ALL targets already live in.
-		java.util.Set<String> exclude = new java.util.HashSet<>();
+		Set<String> exclude = new HashSet<>();
 		for (com.goalplanner.api.SectionView sv : allSections)
 		{
 			if (sv.builtIn)
@@ -3568,7 +3617,7 @@ public class GoalPanel extends PluginPanel
 			}
 		}
 
-		final java.util.function.Consumer<String> onPick = destId ->
+		final Consumer<String> onPick = destId ->
 		{
 			if (copy)
 			{
@@ -3584,7 +3633,7 @@ public class GoalPanel extends PluginPanel
 			}
 			closeMoveSurface();
 		};
-		final java.util.function.Consumer<String> onDefault = allInDefault ? null : incId ->
+		final Consumer<String> onDefault = allInDefault ? null : incId ->
 		{
 			if (copy)
 			{
@@ -3613,8 +3662,8 @@ public class GoalPanel extends PluginPanel
 
 	private void promptAddSectionFromDock()
 	{
-		String input = javax.swing.JOptionPane.showInputDialog(this,
-			"Section name:", "Add Section", javax.swing.JOptionPane.PLAIN_MESSAGE);
+		String input = JOptionPane.showInputDialog(this,
+			"Section name:", "Add Section", JOptionPane.PLAIN_MESSAGE);
 		if (input != null && !input.trim().isEmpty())
 		{
 			try
@@ -3623,8 +3672,8 @@ public class GoalPanel extends PluginPanel
 			}
 			catch (IllegalArgumentException e)
 			{
-				javax.swing.JOptionPane.showMessageDialog(this, e.getMessage(),
-					"Add Section", javax.swing.JOptionPane.WARNING_MESSAGE);
+				JOptionPane.showMessageDialog(this, e.getMessage(),
+					"Add Section", JOptionPane.WARNING_MESSAGE);
 			}
 		}
 	}
@@ -3690,7 +3739,7 @@ public class GoalPanel extends PluginPanel
 	/** Every trainable skill (Skill.values() minus OVERALL) for the skill picker
 	 *  grid - OVERALL is the account "Total Level" metric, not a skill goal. */
 	private static final net.runelite.api.Skill[] GOAL_SKILLS =
-		java.util.Arrays.stream(net.runelite.api.Skill.values())
+		Arrays.stream(net.runelite.api.Skill.values())
 			.filter(s -> s != net.runelite.api.Skill.OVERALL)
 			.toArray(net.runelite.api.Skill[]::new);
 
@@ -3911,7 +3960,7 @@ public class GoalPanel extends PluginPanel
 	 *  the dock is not focusable until it is shown). */
 	private static void autofocus(JComponent field)
 	{
-		javax.swing.SwingUtilities.invokeLater(field::requestFocusInWindow);
+		SwingUtilities.invokeLater(field::requestFocusInWindow);
 	}
 
 	/** Stash a validated goal-create and navigate to the landing-section chooser
@@ -3921,7 +3970,7 @@ public class GoalPanel extends PluginPanel
 	 *  opened this flow), the chooser is SKIPPED - the create runs straight against
 	 *  that section (the same create logic {@link #chooseSection} runs), then the
 	 *  flow returns to the type grid. The target is one-shot: it is consumed here. */
-	private void goToSectionPick(java.util.function.Consumer<String> pending)
+	private void goToSectionPick(Consumer<String> pending)
 	{
 		if (dockCreateTargetSection != null)
 		{
@@ -3954,7 +4003,7 @@ public class GoalPanel extends PluginPanel
 	 * this - they create directly on the EDT.
 	 */
 	private void clientThreadCreateInSection(String compoundDesc, String sectionId,
-		java.util.function.Supplier<String> create)
+		Supplier<String> create)
 	{
 		runOnClientThread(() ->
 		{
@@ -3976,7 +4025,7 @@ public class GoalPanel extends PluginPanel
 			// selectAfterCreate and would re-open the edit view; this invokeLater is
 			// queued strictly after that post and before the debounce fires, so by
 			// the time the rebuild runs the selection is cleared and it stays closed.
-			javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
+			SwingUtilities.invokeLater(this::finishDockCreate);
 		});
 	}
 
@@ -3984,7 +4033,7 @@ public class GoalPanel extends PluginPanel
 	 *  type grid (note 3). */
 	private void chooseSection(String sectionId)
 	{
-		java.util.function.Consumer<String> pending = dockPendingCreate;
+		Consumer<String> pending = dockPendingCreate;
 		dockPendingCreate = null;
 		if (pending != null)
 		{
@@ -4013,7 +4062,7 @@ public class GoalPanel extends PluginPanel
 		return sectionPickSurface("Choose section", "Choose a section for this goal",
 			"Back to the goal types (this goal is not created yet)",
 			"Incomplete (default)", this::chooseSection,
-			java.util.Collections.emptySet(), this::chooseSection,
+			Collections.emptySet(), this::chooseSection,
 			null, () -> navigateCreate(null));
 	}
 
@@ -4040,8 +4089,8 @@ public class GoalPanel extends PluginPanel
 	 * @param onBack       run when "< Back" is pressed
 	 */
 	private JComponent sectionPickSurface(String title, String prompt, String backTip,
-		String defaultLabel, java.util.function.Consumer<String> onDefault,
-		java.util.Set<String> exclude, java.util.function.Consumer<String> onPick,
+		String defaultLabel, Consumer<String> onDefault,
+		Set<String> exclude, Consumer<String> onPick,
 		String newSectionCompound, Runnable onBack)
 	{
 		JPanel body = formBody();
@@ -4054,7 +4103,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(4));
 
 		String incompleteId = null;
-		java.util.List<com.goalplanner.api.SectionView> userSections = new ArrayList<>();
+		List<com.goalplanner.api.SectionView> userSections = new ArrayList<>();
 		for (com.goalplanner.api.SectionView sv : api.queryAllSections())
 		{
 			if ("INCOMPLETE".equals(sv.kind))
@@ -4168,7 +4217,7 @@ public class GoalPanel extends PluginPanel
 		JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
 		row.setBackground(isDefault ? CREATE_SEL_BG : CREATE_TILE_BG);
 		row.setBorder(RoundedPaint.border(isDefault ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
-			RoundedPaint.RADIUS, new java.awt.Insets(4, 6, 4, 6)));
+			RoundedPaint.RADIUS, new Insets(4, 6, 4, 6)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -4216,12 +4265,12 @@ public class GoalPanel extends PluginPanel
 	private JComponent indicatorBar(String text, boolean createTone)
 	{
 		final Color barBg = createTone ? IND_CREATE_BG : IND_EDIT_BG;
-		JLabel bar = new JLabel(text.toUpperCase(java.util.Locale.ROOT))
+		JLabel bar = new JLabel(text.toUpperCase(Locale.ROOT))
 		{
 			@Override
-			protected void paintComponent(java.awt.Graphics g)
+			protected void paintComponent(Graphics g)
 			{
-				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+				Graphics2D g2 = (Graphics2D) g.create();
 				try
 				{
 					RoundedPaint.fillTop(g2, getWidth(), getHeight(),
@@ -4517,7 +4566,7 @@ public class GoalPanel extends PluginPanel
 					// Task 1: collapse AFTER the compound settles - the post-endCompound
 					// debounced rebuild re-selects the new goal, so the winning collapse
 					// must be queued here (after that post, before the debounce fires).
-					javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
+					SwingUtilities.invokeLater(this::finishDockCreate);
 				});
 				finishDockCreate();
 			}
@@ -4549,8 +4598,8 @@ public class GoalPanel extends PluginPanel
 		grid.setOpaque(false);
 		grid.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		java.util.List<JButton> buttons = new ArrayList<>();
-		java.util.Map<JButton, net.runelite.api.Skill> owner = new HashMap<>();
+		List<JButton> buttons = new ArrayList<>();
+		Map<JButton, net.runelite.api.Skill> owner = new HashMap<>();
 		Runnable refresh = () ->
 		{
 			for (JButton b : buttons)
@@ -4596,7 +4645,7 @@ public class GoalPanel extends PluginPanel
 		boolean leaguesProfile = com.goalplanner.persistence.GoalStore.PROFILE_LEAGUES
 			.equals(goalStore.getActiveProfile());
 		com.goalplanner.model.AccountMetric[] metrics =
-			java.util.Arrays.stream(com.goalplanner.model.AccountMetric.values())
+			Arrays.stream(com.goalplanner.model.AccountMetric.values())
 				.filter(m -> leaguesProfile || !m.isLeagues())
 				.toArray(com.goalplanner.model.AccountMetric[]::new);
 		JComboBox<com.goalplanner.model.AccountMetric> metricCombo = new JComboBox<>(metrics);
@@ -4718,7 +4767,7 @@ public class GoalPanel extends PluginPanel
 		addFormRow(body, "Description (optional)", descField);
 		// A custom goal owns its repeat state (it has no live tracker to derive
 		// from), so update mode offers the Repeatable toggle + schedule here.
-		final java.util.function.BooleanSupplier repeatApply = editing == null
+		final BooleanSupplier repeatApply = editing == null
 			? () -> true
 			: addUpdateRepeatBlock(body, editing, "Amount each period");
 
@@ -4774,8 +4823,8 @@ public class GoalPanel extends PluginPanel
 		Runnable doSearch = () ->
 		{
 			results.removeAll();
-			String q = searchField.getText().trim().toLowerCase(java.util.Locale.ROOT);
-			java.util.List<String> show;
+			String q = searchField.getText().trim().toLowerCase(Locale.ROOT);
+			List<String> show;
 			if (q.isEmpty())
 			{
 				// Default view: a SHORT curated head of common bosses, not the whole
@@ -4784,10 +4833,10 @@ public class GoalPanel extends PluginPanel
 			}
 			else
 			{
-				show = new java.util.ArrayList<>();
+				show = new ArrayList<>();
 				for (String b : bosses)
 				{
-					if (b.toLowerCase(java.util.Locale.ROOT).contains(q))
+					if (b.toLowerCase(Locale.ROOT).contains(q))
 					{
 						show.add(b);
 						if (show.size() >= 25)
@@ -5059,7 +5108,7 @@ public class GoalPanel extends PluginPanel
 					}
 					// Task 1: collapse AFTER the compound settles (see the skill
 					// repeatable path) so the debounced rebuild finds no selection.
-					javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
+					SwingUtilities.invokeLater(this::finishDockCreate);
 				});
 				finishDockCreate();
 			}
@@ -5103,7 +5152,7 @@ public class GoalPanel extends PluginPanel
 						// onGoalsChanged rebuild (which re-selects the new goal) does not
 						// re-open the edit view. chooseSection also collapses synchronously
 						// on the pick, but that runs before this create; this wins last.
-						javax.swing.SwingUtilities.invokeLater(this::finishDockCreate);
+						SwingUtilities.invokeLater(this::finishDockCreate);
 					}));
 			}
 			else
@@ -5152,14 +5201,14 @@ public class GoalPanel extends PluginPanel
 
 		// Completed set is empty until the live client read (below) fills it. Until
 		// then the Incomplete filter simply hides nothing.
-		final java.util.EnumSet<net.runelite.api.Quest> completed =
-			java.util.EnumSet.noneOf(net.runelite.api.Quest.class);
+		final EnumSet<net.runelite.api.Quest> completed =
+			EnumSet.noneOf(net.runelite.api.Quest.class);
 
 		final Runnable applyFilter = () ->
 		{
 			Object prev = questCombo.getSelectedItem();
-			javax.swing.DefaultComboBoxModel<net.runelite.api.Quest> model =
-				new javax.swing.DefaultComboBoxModel<>();
+			DefaultComboBoxModel<net.runelite.api.Quest> model =
+				new DefaultComboBoxModel<>();
 			for (net.runelite.api.Quest q : quests)
 			{
 				if (incompleteOnly.isSelected() && completed.contains(q)) continue;
@@ -5182,10 +5231,10 @@ public class GoalPanel extends PluginPanel
 		runOnClientThread(() ->
 		{
 			final Client c = this.client;
-			java.util.Set<net.runelite.api.WorldType> wt = c != null ? c.getWorldType() : null;
+			Set<net.runelite.api.WorldType> wt = c != null ? c.getWorldType() : null;
 			final boolean f2pWorld = wt != null && !wt.contains(net.runelite.api.WorldType.MEMBERS);
-			final java.util.EnumSet<net.runelite.api.Quest> done =
-				java.util.EnumSet.noneOf(net.runelite.api.Quest.class);
+			final EnumSet<net.runelite.api.Quest> done =
+				EnumSet.noneOf(net.runelite.api.Quest.class);
 			if (c != null)
 			{
 				for (net.runelite.api.Quest q : quests)
@@ -5242,7 +5291,7 @@ public class GoalPanel extends PluginPanel
 				clientThreadCreateInSection("Add quest goal", sectionId,
 					() -> withPrereqs
 						? api.addQuestGoal(quest)
-						: api.addQuestGoalWithPrereqs(quest, java.util.List.of())));
+						: api.addQuestGoalWithPrereqs(quest, List.of())));
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.QUEST, body, onAdd);
 	}
@@ -5326,7 +5375,7 @@ public class GoalPanel extends PluginPanel
 				{
 					// Same source the icon picker uses; cap the list, and it scrolls
 					// inside the bounded results pane past that cap.
-					java.util.List<net.runelite.http.api.item.ItemPrice> found =
+					List<net.runelite.http.api.item.ItemPrice> found =
 						itemManager.search(query);
 					int max = Math.min(found.size(), 15);
 					for (int i = 0; i < max; i++)
@@ -5334,8 +5383,8 @@ public class GoalPanel extends PluginPanel
 						net.runelite.http.api.item.ItemPrice it = found.get(i);
 						final int itemId = it.getId();
 						final String name = it.getName();
-						javax.swing.Icon icon = null;
-						try { icon = new javax.swing.ImageIcon(itemManager.getImage(itemId)); }
+						Icon icon = null;
+						try { icon = new ImageIcon(itemManager.getImage(itemId)); }
 						catch (Exception ignored) { }
 						results.add(tappableRow(icon, name, null, () ->
 						{
@@ -5391,10 +5440,10 @@ public class GoalPanel extends PluginPanel
 		final boolean derived = editing != null && editing.getRepeatChunk() > 0;
 
 		JPanel body = formBody();
-		javax.swing.Icon icon = null;
+		Icon icon = null;
 		if (itemId > 0)
 		{
-			try { icon = new javax.swing.ImageIcon(itemManager.getImage(itemId)); }
+			try { icon = new ImageIcon(itemManager.getImage(itemId)); }
 			catch (Exception ignored) { }
 		}
 		addFormRow(body, "Item", pickedHeader(icon, name != null ? name : "(none)"));
@@ -5409,7 +5458,7 @@ public class GoalPanel extends PluginPanel
 		{
 			addFormRow(body, "Quantity", qtyField);
 		}
-		final java.util.function.BooleanSupplier repeatApply = editing == null
+		final BooleanSupplier repeatApply = editing == null
 			? () -> true
 			: addUpdateRepeatBlock(body, editing, "Amount each period");
 
@@ -5484,7 +5533,7 @@ public class GoalPanel extends PluginPanel
 			results.removeAll();
 			selectedId[0] = -1;
 			selectedLabel.setText("No task selected");
-			java.util.List<com.goalplanner.data.WikiCaRepository.CaInfo> found =
+			List<com.goalplanner.data.WikiCaRepository.CaInfo> found =
 				api.searchCombatAchievements(query, 8);
 			if (found.isEmpty() && !query.isEmpty())
 			{
@@ -5585,16 +5634,16 @@ public class GoalPanel extends PluginPanel
 	 *  (empty-search) view (Task 6), filtered to names actually present in the data;
 	 *  topped up alphabetically to {@code n} so the default is never empty whatever
 	 *  the corpus. */
-	private java.util.List<String> recommendedBosses(String[] all, int n)
+	private List<String> recommendedBosses(String[] all, int n)
 	{
-		java.util.Set<String> present = new java.util.HashSet<>(java.util.Arrays.asList(all));
+		Set<String> present = new HashSet<>(Arrays.asList(all));
 		String[] curated = {
 			"Zulrah", "Vorkath", "Vardorvis", "Alchemical Hydra", "Cerberus",
 			"Kraken", "Giant Mole", "Abyssal Sire", "Corporeal Beast", "Nex",
 			"General Graardor", "Commander Zilyana", "Kree'arra", "K'ril Tsutsaroth",
 			"Phantom Muspah", "Duke Sucellus",
 		};
-		java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+		LinkedHashSet<String> out = new LinkedHashSet<>();
 		for (String b : curated)
 		{
 			if (present.contains(b))
@@ -5614,20 +5663,20 @@ public class GoalPanel extends PluginPanel
 			}
 			out.add(b);
 		}
-		return new java.util.ArrayList<>(out);
+		return new ArrayList<>(out);
 	}
 
 	/** A tappable result row (optional icon + label) that runs {@code onPick} when
 	 *  clicked. Used by the stepped tall pickers (boss/item), which auto-advance to
 	 *  the DETAILS step on selection, so no persistent highlight is needed - just a
 	 *  hover cue. */
-	private JComponent tappableRow(javax.swing.Icon icon, String label, String tooltip,
+	private JComponent tappableRow(Icon icon, String label, String tooltip,
 		Runnable onPick)
 	{
 		final JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(6, 0), RoundedPaint.RADIUS);
 		row.setBackground(CREATE_TILE_BG);
 		row.setBorder(RoundedPaint.border(CREATE_TILE_BG, 1,
-			RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
+			RoundedPaint.RADIUS, new Insets(3, 5, 3, 5)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -5661,7 +5710,7 @@ public class GoalPanel extends PluginPanel
 		JPanel row = new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
 		row.setBackground(CREATE_TILE_BG);
 		row.setBorder(RoundedPaint.border(CREATE_TILE_BG, 1,
-			RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
+			RoundedPaint.RADIUS, new Insets(3, 5, 3, 5)));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -5686,7 +5735,7 @@ public class GoalPanel extends PluginPanel
 					{
 						((JComponent) c).setBorder(RoundedPaint.border(
 							sel ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
-							RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
+							RoundedPaint.RADIUS, new Insets(3, 5, 3, 5)));
 					}
 				}
 				results.repaint();
@@ -5699,8 +5748,8 @@ public class GoalPanel extends PluginPanel
 	private static String capitalize(String s)
 	{
 		if (s == null || s.isEmpty()) return s;
-		return s.substring(0, 1).toUpperCase(java.util.Locale.ROOT)
-			+ s.substring(1).toLowerCase(java.util.Locale.ROOT);
+		return s.substring(0, 1).toUpperCase(Locale.ROOT)
+			+ s.substring(1).toLowerCase(Locale.ROOT);
 	}
 
 	// ----- repeatable segmented toggle (ADR-0008) -----
@@ -5740,7 +5789,7 @@ public class GoalPanel extends PluginPanel
 				b.setBackground(on ? CREATE_SEL_BG : CREATE_TILE_BG);
 				b.setForeground(on ? CREATE_PRIMARY_FG : CREATE_FG);
 				b.setBorder(RoundedPaint.border(on ? CREATE_SEL_BORDER : CREATE_TILE_BG, 1,
-					RoundedPaint.RADIUS, new java.awt.Insets(4, 10, 4, 10)));
+					RoundedPaint.RADIUS, new Insets(4, 10, 4, 10)));
 			}
 		};
 		for (int i = 0; i < labels.length; i++)
@@ -5764,7 +5813,7 @@ public class GoalPanel extends PluginPanel
 
 	/** A read-only "chosen pick" header row: optional icon + name, shown on a tall
 	 *  type's DETAILS screen so the picker's selection stays visible. */
-	private JComponent pickedHeader(javax.swing.Icon icon, String name)
+	private JComponent pickedHeader(Icon icon, String name)
 	{
 		JLabel l = new JLabel(name);
 		if (icon != null)
@@ -5788,8 +5837,8 @@ public class GoalPanel extends PluginPanel
 			com.goalplanner.model.RepeatPeriod.MONTHLY };
 		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		row.setOpaque(false);
-		java.util.List<JButton> pills = new ArrayList<>();
-		java.util.Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
+		List<JButton> pills = new ArrayList<>();
+		Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
 		Runnable refresh = () ->
 		{
 			for (JButton b : pills)
@@ -5852,7 +5901,7 @@ public class GoalPanel extends PluginPanel
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
 		JLabel title = new JLabel(update
-			? "Edit " + tileLabel(type).toLowerCase(java.util.Locale.ROOT) + " goal"
+			? "Edit " + tileLabel(type).toLowerCase(Locale.ROOT) + " goal"
 			: tileLabel(type) + " goal");
 		title.setForeground(CREATE_FG);
 		title.setFont(title.getFont().deriveFont(Font.BOLD, 12f));
@@ -5964,14 +6013,14 @@ public class GoalPanel extends PluginPanel
 			// field keeps its size. The dark surface shows through the rounded box.
 			f.setOpaque(false);
 			f.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
-				RoundedPaint.RADIUS, new java.awt.Insets(3, 5, 3, 5)));
+				RoundedPaint.RADIUS, new Insets(3, 5, 3, 5)));
 		}
 	}
 
-	private static javax.swing.DefaultListCellRenderer textRenderer(
-		java.util.function.Function<Object, String> namer)
+	private static DefaultListCellRenderer textRenderer(
+		Function<Object, String> namer)
 	{
-		return new javax.swing.DefaultListCellRenderer()
+		return new DefaultListCellRenderer()
 		{
 			@Override
 			public Component getListCellRendererComponent(JList<?> list, Object value,
@@ -6021,9 +6070,9 @@ public class GoalPanel extends PluginPanel
 
 	private void warnCreate(String msg)
 	{
-		javax.swing.JOptionPane.showMessageDialog(this, msg,
+		JOptionPane.showMessageDialog(this, msg,
 			dockEditFormGoalId != null ? "Edit goal" : "Add goal",
-			javax.swing.JOptionPane.WARNING_MESSAGE);
+			JOptionPane.WARNING_MESSAGE);
 	}
 
 	// ============================================================
@@ -6244,8 +6293,8 @@ public class GoalPanel extends PluginPanel
 		return plainSurface(inner);
 	}
 
-	private static final java.time.format.DateTimeFormatter ADDED_DATE_FMT =
-		java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy", java.util.Locale.ENGLISH);
+	private static final DateTimeFormatter ADDED_DATE_FMT =
+		DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.ENGLISH);
 
 	/** A muted "Added: &lt;date&gt;" line for the Selected view, in the player's local
 	 *  zone. Returns null when the goal predates the createdAt field (legacy goals
@@ -6257,8 +6306,8 @@ public class GoalPanel extends PluginPanel
 		{
 			return null;
 		}
-		String date = java.time.Instant.ofEpochMilli(created)
-			.atZone(java.time.ZoneId.systemDefault())
+		String date = Instant.ofEpochMilli(created)
+			.atZone(ZoneId.systemDefault())
 			.toLocalDate()
 			.format(ADDED_DATE_FMT);
 		JLabel l = new JLabel("Added: " + date);
@@ -6279,8 +6328,8 @@ public class GoalPanel extends PluginPanel
 	{
 		final String gid = g.getId();
 		final boolean complete = g.isComplete();
-		java.util.List<String> reqs = api.getRequirements(gid);
-		java.util.List<String> deps = api.getDependents(gid);
+		List<String> reqs = api.getRequirements(gid);
+		List<String> deps = api.getDependents(gid);
 		boolean hasAny = (reqs != null && !reqs.isEmpty()) || (deps != null && !deps.isEmpty());
 		// Relations can only be added while the goal is incomplete (mirrors the old
 		// Requires / Required-by chips, which were gated on !complete).
@@ -6397,7 +6446,7 @@ public class GoalPanel extends PluginPanel
 
 	/** One relation edge: a direction arrow + the related goal's name on the left,
 	 *  and a small X on the right that removes just that edge. */
-	private JComponent relationEdgeRow(javax.swing.Icon icon, String name,
+	private JComponent relationEdgeRow(Icon icon, String name,
 		String removeTip, Runnable onRemove)
 	{
 		JPanel row = new JPanel(new BorderLayout(6, 0));
@@ -6534,7 +6583,7 @@ public class GoalPanel extends PluginPanel
 	 *  value is unchanged, and an all-no-op compound records nothing at all
 	 *  (CommandHistory drops an empty buffer). {@code apply} returns false when it
 	 *  rejected the input (having warned) - the form then stays open, unsaved. */
-	private void saveGoalEdit(java.util.function.BooleanSupplier apply)
+	private void saveGoalEdit(BooleanSupplier apply)
 	{
 		boolean ok = false;
 		api.beginCompound("Edit goal");
@@ -6564,7 +6613,7 @@ public class GoalPanel extends PluginPanel
 	 * shown, so a conversion is never a silent no-op. Callers short-circuit the
 	 * "nothing actually changed" case themselves, so false always means failure.
 	 */
-	private void saveGoalEditOnClientThread(java.util.function.BooleanSupplier apply,
+	private void saveGoalEditOnClientThread(BooleanSupplier apply,
 		String warning)
 	{
 		runOnClientThread(() ->
@@ -6580,7 +6629,7 @@ public class GoalPanel extends PluginPanel
 				api.endCompound();
 			}
 			final boolean done = ok;
-			javax.swing.SwingUtilities.invokeLater(() ->
+			SwingUtilities.invokeLater(() ->
 			{
 				if (done)
 				{
@@ -6618,7 +6667,7 @@ public class GoalPanel extends PluginPanel
 	 *  pills, and the per-period amount when the goal carries a chunk. Returns a
 	 *  validate-then-apply supplier: false means the input was rejected (already
 	 *  warned) and the save must abort. */
-	private java.util.function.BooleanSupplier addUpdateRepeatBlock(JPanel body, Goal g,
+	private BooleanSupplier addUpdateRepeatBlock(JPanel body, Goal g,
 		String amountLabel)
 	{
 		final String gid = g.getId();
@@ -6905,14 +6954,14 @@ public class GoalPanel extends PluginPanel
 		// Resolve the current selection + default per return type, and the apply sink.
 		final int currentRgb;
 		final int defaultRgb;
-		final java.util.function.IntConsumer apply;
+		final IntConsumer apply;
 		switch (dockColorReturn)
 		{
 			case GOAL:
 			{
 				final String gid = dockColorTarget;
 				Goal g = goalStore.findGoalById(gid);
-				java.awt.Color c = g.getType().getColor();
+				Color c = g.getType().getColor();
 				currentRgb = g.getCustomColorRgb();
 				defaultRgb = (c.getRed() << 16) | (c.getGreen() << 8) | c.getBlue();
 				apply = rgb -> { api.setGoalColor(gid, rgb); closeColorSurface(); };
@@ -6936,8 +6985,8 @@ public class GoalPanel extends PluginPanel
 				currentRgb = -1;
 				defaultRgb = 0x3C3C3C;
 				apply = rgb -> {
-					java.util.Set<String> ids =
-						new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+					Set<String> ids =
+						new LinkedHashSet<>(api.getSelectedGoalIds());
 					api.beginCompound("Recolor " + ids.size() + " goals");
 					try
 					{
@@ -6974,8 +7023,8 @@ public class GoalPanel extends PluginPanel
 
 		JPanel grid = new JPanel(new GridLayout(3, 4, 6, 6));
 		grid.setOpaque(false);
-		grid.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
-		for (java.awt.Color preset : ColorPickerField.PRESETS)
+		grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+		for (Color preset : ColorPickerField.PRESETS)
 		{
 			int rgb = (preset.getRed() << 16) | (preset.getGreen() << 8) | preset.getBlue();
 			grid.add(colorSwatch(preset, rgb == currentRgb, () -> apply.accept(rgb)));
@@ -6992,7 +7041,7 @@ public class GoalPanel extends PluginPanel
 			def.setBorder(RoundedPaint.border(CREATE_SEL_BORDER, 2,
 				RoundedPaint.RADIUS, new Insets(4, 10, 4, 10)));
 		}
-		def.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		def.setAlignmentX(Component.LEFT_ALIGNMENT);
 		body.add(def);
 
 		// Hex input: the inline custom-color path beyond the 12 presets (a full
@@ -7004,11 +7053,11 @@ public class GoalPanel extends PluginPanel
 		final JLabel hexHint = new JLabel(" ");
 		hexHint.setForeground(CREATE_FG);
 		hexHint.setFont(hexHint.getFont().deriveFont(10f));
-		hexHint.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		hexHint.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JPanel hexRow = new JPanel(new BorderLayout(4, 0));
 		hexRow.setOpaque(false);
-		hexRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		hexRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 		JLabel hexLbl = new JLabel("Hex ");
 		hexLbl.setForeground(CREATE_FG);
 		hexLbl.setFont(hexLbl.getFont().deriveFont(11f));
@@ -7072,35 +7121,35 @@ public class GoalPanel extends PluginPanel
 
 	/** A single rounded color swatch tile filled with {@code color}. Selected tiles
 	 *  get a white 2px rounded outline; the rest a hairline. Tapping runs {@code apply}. */
-	private JComponent colorSwatch(final java.awt.Color color, boolean selected, Runnable apply)
+	private JComponent colorSwatch(final Color color, boolean selected, Runnable apply)
 	{
 		final RoundedPaint.RoundedPanel tile =
 			new RoundedPaint.RoundedPanel(new BorderLayout(), RoundedPaint.RADIUS);
 		tile.setBackground(color);
 		tile.setPreferredSize(new Dimension(26, 26));
-		tile.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
+		tile.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		tile.setToolTipText(String.format("#%02X%02X%02X",
 			color.getRed(), color.getGreen(), color.getBlue()));
-		final java.awt.Color unselBorder = new java.awt.Color(80, 80, 80);
+		final Color unselBorder = new Color(80, 80, 80);
 		tile.setBorder(RoundedPaint.border(selected ? CREATE_SEL_BORDER : unselBorder,
 			selected ? 2 : 1, RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
-		tile.addMouseListener(new java.awt.event.MouseAdapter()
+		tile.addMouseListener(new MouseAdapter()
 		{
 			@Override
-			public void mouseClicked(java.awt.event.MouseEvent e)
+			public void mouseClicked(MouseEvent e)
 			{
 				apply.run();
 			}
 
 			@Override
-			public void mouseEntered(java.awt.event.MouseEvent e)
+			public void mouseEntered(MouseEvent e)
 			{
 				tile.setBorder(RoundedPaint.border(CREATE_SEL_BORDER, 2,
 					RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
 			}
 
 			@Override
-			public void mouseExited(java.awt.event.MouseEvent e)
+			public void mouseExited(MouseEvent e)
 			{
 				tile.setBorder(RoundedPaint.border(selected ? CREATE_SEL_BORDER : unselBorder,
 					selected ? 2 : 1, RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
@@ -7234,7 +7283,7 @@ public class GoalPanel extends PluginPanel
 		chips.setOpaque(false);
 		final String gid = dockReqRemoveTarget;
 		final boolean deps = dockReqDependents;
-		java.util.List<String> edges = deps
+		List<String> edges = deps
 			? new ArrayList<>(api.getDependents(gid))
 			: new ArrayList<>(api.getRequirements(gid));
 		for (String reqId : edges)
@@ -7305,13 +7354,13 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildTagAddSurface()
 	{
 		// (label, categoryName) -> add an existing tag preserving its category.
-		final java.util.function.BiConsumer<String, String> addExisting;
+		final BiConsumer<String, String> addExisting;
 		// label -> create-and-add a brand-new tag (OTHER / user-custom category).
-		final java.util.function.Consumer<String> addNew;
+		final Consumer<String> addNew;
 		if (dockTagReturn == TagReturn.MULTI)
 		{
-			final java.util.Set<String> ids =
-				new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
+			final Set<String> ids =
+				new LinkedHashSet<>(api.getSelectedGoalIds());
 			final int n = ids.size();
 			addExisting = (label, cat) -> {
 				api.beginCompound("Add tag '" + label + "' to " + n + " goals");
@@ -7365,7 +7414,7 @@ public class GoalPanel extends PluginPanel
 		body.setOpaque(false);
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-		final java.util.List<com.goalplanner.api.TagView> all = api.queryAllTags();
+		final List<com.goalplanner.api.TagView> all = api.queryAllTags();
 
 		// ONE field drives everything (user): typing narrows the existing tags to
 		// live suggestions so you attach the tag that already exists instead of
@@ -7374,14 +7423,14 @@ public class GoalPanel extends PluginPanel
 		final JTextField field = new JTextField();
 		styleField(field);
 		field.setToolTipText("Type to find an existing tag, or create a new one");
-		field.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		field.setAlignmentX(Component.LEFT_ALIGNMENT);
 		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
 		body.add(field);
 		body.add(Box.createVerticalStrut(6));
 
 		final JPanel suggest = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
 		suggest.setOpaque(false);
-		suggest.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		suggest.setAlignmentX(Component.LEFT_ALIGNMENT);
 		body.add(suggest);
 
 		// Enter / the Create chip: an exact (case-insensitive) hit attaches THAT tag
@@ -7405,7 +7454,7 @@ public class GoalPanel extends PluginPanel
 
 		final Runnable renderSuggestions = () -> {
 			String q = field.getText() == null ? "" : field.getText().trim();
-			String needle = q.toLowerCase(java.util.Locale.ROOT);
+			String needle = q.toLowerCase(Locale.ROOT);
 			suggest.removeAll();
 			boolean exact = false;
 			int shown = 0;
@@ -7416,7 +7465,7 @@ public class GoalPanel extends PluginPanel
 				{
 					continue;
 				}
-				String hay = label.toLowerCase(java.util.Locale.ROOT);
+				String hay = label.toLowerCase(Locale.ROOT);
 				if (hay.equals(needle))
 				{
 					exact = true;
@@ -7459,11 +7508,11 @@ public class GoalPanel extends PluginPanel
 			remeasureDock();
 		};
 
-		field.getDocument().addDocumentListener(new javax.swing.event.DocumentListener()
+		field.getDocument().addDocumentListener(new DocumentListener()
 		{
-			@Override public void insertUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
-			@Override public void removeUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
-			@Override public void changedUpdate(javax.swing.event.DocumentEvent e) { renderSuggestions.run(); }
+			@Override public void insertUpdate(DocumentEvent e) { renderSuggestions.run(); }
+			@Override public void removeUpdate(DocumentEvent e) { renderSuggestions.run(); }
+			@Override public void changedUpdate(DocumentEvent e) { renderSuggestions.run(); }
 		});
 		field.addActionListener(e -> commit.run());
 		renderSuggestions.run();
@@ -7496,9 +7545,9 @@ public class GoalPanel extends PluginPanel
 		boolean any = false;
 		if (dockTagReturn == TagReturn.MULTI)
 		{
-			final java.util.Set<String> ids =
-				new java.util.LinkedHashSet<>(api.getSelectedGoalIds());
-			java.util.List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> opts =
+			final Set<String> ids =
+				new LinkedHashSet<>(api.getSelectedGoalIds());
+			List<com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption> opts =
 				api.getRemovableTagsForSelection(ids);
 			for (com.goalplanner.api.GoalPlannerInternalApi.TagRemovalOption o : opts)
 			{
@@ -7524,8 +7573,8 @@ public class GoalPanel extends PluginPanel
 		{
 			final String gid = dockTagTarget;
 			Goal g = goalStore.findGoalById(gid);
-			java.util.List<Tag> removable = g != null
-				? removableTagsFor(g) : java.util.Collections.emptyList();
+			List<Tag> removable = g != null
+				? removableTagsFor(g) : Collections.emptyList();
 			for (Tag t : removable)
 			{
 				any = true;
@@ -7559,14 +7608,14 @@ public class GoalPanel extends PluginPanel
 	/** Open the Share surface for a captured goal-id list (single-goal edit share
 	 *  or the multi selection). The list is copied so a later selection change does
 	 *  not mutate it. */
-	private void openShareForGoals(java.util.List<String> goalIds)
+	private void openShareForGoals(List<String> goalIds)
 	{
 		if (!isShareAvailable())
 		{
 			return;
 		}
 		dockShareScope = ShareScope.GOALS;
-		dockShareGoalIds = new java.util.ArrayList<>(goalIds);
+		dockShareGoalIds = new ArrayList<>(goalIds);
 		dockShareSectionId = null;
 		dockShareMounted = false;
 		refreshDock();
@@ -7702,7 +7751,7 @@ public class GoalPanel extends PluginPanel
 			JLabel none = new JLabel("Nothing to share here.");
 			none.setForeground(CREATE_FG);
 			none.setFont(none.getFont().deriveFont(11f));
-			none.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			none.setAlignmentX(Component.LEFT_ALIGNMENT);
 			body.add(none);
 			inner.add(body, BorderLayout.CENTER);
 			return surfaceShell("Share", false, inner);
@@ -7722,8 +7771,8 @@ public class GoalPanel extends PluginPanel
 		codeArea.setCaretPosition(0);
 		JScrollPane codeScroll = new JScrollPane(codeArea);
 		codeScroll.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
-			RoundedPaint.RADIUS, new java.awt.Insets(2, 2, 2, 2)));
-		codeScroll.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
+		codeScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 		codeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
 		body.add(codeScroll);
 		body.add(Box.createVerticalStrut(6));
@@ -7731,10 +7780,10 @@ public class GoalPanel extends PluginPanel
 		// Copy the invite line to the system clipboard, with a brief inline confirm.
 		JButton copyBtn = flatButton("Copy", true);
 		copyBtn.setToolTipText("Copy the share code to your clipboard");
-		copyBtn.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		copyBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 		copyBtn.addActionListener(e -> {
-			java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-				.setContents(new java.awt.datatransfer.StringSelection(invite), null);
+			Toolkit.getDefaultToolkit().getSystemClipboard()
+				.setContents(new StringSelection(invite), null);
 			showInfoNotice("Copied share code to your clipboard.");
 		});
 		body.add(copyBtn);
@@ -7746,13 +7795,13 @@ public class GoalPanel extends PluginPanel
 			JLabel saveLbl = new JLabel("Save to your plans");
 			saveLbl.setForeground(CREATE_FG);
 			saveLbl.setFont(saveLbl.getFont().deriveFont(11f));
-			saveLbl.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			saveLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
 			body.add(saveLbl);
 			body.add(Box.createVerticalStrut(2));
 
 			JPanel saveRow = new JPanel(new BorderLayout(4, 0));
 			saveRow.setOpaque(false);
-			saveRow.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			saveRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 			final JTextField nameField = new JTextField(defaultSharePlanName(bundle));
 			styleField(nameField);
 			nameField.setToolTipText("Name this saved plan");
@@ -7878,7 +7927,7 @@ public class GoalPanel extends PluginPanel
 		JLabel prompt = new JLabel("Paste a share code");
 		prompt.setForeground(CREATE_FG);
 		prompt.setFont(prompt.getFont().deriveFont(11f));
-		prompt.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
 		body.add(prompt);
 		body.add(Box.createVerticalStrut(2));
 
@@ -7890,8 +7939,8 @@ public class GoalPanel extends PluginPanel
 		codeArea.setBackground(CREATE_FIELD_BG);
 		JScrollPane codeScroll = new JScrollPane(codeArea);
 		codeScroll.setBorder(RoundedPaint.border(CREATE_FIELD_STROKE, 1,
-			RoundedPaint.RADIUS, new java.awt.Insets(2, 2, 2, 2)));
-		codeScroll.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			RoundedPaint.RADIUS, new Insets(2, 2, 2, 2)));
+		codeScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 		codeScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 84));
 		body.add(codeScroll);
 		body.add(Box.createVerticalStrut(4));
@@ -7899,11 +7948,11 @@ public class GoalPanel extends PluginPanel
 		final JLabel hint = new JLabel(" ");
 		hint.setForeground(CREATE_FG);
 		hint.setFont(hint.getFont().deriveFont(10f));
-		hint.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		hint.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JButton importBtn = flatButton("Import", true);
 		importBtn.setToolTipText("Import the pasted share code");
-		importBtn.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		importBtn.setAlignmentX(Component.LEFT_ALIGNMENT);
 		importBtn.addActionListener(e -> {
 			String text = codeArea.getText();
 			if (text == null || text.trim().isEmpty())
@@ -7956,13 +8005,13 @@ public class GoalPanel extends PluginPanel
 		body.setOpaque(false);
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
-		java.util.List<com.goalplanner.persistence.SavedPlan> plans = savedPlanStore.getPlans();
+		List<com.goalplanner.persistence.SavedPlan> plans = savedPlanStore.getPlans();
 		if (plans.isEmpty())
 		{
 			JLabel none = new JLabel("No saved goals yet.");
 			none.setForeground(CREATE_FG);
 			none.setFont(none.getFont().deriveFont(11f));
-			none.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+			none.setAlignmentX(Component.LEFT_ALIGNMENT);
 			body.add(none);
 		}
 		else
@@ -7984,7 +8033,7 @@ public class GoalPanel extends PluginPanel
 	{
 		JPanel row = new JPanel(new BorderLayout(6, 0));
 		row.setOpaque(false);
-		row.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JPanel text = new JPanel();
 		text.setOpaque(false);
@@ -8003,8 +8052,8 @@ public class GoalPanel extends PluginPanel
 		actions.setOpaque(false);
 		actions.add(chip("Load", "Import this saved plan", () -> loadSavedPlan(plan)));
 		actions.add(chip("Copy", "Copy the share code to your clipboard", () -> {
-			java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
-				new java.awt.datatransfer.StringSelection(plan.getCode()), null);
+			Toolkit.getDefaultToolkit().getSystemClipboard().setContents(
+				new StringSelection(plan.getCode()), null);
 		}));
 		actions.add(chip("Delete", "Delete this saved plan", () -> {
 			savedPlanStore.remove(plan.getId());
@@ -8107,9 +8156,9 @@ public class GoalPanel extends PluginPanel
 	private void commitOnBlurOrEnter(JTextField f, Runnable commit)
 	{
 		f.addActionListener(e -> commit.run());
-		f.addFocusListener(new java.awt.event.FocusAdapter()
+		f.addFocusListener(new FocusAdapter()
 		{
-			@Override public void focusLost(java.awt.event.FocusEvent e) { commit.run(); }
+			@Override public void focusLost(FocusEvent e) { commit.run(); }
 		});
 	}
 
@@ -8399,8 +8448,8 @@ public class GoalPanel extends PluginPanel
 		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		row.setOpaque(false);
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
-		java.util.List<JButton> pills = new ArrayList<>();
-		java.util.Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
+		List<JButton> pills = new ArrayList<>();
+		Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
 		Runnable refresh = () ->
 		{
 			for (JButton b : pills)
@@ -8485,7 +8534,7 @@ public class GoalPanel extends PluginPanel
 			() -> openColorSurfaceForGoal(gid)));
 		wrap.add(chip("Add tag", "Add a tag to this goal",
 			() -> openTagAddSurfaceForGoal(gid)));
-		java.util.List<Tag> removable = removableTagsFor(g);
+		List<Tag> removable = removableTagsFor(g);
 		if (!removable.isEmpty())
 		{
 			wrap.add(chip("Drop tags", "Remove tags from this goal",
@@ -8494,7 +8543,7 @@ public class GoalPanel extends PluginPanel
 		if (api.isGoalOverridden(gid))
 		{
 			wrap.add(chip("Restore defaults", "Reset tags and color to their defaults",
-				() -> { api.bulkRestoreDefaults(java.util.Collections.singleton(gid)); refreshEditForm(); }));
+				() -> { api.bulkRestoreDefaults(Collections.singleton(gid)); refreshEditForm(); }));
 		}
 	}
 
@@ -8509,9 +8558,9 @@ public class GoalPanel extends PluginPanel
 		final GoalType type = g.getType();
 
 		wrap.add(chip("Move to section", "Move this goal to another section",
-			() -> openMoveSurface(MoveMode.MOVE, java.util.Collections.singletonList(gid))));
+			() -> openMoveSurface(MoveMode.MOVE, Collections.singletonList(gid))));
 		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
-			() -> openMoveSurface(MoveMode.COPY, java.util.Collections.singletonList(gid))));
+			() -> openMoveSurface(MoveMode.COPY, Collections.singletonList(gid))));
 
 		if (goalHasSeedableReqs(g))
 		{
@@ -8539,7 +8588,7 @@ public class GoalPanel extends PluginPanel
 
 		if (isShareAvailable())
 		{
-			final java.util.List<String> shareIds = java.util.Collections.singletonList(gid);
+			final List<String> shareIds = Collections.singletonList(gid);
 			wrap.add(chip("Share", "Copy or save a share code for this goal",
 				() -> openShareForGoals(shareIds)));
 		}
@@ -8572,7 +8621,7 @@ public class GoalPanel extends PluginPanel
 		int goalCount = countGoalsInSection(sv.id);
 		String kind = sv.builtIn
 			? (sv.kind != null ? sv.kind.substring(0, 1)
-				+ sv.kind.substring(1).toLowerCase(java.util.Locale.ROOT) + " (built-in)"
+				+ sv.kind.substring(1).toLowerCase(Locale.ROOT) + " (built-in)"
 				: "Built-in")
 			: "Section";
 		JLabel meta = new JLabel(kind + " - " + goalCount
@@ -8733,7 +8782,7 @@ public class GoalPanel extends PluginPanel
 	{
 		int goalCount = countGoalsInSection(sv.id);
 		String plural = goalCount == 1 ? "goal" : "goals";
-		javax.swing.JCheckBox moveInstead = new javax.swing.JCheckBox(
+		JCheckBox moveInstead = new JCheckBox(
 			"Move " + (goalCount == 1 ? "it" : "them")
 				+ " to Default (Incomplete/Completed) instead");
 		Object[] message = goalCount > 0
@@ -8770,24 +8819,24 @@ public class GoalPanel extends PluginPanel
 	 *  against the real dock width. A plain JPanel would take only its preferred
 	 *  width and clip (the dock suppresses horizontal scrolling), and the
 	 *  full-width indicator bar would not span the dock. */
-	private static final class ScrollablePanel extends JPanel implements javax.swing.Scrollable
+	private static final class ScrollablePanel extends JPanel implements Scrollable
 	{
 		/** When set, the panel paints a rounded card fill of this color (glam
 		 *  surfaces); null keeps it fully transparent (result columns). */
 		private Color cardBg = null;
 
-		ScrollablePanel(java.awt.LayoutManager lm) { super(lm); }
+		ScrollablePanel(LayoutManager lm) { super(lm); }
 
 		/** Paint a rounded {@link RoundedPaint#SURFACE_RADIUS} card behind this
 		 *  panel so a surface reads as a card. Returns this for chaining. */
 		ScrollablePanel asCard(Color bg) { this.cardBg = bg; return this; }
 
 		@Override
-		protected void paintComponent(java.awt.Graphics g)
+		protected void paintComponent(Graphics g)
 		{
 			if (cardBg != null)
 			{
-				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+				Graphics2D g2 = (Graphics2D) g.create();
 				try
 				{
 					RoundedPaint.fill(g2, 0, 0, getWidth(), getHeight(),
@@ -8802,8 +8851,8 @@ public class GoalPanel extends PluginPanel
 		}
 
 		@Override public Dimension getPreferredScrollableViewportSize() { return getPreferredSize(); }
-		@Override public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d) { return 16; }
-		@Override public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d) { return 48; }
+		@Override public int getScrollableUnitIncrement(Rectangle r, int o, int d) { return 16; }
+		@Override public int getScrollableBlockIncrement(Rectangle r, int o, int d) { return 48; }
 		@Override public boolean getScrollableTracksViewportWidth() { return true; }
 		@Override public boolean getScrollableTracksViewportHeight() { return false; }
 	}
@@ -8835,7 +8884,7 @@ public class GoalPanel extends PluginPanel
 				}
 				int hgap = getHgap();
 				int vgap = getVgap();
-				java.awt.Insets insets = target.getInsets();
+				Insets insets = target.getInsets();
 				int maxWidth = targetWidth - (insets.left + insets.right + hgap * 2);
 				Dimension dim = new Dimension(0, 0);
 				int rowWidth = 0;

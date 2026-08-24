@@ -1,4 +1,8 @@
 package com.goalplanner.api;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Internal-only mutation API. NOT bound publicly via {@code Plugin.configure}.
@@ -317,7 +321,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return true if the selection actually changed
 	 */
-	boolean replaceGoalSelection(java.util.Collection<String> goalIds);
+	boolean replaceGoalSelection(Collection<String> goalIds);
 
 	/**
 	 * Add a single goal id to the current selection (no-op if already in).
@@ -344,7 +348,7 @@ public interface GoalPlannerInternalApi
 	boolean clearGoalSelection();
 
 	/** @return an unmodifiable snapshot of the currently-selected goal ids. */
-	java.util.Set<String> getSelectedGoalIds();
+	Set<String> getSelectedGoalIds();
 
 	/**
 	 * Add every goal currently in the given section to the selection. Existing
@@ -389,7 +393,7 @@ public interface GoalPlannerInternalApi
 	 * Snapshot of every tag in the store. Includes both system and user tags
 	 * across all categories. Used by the tag management UI.
 	 */
-	java.util.List<TagView> queryAllTags();
+	List<TagView> queryAllTags();
 
 	/**
 	 * Free-text search across goals. Case-insensitive partial substring match
@@ -408,7 +412,7 @@ public interface GoalPlannerInternalApi
 	 * @param query free-text search; null/blank returns all goals
 	 * @return filtered list of GoalViews in canonical order
 	 */
-	java.util.List<GoalView> searchGoals(String query);
+	List<GoalView> searchGoals(String query);
 
 	// ---------------------------------------------------------------------
 	// Bulk multi-selection actions
@@ -429,7 +433,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return number of goals actually changed
 	 */
-	int bulkRestoreDefaults(java.util.Set<String> goalIds);
+	int bulkRestoreDefaults(Set<String> goalIds);
 
 	/**
 	 * Remove a tag from every selected goal where it is both present and
@@ -439,7 +443,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return number of goals from which the tag was removed
 	 */
-	int bulkRemoveTagFromGoals(java.util.Set<String> goalIds, String tagId);
+	int bulkRemoveTagFromGoals(Set<String> goalIds, String tagId);
 
 	/**
 	 * Remove a batch of goals as a single atomic command. Unlike calling
@@ -449,7 +453,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return number of goals actually removed
 	 */
-	int bulkRemoveGoals(java.util.Set<String> goalIds);
+	int bulkRemoveGoals(Set<String> goalIds);
 
 	/**
 	 * Clear completion on every completed goal in the selection, as one undoable
@@ -458,7 +462,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return how many goals were reopened
 	 */
-	int bulkMarkIncomplete(java.util.Set<String> goalIds);
+	int bulkMarkIncomplete(Set<String> goalIds);
 
 	/**
 	 * Move a batch of goals into the same target section as a single atomic
@@ -467,7 +471,7 @@ public interface GoalPlannerInternalApi
 	 *
 	 * @return number of goals actually moved
 	 */
-	int bulkMoveGoalsToSection(java.util.Set<String> goalIds, String targetSectionId);
+	int bulkMoveGoalsToSection(Set<String> goalIds, String targetSectionId);
 
 	/**
 	 * For a set of selected goals, return every removable tag (deduped) with
@@ -475,7 +479,7 @@ public interface GoalPlannerInternalApi
 	 * removable). Sorted by count descending then by label ascending. Used
 	 * to populate the bulk Remove Tag dropdown.
 	 */
-	java.util.List<TagRemovalOption> getRemovableTagsForSelection(java.util.Set<String> goalIds);
+	List<TagRemovalOption> getRemovableTagsForSelection(Set<String> goalIds);
 
 	/**
 	 * Lightweight DTO returned by {@link #getRemovableTagsForSelection}.
@@ -592,13 +596,13 @@ public interface GoalPlannerInternalApi
 	/**
 	 * Get the goals that {@code goalId} requires (outgoing edges).
 	 */
-	java.util.List<String> getRequirements(String goalId);
+	List<String> getRequirements(String goalId);
 
 	/**
 	 * Get the goals that require {@code goalId} (incoming edges, derived
 	 * by scanning all goals).
 	 */
-	java.util.List<String> getDependents(String goalId);
+	List<String> getDependents(String goalId);
 
 	/**
 	 * Return value from {@link #findOrCreateRequirement}. {@code goalId} is
@@ -638,13 +642,13 @@ public interface GoalPlannerInternalApi
 	 * @param sectionId the section to sort
 	 * @return ordered list of GoalViews, or empty list if section is unknown
 	 */
-	java.util.List<com.goalplanner.api.GoalView> queryGoalsTopologicallySorted(String sectionId);
+	List<com.goalplanner.api.GoalView> queryGoalsTopologicallySorted(String sectionId);
 
 	/**
 	 * Topo-sort ALL sections in one pass. Returns a map of sectionId →
 	 * sorted GoalView list.
 	 */
-	java.util.Map<String, java.util.List<com.goalplanner.api.GoalView>> queryAllGoalsTopologicallySorted();
+	Map<String, List<com.goalplanner.api.GoalView>> queryAllGoalsTopologicallySorted();
 
 	/**
 	 * Resolve a requirement template to a concrete goal id, creating a

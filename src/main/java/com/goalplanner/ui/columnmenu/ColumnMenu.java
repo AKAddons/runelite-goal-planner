@@ -31,6 +31,13 @@ import java.awt.event.MouseEvent;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.Graphics;
+import java.awt.GraphicsConfiguration;
+import java.awt.Insets;
+import java.awt.RenderingHints;
+import javax.swing.Icon;
 
 /**
  * Click-driven, hover-stable replacement for cascading {@link javax.swing.JPopupMenu}.
@@ -127,7 +134,7 @@ public final class ColumnMenu
 	 */
 	private int computeColumnWidth(List<MenuNode> rootItems)
 	{
-		java.awt.FontMetrics fm = new JLabel().getFontMetrics(PanelFonts.derive(Font.PLAIN, 13f));
+		FontMetrics fm = new JLabel().getFontMetrics(PanelFonts.derive(Font.PLAIN, 13f));
 		int widest = maxLabelWidth(rootItems, fm);
 		int needed = widest + 20 + 26; // 10+10 row border + ~26 arrow column + slack
 		int cap = MAX_COLUMN_WIDTH;
@@ -138,7 +145,7 @@ public final class ColumnMenu
 		return Math.max(MIN_COLUMN_WIDTH, Math.min(needed, cap));
 	}
 
-	private int maxLabelWidth(List<MenuNode> items, java.awt.FontMetrics fm)
+	private int maxLabelWidth(List<MenuNode> items, FontMetrics fm)
 	{
 		int max = 0;
 		for (MenuNode n : items)
@@ -355,11 +362,11 @@ public final class ColumnMenu
 		int top;
 		int rightLimit;
 		int bottomLimit;
-		java.awt.GraphicsConfiguration gc = window.getGraphicsConfiguration();
+		GraphicsConfiguration gc = window.getGraphicsConfiguration();
 		if (gc != null)
 		{
 			Rectangle screen = gc.getBounds();
-			java.awt.Insets ins = Toolkit.getDefaultToolkit().getScreenInsets(gc);
+			Insets ins = Toolkit.getDefaultToolkit().getScreenInsets(gc);
 			left = screen.x + ins.left;
 			top = screen.y + ins.top;
 			rightLimit = screen.x + screen.width - ins.right;
@@ -421,17 +428,17 @@ public final class ColumnMenu
 	}
 
 	/** Small filled dot used to mark the selected row in a checkable group. */
-	private static javax.swing.Icon dotIcon(Color color)
+	private static Icon dotIcon(Color color)
 	{
-		return new javax.swing.Icon()
+		return new Icon()
 		{
 			@Override public int getIconWidth() { return DOT_SIZE; }
 			@Override public int getIconHeight() { return DOT_SIZE; }
-			@Override public void paintIcon(Component c, java.awt.Graphics g, int x, int y)
+			@Override public void paintIcon(Component c, Graphics g, int x, int y)
 			{
-				java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
-				g2.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
-					java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+				Graphics2D g2 = (Graphics2D) g.create();
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING,
+					RenderingHints.VALUE_ANTIALIAS_ON);
 				g2.setColor(color);
 				g2.fillOval(x, y, DOT_SIZE, DOT_SIZE);
 				g2.dispose();

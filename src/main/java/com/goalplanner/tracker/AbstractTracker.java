@@ -6,6 +6,7 @@ import com.goalplanner.model.GoalStatus;
 import com.goalplanner.model.GoalType;
 import java.util.List;
 import net.runelite.api.Client;
+import java.util.ArrayList;
 
 /**
  * Base class for goal trackers. Provides the shared loop that filters
@@ -97,7 +98,7 @@ public abstract class AbstractTracker
 		// value drops below target. BLOCKED/PAUSED goals are never read.
 		//
 		// ItemTracker overrides this method entirely for its own semantics.
-		List<Goal> snapshot = new java.util.ArrayList<>(goals);
+		List<Goal> snapshot = new ArrayList<>(goals);
 		for (Goal goal : snapshot)
 		{
 			if (goal.getType() != targetType()) continue;

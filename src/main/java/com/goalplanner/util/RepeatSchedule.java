@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 
 /**
  * Pure clock math for repeatable goals: which period a moment falls in, and
@@ -178,7 +179,7 @@ public final class RepeatSchedule
 		{
 			return "";
 		}
-		java.time.ZonedDateTime z = boundary.atZone(zone);
+		ZonedDateTime z = boundary.atZone(zone);
 		String time = String.format("%02d:%02d", z.getHour(), z.getMinute());
 		switch (period)
 		{

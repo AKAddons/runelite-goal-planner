@@ -8,6 +8,12 @@ import com.goalplanner.persistence.GoalStore;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Handles goal reordering logic including recursive skill chain movement.
@@ -80,7 +86,7 @@ public class GoalReorderingService
 	 */
 	public void enforceSkillOrdering()
 	{
-		java.util.Set<String> sectionIds = new java.util.HashSet<>();
+		Set<String> sectionIds = new HashSet<>();
 		for (Goal g : goalStore.getGoals())
 		{
 			if (g.getSectionId() != null) sectionIds.add(g.getSectionId());
@@ -106,18 +112,18 @@ public class GoalReorderingService
 
 		// Group same-skill active goals in this section by skillName.
 		// Each entry: skillName → list of (flat index, goal) pairs.
-		java.util.Map<String, java.util.List<int[]>> groups = new java.util.LinkedHashMap<>();
+		Map<String, List<int[]>> groups = new LinkedHashMap<>();
 		for (int i = 0; i < goals.size(); i++)
 		{
 			Goal g = goals.get(i);
 			if (!isActiveSkillGoal(g) || !sectionId.equals(g.getSectionId())) continue;
 			String key = g.getSkillName();
 			if (key == null) continue;
-			groups.computeIfAbsent(key, k -> new java.util.ArrayList<>()).add(new int[]{i, g.getTargetValue()});
+			groups.computeIfAbsent(key, k -> new ArrayList<>()).add(new int[]{i, g.getTargetValue()});
 		}
 
 		boolean anyReordered = false;
-		for (java.util.List<int[]> group : groups.values())
+		for (List<int[]> group : groups.values())
 		{
 			if (group.size() < 2) continue;
 			// Check if already sorted by target value.
@@ -130,8 +136,8 @@ public class GoalReorderingService
 
 			// Sort by target value, then place each goal at the position
 			// occupied by the group member that should be there.
-			java.util.List<int[]> sortedByTarget = new java.util.ArrayList<>(group);
-			sortedByTarget.sort(java.util.Comparator.comparingInt(a -> a[1]));
+			List<int[]> sortedByTarget = new ArrayList<>(group);
+			sortedByTarget.sort(Comparator.comparingInt(a -> a[1]));
 
 			// Collect the flat indices the group currently occupies (in order).
 			int[] slots = new int[group.size()];
@@ -266,11 +272,11 @@ public class GoalReorderingService
 	 */
 	public void promoteLeafGoalsToTop()
 	{
-		java.util.List<Goal> allGoals = goalStore.getGoals();
+		List<Goal> allGoals = goalStore.getGoals();
 		String incompleteSectionId = goalStore.getIncompleteSection().getId();
 
-		java.util.List<Goal> leaves = new java.util.ArrayList<>();
-		java.util.List<Goal> rest = new java.util.ArrayList<>();
+		List<Goal> leaves = new ArrayList<>();
+		List<Goal> rest = new ArrayList<>();
 
 		for (Goal g : allGoals)
 		{

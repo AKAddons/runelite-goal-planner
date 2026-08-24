@@ -6,6 +6,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Predicate;
 
 /**
  * Arranges one section's goals into a subtly-nested <em>outline tree</em> so that
@@ -80,8 +82,8 @@ public final class NestIndentAssigner
 	 */
 	public static List<String> resolveVisiblePrereqs(
 		List<String> direct,
-		java.util.function.Function<String, List<String>> prereqsOf,
-		java.util.function.Predicate<String> hidden)
+		Function<String, List<String>> prereqsOf,
+		Predicate<String> hidden)
 	{
 		List<String> out = new ArrayList<>();
 		expandThroughHidden(direct, prereqsOf, hidden, new HashSet<>(), out);
@@ -90,8 +92,8 @@ public final class NestIndentAssigner
 
 	private static void expandThroughHidden(
 		List<String> edges,
-		java.util.function.Function<String, List<String>> prereqsOf,
-		java.util.function.Predicate<String> hidden,
+		Function<String, List<String>> prereqsOf,
+		Predicate<String> hidden,
 		Set<String> visited,
 		List<String> out)
 	{

@@ -6,6 +6,14 @@ import com.goalplanner.model.GoalType;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Encapsulates goal-mutation methods extracted from {@link GoalPlannerApiImpl}.
@@ -178,12 +186,12 @@ class GoalMutationService
 	 *
 	 * @return how many goals were actually reopened
 	 */
-	int bulkMarkIncomplete(java.util.Set<String> goalIds)
+	int bulkMarkIncomplete(Set<String> goalIds)
 	{
 		log.debug("API.internal bulkMarkIncomplete(goalIds={})", goalIds == null ? 0 : goalIds.size());
 		if (goalIds == null || goalIds.isEmpty()) return 0;
 
-		java.util.List<String> targets = new java.util.ArrayList<>();
+		List<String> targets = new ArrayList<>();
 		for (String id : goalIds)
 		{
 			Goal g = api.findGoal(id);
@@ -422,7 +430,7 @@ class GoalMutationService
 			}
 			@Override public String getDescription()
 			{
-				return "Repeat " + period.getLabel().toLowerCase(java.util.Locale.ROOT) + ": "
+				return "Repeat " + period.getLabel().toLowerCase(Locale.ROOT) + ": "
 					+ prevName;
 			}
 		});
@@ -876,16 +884,16 @@ class GoalMutationService
 		Goal g = api.findGoal(goalId);
 		if (g == null) return false;
 		if (g.getCustomColorRgb() >= 0) return true;
-		List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
-		List<String> current = g.getTagIds() != null ? g.getTagIds() : java.util.Collections.emptyList();
-		return !new java.util.HashSet<>(current).equals(new java.util.HashSet<>(defaults));
+		List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
+		List<String> current = g.getTagIds() != null ? g.getTagIds() : Collections.emptyList();
+		return !new HashSet<>(current).equals(new HashSet<>(defaults));
 	}
 
-	int bulkRestoreDefaults(java.util.Set<String> goalIds)
+	int bulkRestoreDefaults(Set<String> goalIds)
 	{
 		log.debug("API.internal bulkRestoreDefaults({} goals)", goalIds == null ? 0 : goalIds.size());
 		if (goalIds == null || goalIds.isEmpty()) return 0;
-		final java.util.List<String[]> snapshots = new java.util.ArrayList<>();
+		final List<String[]> snapshots = new ArrayList<>();
 		for (String goalId : goalIds)
 		{
 			Goal g = api.findGoal(goalId);
@@ -905,7 +913,7 @@ class GoalMutationService
 				{
 					Goal g = api.findGoal(snap[0]);
 					if (g == null) continue;
-					List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : java.util.Collections.emptyList();
+					List<String> defaults = g.getDefaultTagIds() != null ? g.getDefaultTagIds() : Collections.emptyList();
 					g.setTagIds(new ArrayList<>(defaults));
 					g.setCustomColorRgb(-1);
 					api.goalStore.updateGoal(g);
@@ -919,8 +927,8 @@ class GoalMutationService
 					Goal g = api.findGoal(snap[0]);
 					if (g == null) continue;
 					g.setCustomColorRgb(Integer.parseInt(snap[1]));
-					java.util.List<String> tags = snap[2].isEmpty()
-						? new ArrayList<>() : new ArrayList<>(java.util.Arrays.asList(snap[2].split(",")));
+					List<String> tags = snap[2].isEmpty()
+						? new ArrayList<>() : new ArrayList<>(Arrays.asList(snap[2].split(",")));
 					g.setTagIds(tags);
 					api.goalStore.updateGoal(g);
 				}
@@ -934,12 +942,12 @@ class GoalMutationService
 		return ok ? snapshots.size() : 0;
 	}
 
-	int bulkRemoveGoals(java.util.Set<String> goalIds)
+	int bulkRemoveGoals(Set<String> goalIds)
 	{
 		log.debug("API.internal bulkRemoveGoals({} goals)", goalIds == null ? 0 : goalIds.size());
 		if (goalIds == null || goalIds.isEmpty()) return 0;
-		final java.util.List<Goal> goalSnapshots = new ArrayList<>();
-		final java.util.List<Integer> prioritySnapshots = new ArrayList<>();
+		final List<Goal> goalSnapshots = new ArrayList<>();
+		final List<Integer> prioritySnapshots = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (goalIds.contains(g.getId()))
@@ -949,7 +957,7 @@ class GoalMutationService
 			}
 		}
 		if (goalSnapshots.isEmpty()) return 0;
-		final java.util.Set<String> selectionSnapshot = new java.util.LinkedHashSet<>(api.selectedGoalIds);
+		final Set<String> selectionSnapshot = new LinkedHashSet<>(api.selectedGoalIds);
 		boolean ok = api.executeCommand(new com.goalplanner.command.Command()
 		{
 			@Override public boolean apply()
@@ -963,7 +971,7 @@ class GoalMutationService
 			}
 			@Override public boolean revert()
 			{
-				java.util.List<Integer> order = new ArrayList<>();
+				List<Integer> order = new ArrayList<>();
 				for (int i = 0; i < goalSnapshots.size(); i++) order.add(i);
 				order.sort((a, b) -> Integer.compare(prioritySnapshots.get(a), prioritySnapshots.get(b)));
 				for (int idx : order)
@@ -981,14 +989,14 @@ class GoalMutationService
 		return ok ? goalSnapshots.size() : 0;
 	}
 
-	int bulkMoveGoalsToSection(java.util.Set<String> goalIds, String targetSectionId)
+	int bulkMoveGoalsToSection(Set<String> goalIds, String targetSectionId)
 	{
 		log.debug("API.internal bulkMoveGoalsToSection({} goals → {})",
 			goalIds == null ? 0 : goalIds.size(), targetSectionId);
 		if (goalIds == null || goalIds.isEmpty() || targetSectionId == null) return 0;
-		final java.util.List<String> affectedIds = new ArrayList<>();
-		final java.util.List<String> prevSections = new ArrayList<>();
-		final java.util.List<Integer> prevPriorities = new ArrayList<>();
+		final List<String> affectedIds = new ArrayList<>();
+		final List<String> prevSections = new ArrayList<>();
+		final List<Integer> prevPriorities = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (!goalIds.contains(g.getId())) continue;
@@ -1034,16 +1042,16 @@ class GoalMutationService
 	 *
 	 * @return the number of goals actually moved
 	 */
-	int moveGoalsToDefault(java.util.Collection<String> goalIds)
+	int moveGoalsToDefault(Collection<String> goalIds)
 	{
 		log.debug("API.internal moveGoalsToDefault({} goals)", goalIds == null ? 0 : goalIds.size());
 		if (goalIds == null || goalIds.isEmpty()) return 0;
 		final String incId = api.goalStore.getIncompleteSection().getId();
 		final String compId = api.goalStore.getCompletedSection().getId();
-		final java.util.List<String> affectedIds = new ArrayList<>();
-		final java.util.List<String> targets = new ArrayList<>();
-		final java.util.List<String> prevSections = new ArrayList<>();
-		final java.util.List<Integer> prevPriorities = new ArrayList<>();
+		final List<String> affectedIds = new ArrayList<>();
+		final List<String> targets = new ArrayList<>();
+		final List<String> prevSections = new ArrayList<>();
+		final List<Integer> prevPriorities = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (!goalIds.contains(g.getId())) continue;
@@ -1086,7 +1094,7 @@ class GoalMutationService
 	{
 		log.debug("API.internal removeAllGoals()");
 		// Only remove incomplete goals - completed goals are preserved.
-		final java.util.List<Goal> toRemove = new ArrayList<>();
+		final List<Goal> toRemove = new ArrayList<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (g.getStatus() != com.goalplanner.model.GoalStatus.COMPLETE)
@@ -1095,9 +1103,9 @@ class GoalMutationService
 			}
 		}
 		if (toRemove.isEmpty()) return;
-		final java.util.Set<String> removedIds = new java.util.LinkedHashSet<>();
+		final Set<String> removedIds = new LinkedHashSet<>();
 		for (Goal g : toRemove) removedIds.add(g.getId());
-		final java.util.Set<String> selectionSnapshot = new java.util.LinkedHashSet<>(api.selectedGoalIds);
+		final Set<String> selectionSnapshot = new LinkedHashSet<>(api.selectedGoalIds);
 		// Suspend saves so the bulk loop writes one goal_order at the end,
 		// not N times (one per removal).
 		api.goalStore.suspendSave();
@@ -1146,20 +1154,20 @@ class GoalMutationService
 	int removeDuplicateGoals()
 	{
 		log.debug("API.internal removeDuplicateGoals()");
-		final java.util.List<Goal> all = new ArrayList<>(api.goalStore.getGoals());
-		final java.util.Set<String> removeIds = new java.util.LinkedHashSet<>();
+		final List<Goal> all = new ArrayList<>(api.goalStore.getGoals());
+		final Set<String> removeIds = new LinkedHashSet<>();
 		for (int i = 0; i < all.size(); i++)
 		{
 			Goal a = all.get(i);
 			if (removeIds.contains(a.getId())) continue;
 			String nsA = api.goalStore.namespaceKey(a.getSectionId());
-			java.util.List<Goal> group = new ArrayList<>();
+			List<Goal> group = new ArrayList<>();
 			group.add(a);
 			for (int j = i + 1; j < all.size(); j++)
 			{
 				Goal b = all.get(j);
 				if (removeIds.contains(b.getId())) continue;
-				if (java.util.Objects.equals(nsA, api.goalStore.namespaceKey(b.getSectionId()))
+				if (Objects.equals(nsA, api.goalStore.namespaceKey(b.getSectionId()))
 					&& com.goalplanner.model.GoalIdentity.sameIdentity(a, b))
 				{
 					group.add(b);
@@ -1172,9 +1180,9 @@ class GoalMutationService
 		}
 		if (removeIds.isEmpty()) return 0;
 
-		final java.util.List<Goal> toRemove = new ArrayList<>();
+		final List<Goal> toRemove = new ArrayList<>();
 		for (Goal g : all) if (removeIds.contains(g.getId())) toRemove.add(g);
-		final java.util.Set<String> selectionSnapshot = new java.util.LinkedHashSet<>(api.selectedGoalIds);
+		final Set<String> selectionSnapshot = new LinkedHashSet<>(api.selectedGoalIds);
 
 		api.goalStore.suspendSave();
 		try

@@ -11,6 +11,8 @@ import java.awt.datatransfer.StringSelection;
 import java.util.List;
 import java.util.function.Supplier;
 import javax.swing.JOptionPane;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
 
 /**
  * Swing dialogs for sharing/importing goals (export to clipboard, paste-import,
@@ -34,10 +36,10 @@ public final class ShareDialogs
 		// pasted from chat, and a single-line field would drop everything after
 		// the first newline. The decoder skips embedded whitespace, so a wrapped
 		// paste still decodes.
-		javax.swing.JTextArea codeArea = new javax.swing.JTextArea(4, 28);
+		JTextArea codeArea = new JTextArea(4, 28);
 		codeArea.setLineWrap(true);
 		codeArea.setWrapStyleWord(false);
-		javax.swing.JScrollPane codeScroll = new javax.swing.JScrollPane(codeArea);
+		JScrollPane codeScroll = new JScrollPane(codeArea);
 		int ok = JOptionPane.showConfirmDialog(parent,
 			new Object[]{"Paste a Goal Planner share code:", codeScroll},
 			"Import shared goals", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);

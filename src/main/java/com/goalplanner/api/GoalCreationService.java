@@ -17,6 +17,16 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Experience;
 import net.runelite.api.Quest;
 import net.runelite.api.Skill;
+import java.util.ArrayDeque;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Encapsulates all goal-creation methods extracted from {@link GoalPlannerApiImpl}.
@@ -141,7 +151,7 @@ class GoalCreationService
 		{
 			if (other.getId().equals(newId)) continue;
 			if (other.getType() != type) continue;
-			if (!java.util.Objects.equals(newNs, api.goalStore.namespaceKey(other.getSectionId()))) continue;
+			if (!Objects.equals(newNs, api.goalStore.namespaceKey(other.getSectionId()))) continue;
 			// Identity check per type
 			if (type == GoalType.SKILL)
 			{
@@ -381,7 +391,7 @@ class GoalCreationService
 		return addQuestGoalWithPrereqs(quest, resolved.templates);
 	}
 
-	String addQuestGoalWithPrereqs(Quest quest, java.util.List<Goal> prereqTemplates)
+	String addQuestGoalWithPrereqs(Quest quest, List<Goal> prereqTemplates)
 	{
 		log.debug("API.internal addQuestGoalWithPrereqs(quest={}, prereqs={})",
 			quest, prereqTemplates == null ? 0 : prereqTemplates.size());
@@ -393,7 +403,7 @@ class GoalCreationService
 		api.clearGoalSelection();
 		if (prereqTemplates == null)
 		{
-			prereqTemplates = java.util.Collections.emptyList();
+			prereqTemplates = Collections.emptyList();
 		}
 
 		// Degenerate case - no templates means no compound is needed, just
@@ -449,10 +459,10 @@ class GoalCreationService
 	 */
 	private boolean seedKeepCompleted = false;
 
-	private java.util.List<String> seedPrereqsAndPrioritize(
-		String rootGoalId, Quest rootQuest, java.util.List<Goal> prereqTemplates, boolean allMode)
+	private List<String> seedPrereqsAndPrioritize(
+		String rootGoalId, Quest rootQuest, List<Goal> prereqTemplates, boolean allMode)
 	{
-		java.util.Set<Quest> visited = new java.util.HashSet<>();
+		Set<Quest> visited = new HashSet<>();
 		if (rootQuest != null)
 		{
 			visited.add(rootQuest);
@@ -460,13 +470,13 @@ class GoalCreationService
 
 		// Snapshot goal IDs present before the BFS so the hybrid skill helper only
 		// reuses pre-existing goals, not ones created during this same gesture.
-		java.util.Set<String> preExistingGoalIds = new java.util.HashSet<>();
+		Set<String> preExistingGoalIds = new HashSet<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			preExistingGoalIds.add(g.getId());
 		}
 
-		java.util.List<String> gestureGoalIds = new java.util.ArrayList<>();
+		List<String> gestureGoalIds = new ArrayList<>();
 		gestureGoalIds.add(rootGoalId);
 
 		this.seedKeepCompleted = allMode;
@@ -483,9 +493,9 @@ class GoalCreationService
 		// 1. Zero-dependency QUEST goals at the very top (leaf quests - do first)
 		// 2. Everything else in reversed creation order (deepest leaves near top,
 		//    root at bottom)
-		java.util.Set<String> gestureSet = new java.util.HashSet<>(gestureGoalIds);
-		java.util.List<String> zeroDegQuests = new java.util.ArrayList<>();
-		java.util.List<String> others = new java.util.ArrayList<>();
+		Set<String> gestureSet = new HashSet<>(gestureGoalIds);
+		List<String> zeroDegQuests = new ArrayList<>();
+		List<String> others = new ArrayList<>();
 		for (String id : gestureGoalIds)
 		{
 			Goal g = api.findGoal(id);
@@ -527,7 +537,7 @@ class GoalCreationService
 			}
 			others.add(id);
 		}
-		java.util.Collections.reverse(others);
+		Collections.reverse(others);
 
 		int p = 0;
 		for (String id : zeroDegQuests)
@@ -605,7 +615,7 @@ class GoalCreationService
 			{
 				api.setSectionAutoArchiveOverride(g.getSectionId(), Boolean.FALSE);
 			}
-			java.util.List<String> gestureGoalIds =
+			List<String> gestureGoalIds =
 				seedPrereqsAndPrioritize(goalId, quest, resolved.templates, /*allMode=*/includeMet);
 			return gestureGoalIds.size() - 1;
 		}
@@ -636,7 +646,7 @@ class GoalCreationService
 			return 0;
 		}
 
-		java.util.Set<String> before = new java.util.HashSet<>();
+		Set<String> before = new HashSet<>();
 		for (Goal x : api.goalStore.getGoals()) before.add(x.getId());
 
 		api.clearGoalSelection();
@@ -698,24 +708,24 @@ class GoalCreationService
 	 *
 	 * <p>Client-thread only (reads live skill/quest/account state).
 	 */
-	java.util.List<String> missingDirectPrereqLabels(Goal goal)
+	List<String> missingDirectPrereqLabels(Goal goal)
 	{
 		if (goal == null || api.client == null || goal.getType() == null)
 		{
-			return java.util.List.of();
+			return List.of();
 		}
-		java.util.List<Goal> unmet;
+		List<Goal> unmet;
 		switch (goal.getType())
 		{
 			case QUEST:
 			{
-				if (goal.getQuestName() == null) return java.util.List.of();
+				if (goal.getQuestName() == null) return List.of();
 				net.runelite.api.Quest q;
 				try { q = net.runelite.api.Quest.valueOf(goal.getQuestName()); }
-				catch (IllegalArgumentException e) { return java.util.List.of(); }
-				if (!com.goalplanner.data.QuestRequirements.hasRequirements(q)) return java.util.List.of();
+				catch (IllegalArgumentException e) { return List.of(); }
+				if (!com.goalplanner.data.QuestRequirements.hasRequirements(q)) return List.of();
 				com.goalplanner.data.QuestRequirementResolver.Resolved r = api.resolveQuestRequirements(q);
-				unmet = (r == null) ? java.util.List.of() : r.templates;
+				unmet = (r == null) ? List.of() : r.templates;
 				break;
 			}
 			case DIARY:
@@ -725,24 +735,24 @@ class GoalCreationService
 				if (tier == null || goal.getName() == null
 					|| !com.goalplanner.data.DiaryRequirements.hasRequirements(goal.getName(), tier))
 				{
-					return java.util.List.of();
+					return List.of();
 				}
 				com.goalplanner.data.DiaryRequirementResolver.Resolved r =
 					com.goalplanner.data.DiaryRequirementResolver.resolve(goal.getName(), tier, api.client);
-				unmet = (r == null) ? java.util.List.of() : r.templates;
+				unmet = (r == null) ? List.of() : r.templates;
 				break;
 			}
 			case BOSS:
 			{
-				if (goal.getBossName() == null) return java.util.List.of();
+				if (goal.getBossName() == null) return List.of();
 				unmet = unmetBossPrereqTemplates(goal.getBossName());
 				break;
 			}
 			default:
-				return java.util.List.of();
+				return List.of();
 		}
 
-		java.util.List<String> labels = new java.util.ArrayList<>();
+		List<String> labels = new ArrayList<>();
 		for (Goal t : unmet)
 		{
 			if (!isInPlan(t) && t.getName() != null)
@@ -754,12 +764,12 @@ class GoalCreationService
 	}
 
 	/** Direct, unmet boss skill/quest/account prereqs as goal templates. */
-	private java.util.List<Goal> unmetBossPrereqTemplates(String bossName)
+	private List<Goal> unmetBossPrereqTemplates(String bossName)
 	{
 		com.goalplanner.data.BossKillData.BossPrereqs p =
 			com.goalplanner.data.BossKillData.getPrereqs(bossName);
-		if (p == null) return java.util.List.of();
-		java.util.List<Goal> out = new java.util.ArrayList<>();
+		if (p == null) return List.of();
+		List<Goal> out = new ArrayList<>();
 		for (com.goalplanner.data.BossKillData.SkillReq sr : p.skills)
 		{
 			if (api.client.getRealSkillLevel(sr.skill) >= sr.level) continue;
@@ -893,10 +903,10 @@ class GoalCreationService
 	private void seedPrereqsInto(
 		String rootGoalId,
 		Quest rootQuest,
-		java.util.List<Goal> rootTemplates,
-		java.util.Set<Quest> visited,
-		java.util.Set<String> preExistingGoalIds,
-		java.util.List<String> gestureGoalIds)
+		List<Goal> rootTemplates,
+		Set<Quest> visited,
+		Set<String> preExistingGoalIds,
+		List<String> gestureGoalIds)
 	{
 		seedPrereqsInto(rootGoalId, rootQuest,
 			com.goalplanner.data.QuestRequirements.displayName(rootQuest),
@@ -919,22 +929,22 @@ class GoalCreationService
 		String rootGoalId,
 		Quest rootQuest,
 		String rootTagLabel,
-		java.util.List<Goal> rootTemplates,
-		java.util.Set<Quest> visited,
-		java.util.Set<String> preExistingGoalIds,
-		java.util.List<String> gestureGoalIds)
+		List<Goal> rootTemplates,
+		Set<Quest> visited,
+		Set<String> preExistingGoalIds,
+		List<String> gestureGoalIds)
 	{
 		// Three-queue priority system: optional recommendations (combat level,
 		// recommended skills) process first, then required skills/account goals,
 		// then quests. This puts optional goals at the top of the card list so
 		// the user sees them prominently.
-		java.util.ArrayDeque<SeedEntry> optionalPriority = new java.util.ArrayDeque<>();
-		java.util.ArrayDeque<SeedEntry> highPriority = new java.util.ArrayDeque<>();
-		java.util.ArrayDeque<SeedEntry> lowPriority = new java.util.ArrayDeque<>();
+		ArrayDeque<SeedEntry> optionalPriority = new ArrayDeque<>();
+		ArrayDeque<SeedEntry> highPriority = new ArrayDeque<>();
+		ArrayDeque<SeedEntry> lowPriority = new ArrayDeque<>();
 
 		// Sort skill templates by target value descending so higher-level
 		// skills are processed (and thus positioned) first in the card list.
-		java.util.List<Goal> sortedTemplates = new java.util.ArrayList<>(rootTemplates);
+		List<Goal> sortedTemplates = new ArrayList<>(rootTemplates);
 		sortedTemplates.sort((a, b) -> {
 			boolean aSkill = a != null && a.getType() == GoalType.SKILL;
 			boolean bSkill = b != null && b.getType() == GoalType.SKILL;
@@ -1164,7 +1174,7 @@ class GoalCreationService
 						? resolveAllRequirements(childQuestForNextLevel)
 						: api.resolveQuestRequirements(childQuestForNextLevel);
 				// Sort child skill templates highest-level-first.
-				java.util.List<Goal> sortedChildTemplates = new java.util.ArrayList<>(childResolved.templates);
+				List<Goal> sortedChildTemplates = new ArrayList<>(childResolved.templates);
 				sortedChildTemplates.sort((a, b) -> {
 					boolean aSkill = a != null && a.getType() == GoalType.SKILL;
 					boolean bSkill = b != null && b.getType() == GoalType.SKILL;
@@ -1207,7 +1217,7 @@ class GoalCreationService
 	 * @return goal id (existing or newly created), or null on error
 	 */
 	private String findOrCreateSkillGoalForSeed(
-		net.runelite.api.Skill skill, int targetXp, java.util.Set<String> preExistingGoalIds)
+		net.runelite.api.Skill skill, int targetXp, Set<String> preExistingGoalIds)
 	{
 		// 1. Check for a pre-existing USER goal (one that existed before
 		//    this gesture started) that satisfies the requirement. Goals
@@ -1335,7 +1345,7 @@ class GoalCreationService
 	 * and a move into the same section is refused, so behaviour is unchanged.
 	 */
 	private String reuseOrCreateInSection(String sectionId, Goal probe,
-		java.util.Set<String> preExistingGoalIds, java.util.function.Supplier<String> create)
+		Set<String> preExistingGoalIds, Supplier<String> create)
 	{
 		if (sectionId != null && probe != null)
 		{
@@ -1373,7 +1383,7 @@ class GoalCreationService
 		{
 			return insertDiaryGoal(areaDisplayName, tier);
 		}
-		java.util.List<String> gesture =
+		List<String> gesture =
 			addDiaryGoalWithPrereqsCore(null, areaDisplayName, tier, resolved, /*keepCompleted=*/false);
 		return gesture.isEmpty() ? null : gesture.get(0);
 	}
@@ -1391,7 +1401,7 @@ class GoalCreationService
 	 *
 	 * @return every goal id touched by the gesture (diary goal first), or empty on failure
 	 */
-	private java.util.List<String> addDiaryGoalWithPrereqsCore(
+	private List<String> addDiaryGoalWithPrereqsCore(
 		String existingDiaryGoalId, String areaDisplayName, GoalPlannerApi.DiaryTier tier,
 		com.goalplanner.data.DiaryRequirementResolver.Resolved resolved, boolean keepCompleted)
 	{
@@ -1399,12 +1409,12 @@ class GoalCreationService
 			existingDiaryGoalId, areaDisplayName, tier,
 			resolved == null ? 0 : resolved.templates.size(),
 			resolved == null ? 0 : resolved.unlocks.size(), keepCompleted);
-		java.util.List<String> gestureGoalIds = new java.util.ArrayList<>();
+		List<String> gestureGoalIds = new ArrayList<>();
 		if (areaDisplayName == null || tier == null || resolved == null || resolved.isEmpty())
 		{
 			return gestureGoalIds;
 		}
-		java.util.List<Goal> prereqTemplates = resolved.templates;
+		List<Goal> prereqTemplates = resolved.templates;
 
 		AchievementDiaryData.Tier internalTier = mapDiaryTier(tier);
 		String tierStr = internalTier.getDisplayName();
@@ -1435,8 +1445,8 @@ class GoalCreationService
 			gestureGoalIds.add(diaryGoalId);
 
 			// Use the same BFS priority queue as quest prereq seeding.
-			java.util.Set<Quest> visited = new java.util.HashSet<>();
-			java.util.Set<String> preExisting = new java.util.HashSet<>();
+			Set<Quest> visited = new HashSet<>();
+			Set<String> preExisting = new HashSet<>();
 			for (Goal g : api.goalStore.getGoals()) preExisting.add(g.getId());
 			seedPrereqsInto(diaryGoalId, null, tagLabel,
 				prereqTemplates, visited, preExisting, gestureGoalIds);
@@ -1511,7 +1521,7 @@ class GoalCreationService
 								api.resolveQuestRequirements(quest);
 							if (qr != null && !qr.isEmpty())
 							{
-								java.util.Set<Quest> qVisited = new java.util.HashSet<>();
+								Set<Quest> qVisited = new HashSet<>();
 								qVisited.add(quest);
 								seedPrereqsInto(questGoalId, quest, qr.templates,
 									qVisited, preExisting, gestureGoalIds);
@@ -1580,9 +1590,9 @@ class GoalCreationService
 							api.resolveQuestRequirements(quest);
 						if (qr != null && !qr.isEmpty())
 						{
-							java.util.Set<Quest> vis = new java.util.HashSet<>();
+							Set<Quest> vis = new HashSet<>();
 							vis.add(quest);
-							java.util.Set<String> pre = new java.util.HashSet<>();
+							Set<String> pre = new HashSet<>();
 							for (Goal g2 : api.goalStore.getGoals())
 								pre.add(g2.getId());
 							seedPrereqsInto(questGoalId, quest, qr.templates,
@@ -1782,7 +1792,7 @@ class GoalCreationService
 			{
 				api.setSectionAutoArchiveOverride(g.getSectionId(), Boolean.FALSE);
 			}
-			java.util.List<String> gesture =
+			List<String> gesture =
 				addDiaryGoalWithPrereqsCore(diaryGoalId, area, apiTier, resolved, /*keepCompleted=*/includeMet);
 			return Math.max(0, gesture.size() - 1);
 		}
@@ -2072,16 +2082,16 @@ class GoalCreationService
 				// boss prereqs render with the same ordering (optional →
 				// skills/item/account → quests) and quests chain their own
 				// prereqs transitively.
-				java.util.Set<net.runelite.api.Quest> bossVisited = new java.util.HashSet<>();
-				java.util.Set<String> bossPreExistingGoalIds = new java.util.HashSet<>();
+				Set<net.runelite.api.Quest> bossVisited = new HashSet<>();
+				Set<String> bossPreExistingGoalIds = new HashSet<>();
 				for (Goal g : api.goalStore.getGoals()) bossPreExistingGoalIds.add(g.getId());
-				java.util.List<String> bossGestureGoalIds = new java.util.ArrayList<>();
+				List<String> bossGestureGoalIds = new ArrayList<>();
 				bossGestureGoalIds.add(goalId);
 
 				// Build templates for every direct prereq type EXCEPT
 				// UnlockRef (which has a unique CUSTOM + optional-skill
 				// subtree shape and stays in its own loop below).
-				java.util.List<Goal> templates = new java.util.ArrayList<>();
+				List<Goal> templates = new ArrayList<>();
 
 				for (com.goalplanner.data.BossKillData.SkillReq sr : prereqs.skills)
 				{
@@ -2398,7 +2408,7 @@ class GoalCreationService
 			return null;
 		}
 		final String goalId = derived.getId();
-		executeAddGoal(derived, goalId, "Add " + period.getLabel().toLowerCase(java.util.Locale.ROOT)
+		executeAddGoal(derived, goalId, "Add " + period.getLabel().toLowerCase(Locale.ROOT)
 			+ " goal: " + derived.getName());
 		api.goalStore.reconcileDerivedSections();
 		log.info("repeat chunk goal created: {} ({})", goalId, derived.getName());
@@ -2536,28 +2546,28 @@ class GoalCreationService
 	 *
 	 * @return the new goal ids (empty if nothing was duplicated)
 	 */
-	java.util.List<String> duplicateGoalsToSection(java.util.Collection<String> goalIds, String targetSectionId)
+	List<String> duplicateGoalsToSection(Collection<String> goalIds, String targetSectionId)
 	{
 		log.debug("API.internal duplicateGoalsToSection(n={}, target={})",
 			goalIds == null ? 0 : goalIds.size(), targetSectionId);
-		if (goalIds == null || goalIds.isEmpty()) return java.util.Collections.emptyList();
-		if (api.goalStore.findSection(targetSectionId) == null) return java.util.Collections.emptyList();
+		if (goalIds == null || goalIds.isEmpty()) return Collections.emptyList();
+		if (api.goalStore.findSection(targetSectionId) == null) return Collections.emptyList();
 
-		final java.util.List<Goal> sources = new java.util.ArrayList<>();
+		final List<Goal> sources = new ArrayList<>();
 		for (String id : goalIds)
 		{
 			Goal g = api.findGoal(id);
 			if (g != null) sources.add(g);
 		}
-		if (sources.isEmpty()) return java.util.Collections.emptyList();
+		if (sources.isEmpty()) return Collections.emptyList();
 
-		final java.util.List<String> createdGoalIds = new java.util.ArrayList<>();
+		final List<String> createdGoalIds = new ArrayList<>();
 		api.executeCommand(new com.goalplanner.command.Command()
 		{
 			@Override public boolean apply()
 			{
 				createdGoalIds.clear();
-				java.util.Map<String, String> oldToNew = new java.util.HashMap<>();
+				Map<String, String> oldToNew = new HashMap<>();
 				// Pass 1: create copies, honoring per-section dedup against the target.
 				for (Goal src : sources)
 				{
@@ -2599,7 +2609,7 @@ class GoalCreationService
 				return "Duplicate " + sources.size() + " goal(s) to section";
 			}
 		});
-		return new java.util.ArrayList<>(createdGoalIds);
+		return new ArrayList<>(createdGoalIds);
 	}
 
 	/**
@@ -2633,7 +2643,7 @@ class GoalCreationService
 			.build();
 		if (src.getTagIds() != null)
 		{
-			copy.setTagIds(new java.util.ArrayList<>(src.getTagIds()));
+			copy.setTagIds(new ArrayList<>(src.getTagIds()));
 		}
 		return copy;
 	}

@@ -193,7 +193,7 @@ class RelationService
 		if (quest == null || api.client == null)
 		{
 			return new com.goalplanner.data.QuestRequirementResolver.Resolved(
-				java.util.List.of(), 0, 0, 0, 0);
+				List.of(), 0, 0, 0, 0);
 		}
 		return com.goalplanner.data.QuestRequirementResolver.resolve(quest, api.client);
 	}

@@ -1,6 +1,7 @@
 package com.goalplanner.ui;
 
 import com.goalplanner.model.AccountMetric;
+import java.util.LinkedHashSet;
 
 /**
  * Pure quick-fill target presets for account-metric goals (Task 3). Data-driven
@@ -33,7 +34,7 @@ public final class AccountTargetPresets
 		int min = metric.getMinTarget();
 		int max = metric.getMaxTarget();
 		// Preserve insertion order, drop duplicates.
-		java.util.LinkedHashSet<Integer> out = new java.util.LinkedHashSet<>();
+		LinkedHashSet<Integer> out = new LinkedHashSet<>();
 
 		int[] milestones = milestonesFor(metric);
 		if (milestones != null)

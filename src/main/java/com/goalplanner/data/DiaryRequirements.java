@@ -7,6 +7,12 @@ import java.util.Map;
 import net.runelite.api.ItemID;
 import net.runelite.api.Quest;
 import net.runelite.api.Skill;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Pre-defined achievement diary tier requirements (skill levels,
@@ -290,21 +296,21 @@ public final class DiaryRequirements
 			{
 				return;
 			}
-			try (java.io.InputStream in = DiaryRequirements.class.getResourceAsStream("diary-requirements.json"))
+			try (InputStream in = DiaryRequirements.class.getResourceAsStream("diary-requirements.json"))
 			{
 				if (in == null)
 				{
 					throw new IllegalStateException("missing resource: diary-requirements.json");
 				}
-				try (java.io.Reader reader = new java.io.InputStreamReader(in, java.nio.charset.StandardCharsets.UTF_8))
+				try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8))
 				{
 					TABLE.putAll(gson.fromJson(reader,
-						new com.google.gson.reflect.TypeToken<java.util.Map<String, Reqs>>(){}.getType()));
+						new com.google.gson.reflect.TypeToken<Map<String, Reqs>>(){}.getType()));
 				}
 			}
-			catch (java.io.IOException e)
+			catch (IOException e)
 			{
-				throw new java.io.UncheckedIOException("failed to load diary-requirements.json", e);
+				throw new UncheckedIOException("failed to load diary-requirements.json", e);
 			}
 			loaded = true;
 		}

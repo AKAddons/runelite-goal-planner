@@ -8,6 +8,9 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JSeparator;
 
 /**
  * Converts an already-built {@link JPopupMenu} (or a {@link JMenu}
@@ -52,7 +55,7 @@ public final class MenuTreeAdapter
 
 	private static MenuNode fromComponent(Component c)
 	{
-		if (c instanceof JPopupMenu.Separator || c instanceof javax.swing.JSeparator)
+		if (c instanceof JPopupMenu.Separator || c instanceof JSeparator)
 		{
 			return MenuNode.separator();
 		}
@@ -86,8 +89,8 @@ public final class MenuTreeAdapter
 				: MenuNode.leaf(item.getText(), action);
 			// Radio / checkbox items carry a selected state - render as a
 			// checkable row (a left dot marks the selected one).
-			if (item instanceof javax.swing.JRadioButtonMenuItem
-				|| item instanceof javax.swing.JCheckBoxMenuItem)
+			if (item instanceof JRadioButtonMenuItem
+				|| item instanceof JCheckBoxMenuItem)
 			{
 				leaf = leaf.withCheck(true, item.isSelected());
 			}

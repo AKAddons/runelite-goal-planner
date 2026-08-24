@@ -15,6 +15,12 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.BasicStroke;
+import java.awt.Graphics2D;
+import java.awt.Graphics;
+import java.awt.Image;
+import java.util.function.BooleanSupplier;
+import javax.swing.ImageIcon;
 
 /**
  * A row rendered as a section header in the goal panel.
@@ -51,7 +57,7 @@ public class SectionHeaderRow extends JPanel
 	private final Color darkenedFill;
 
 	/** Select-all toggle state - null when the section has no goals (no glyph shown). */
-	private final java.util.function.BooleanSupplier allSelectedState;
+	private final BooleanSupplier allSelectedState;
 	private final JLabel selectToggle;
 
 	/** This header's section id, so the panel can match it against the current
@@ -77,7 +83,7 @@ public class SectionHeaderRow extends JPanel
 	 */
 	public SectionHeaderRow(SectionView section, int goalCount, Runnable onToggle,
 		Runnable onSelect,
-		java.util.function.BooleanSupplier allSelectedState, Runnable onToggleSelectAll,
+		BooleanSupplier allSelectedState, Runnable onToggleSelectAll,
 		boolean allCompleted)
 	{
 		this.sectionId = section.id;
@@ -146,19 +152,19 @@ public class SectionHeaderRow extends JPanel
 		// Right edge: an optional all-complete badge to the LEFT of the select-all
 		// toggle. BorderLayout (not FlowLayout) so children stretch to the row's
 		// bordered content height instead of being clipped at their preferred size.
-		javax.swing.JPanel eastPanel = new javax.swing.JPanel(new BorderLayout(2, 0));
+		JPanel eastPanel = new JPanel(new BorderLayout(2, 0));
 		eastPanel.setOpaque(false);
 
 		// Every goal in a non-empty section is complete -> show the plugin's
 		// completion icon as a section badge, scaled to fit the short header row.
 		if (allCompleted && goalCount > 0)
 		{
-			javax.swing.ImageIcon src = GoalCard.completionIcon();
+			ImageIcon src = GoalCard.completionIcon();
 			if (src != null)
 			{
 				int px = ROW_HEIGHT - 10; // fit within the 4px-bordered content height
-				java.awt.Image scaled = src.getImage().getScaledInstance(px, px, java.awt.Image.SCALE_SMOOTH);
-				JLabel doneBadge = new JLabel(new javax.swing.ImageIcon(scaled));
+				Image scaled = src.getImage().getScaledInstance(px, px, Image.SCALE_SMOOTH);
+				JLabel doneBadge = new JLabel(new ImageIcon(scaled));
 				doneBadge.setToolTipText("All goals in this section are complete");
 				eastPanel.add(doneBadge, BorderLayout.WEST);
 			}
@@ -258,7 +264,7 @@ public class SectionHeaderRow extends JPanel
 	}
 
 	@Override
-	protected void paintComponent(java.awt.Graphics g)
+	protected void paintComponent(Graphics g)
 	{
 		// Paint the darkened user-color fill ourselves so FlatLaf/UI delegates
 		// don't override it. Matches the pattern in ColorPickerField swatches
@@ -274,9 +280,9 @@ public class SectionHeaderRow extends JPanel
 		// bottom hairline. Mirrors GoalCard's 2px inset white outline.
 		if (selected)
 		{
-			java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+			Graphics2D g2 = (Graphics2D) g.create();
 			g2.setColor(SELECT_COLOR);
-			g2.setStroke(new java.awt.BasicStroke(2f));
+			g2.setStroke(new BasicStroke(2f));
 			g2.drawRect(1, 1, getWidth() - 3, getHeight() - 3);
 			g2.dispose();
 		}

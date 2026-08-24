@@ -3,6 +3,7 @@ package com.goalplanner.share;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Data;
+import java.util.Collections;
 
 /**
  * Transport-neutral payload for sharing a section or a set of goals with
@@ -76,7 +77,7 @@ public class ShareBundle
 		legacy.setName(kind == Kind.SECTION ? sectionName : null);
 		legacy.setColorRgb(sectionColorRgb);
 		legacy.setGoals(goals != null ? goals : new ArrayList<>());
-		return java.util.Collections.singletonList(legacy);
+		return Collections.singletonList(legacy);
 	}
 
 	/**

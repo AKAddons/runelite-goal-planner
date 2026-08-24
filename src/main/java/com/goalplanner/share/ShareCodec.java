@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+import java.util.List;
 
 /**
  * Encodes a {@link ShareBundle} to (and from) a compact, copy-safe string:
@@ -69,7 +70,7 @@ public final class ShareCodec
 	 */
 	static ShareBundle normalizeForWire(ShareBundle bundle)
 	{
-		java.util.List<SectionShareDto> secs = bundle.effectiveSections();
+		List<SectionShareDto> secs = bundle.effectiveSections();
 		ShareBundle wire = new ShareBundle();
 		wire.setSharedBy(bundle.getSharedBy());
 		if (bundle.needsV2())

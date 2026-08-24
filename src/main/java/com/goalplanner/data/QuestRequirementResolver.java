@@ -12,6 +12,8 @@ import net.runelite.api.Experience;
 import net.runelite.api.Quest;
 import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * Resolves a {@link QuestRequirements.Reqs} entry into concrete goal
@@ -294,7 +296,7 @@ public final class QuestRequirementResolver
 
 		// Recommended skills (wiki suggestions) - seeded as optional.
 		// Only added for skills not already in the hard requirements.
-		java.util.Set<String> hardSkillNames = new java.util.HashSet<>();
+		Set<String> hardSkillNames = new HashSet<>();
 		for (QuestRequirements.SkillReq req : reqs.skills)
 		{
 			hardSkillNames.add(req.skill.name());

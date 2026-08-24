@@ -7,6 +7,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import net.runelite.client.game.ItemVariationMapping;
+import java.util.Locale;
+import java.util.Map;
 
 /**
  * Answers "what repeatable activity drops this item?" by joining the two
@@ -80,8 +82,8 @@ public final class ItemActivityResolver
 	 * these are the ones whose group name shares no words with its members.
 	 * Every target verified present in boss-killcount.tsv by test.
 	 */
-	private static final java.util.Map<String, String[]> GROUP_LABELS =
-		java.util.Map.of(
+	private static final Map<String, String[]> GROUP_LABELS =
+		Map.of(
 			"Dagannoth Kings",
 			new String[]{"Dagannoth Prime", "Dagannoth Rex", "Dagannoth Supreme"},
 			"Moons of Peril",
@@ -218,7 +220,7 @@ public final class ItemActivityResolver
 	/** Lowercase, strip a leading "the ", collapse to alphanumerics. */
 	private static String normalize(String s)
 	{
-		String t = s.toLowerCase(java.util.Locale.ROOT).trim();
+		String t = s.toLowerCase(Locale.ROOT).trim();
 		if (t.startsWith("the "))
 		{
 			t = t.substring(4);

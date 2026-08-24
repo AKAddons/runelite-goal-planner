@@ -1,4 +1,5 @@
 package com.goalplanner.share;
+import java.util.List;
 
 /**
  * Wraps a {@link ShareCodec} share code in a human-readable, copy-paste-ready
@@ -43,7 +44,7 @@ public final class ShareText
 		{
 			return "0 goals";
 		}
-		java.util.List<SectionShareDto> sections = bundle.effectiveSections();
+		List<SectionShareDto> sections = bundle.effectiveSections();
 		int n = bundle.totalGoalCount();
 		String goals = n == 1 ? "1 goal" : n + " goals";
 		if (sections.size() > 1)

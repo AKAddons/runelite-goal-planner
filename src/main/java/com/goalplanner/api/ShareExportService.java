@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * Builds a {@link ShareBundle} from goals currently in the store (export side).
@@ -107,7 +109,7 @@ class ShareExportService
 		// Group the selection by source section, in store (display) order;
 		// the two built-ins collapse into one "default plan" group.
 		List<Goal> defaultGroup = new ArrayList<>();
-		java.util.Map<String, List<Goal>> bySection = new java.util.LinkedHashMap<>();
+		Map<String, List<Goal>> bySection = new LinkedHashMap<>();
 		for (Goal g : api.goalStore.getGoals())
 		{
 			if (g == null || !wanted.contains(g.getId()))
@@ -146,7 +148,7 @@ class ShareExportService
 		// Spans sections → multi-section (v2) bundle preserving each source.
 		List<SectionShareDto> sections = new ArrayList<>();
 		List<List<Goal>> groups = new ArrayList<>();
-		for (java.util.Map.Entry<String, List<Goal>> e : bySection.entrySet())
+		for (Map.Entry<String, List<Goal>> e : bySection.entrySet())
 		{
 			Section sec = api.goalStore.findSection(e.getKey());
 			sections.add(ShareMapper.toSectionDto(
