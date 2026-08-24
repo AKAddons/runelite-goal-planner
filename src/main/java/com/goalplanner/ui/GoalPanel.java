@@ -12,6 +12,7 @@ import net.runelite.api.Client;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.ui.ColorScheme;
+import net.runelite.client.util.LinkBrowser;
 import net.runelite.client.ui.PluginPanel;
 
 import javax.swing.*;
@@ -26,7 +27,6 @@ import java.util.Map;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
-import java.awt.Desktop;
 import java.awt.Graphics2D;
 import java.awt.Graphics;
 import java.awt.Insets;
@@ -1870,28 +1870,13 @@ public class GoalPanel extends PluginPanel
 	private static final Color UNDO_REDO_DISABLED = new Color(80, 80, 90);
 
 	/**
-	 * Open the Discord invite in the user's default browser. Falls back to
-	 * a no-op (with a log warning) if Desktop browse isn't supported - on
-	 * a headless system there's nothing useful we can do.
+	 * Open the Discord invite. Uses RuneLite's LinkBrowser, which handles the
+	 * unsupported/headless cases and the client's own link confirmation -
+	 * Desktop::browse is not permitted on the plugin hub.
 	 */
 	private void openDiscordInvite()
 	{
-		try
-		{
-			if (Desktop.isDesktopSupported()
-				&& Desktop.getDesktop().isSupported(Desktop.Action.BROWSE))
-			{
-				Desktop.getDesktop().browse(URI.create(DISCORD_URL));
-			}
-			else
-			{
-				log.warn("Desktop browse not supported; cannot open Discord invite");
-			}
-		}
-		catch (Exception ex)
-		{
-			log.warn("Failed to open Discord invite: {}", ex.getMessage());
-		}
+		LinkBrowser.browse(DISCORD_URL);
 	}
 
 	private void refreshUndoRedoButtons()
