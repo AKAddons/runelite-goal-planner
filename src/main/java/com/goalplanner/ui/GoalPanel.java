@@ -2434,10 +2434,6 @@ public class GoalPanel extends PluginPanel
 	}
 
 	/** A group separator in a dock strip (small-caps label, no action). */
-	private static ActionDock.Item sep(String label)
-	{
-		return new ActionDock.Item(label, null, null);
-	}
 
 	/**
 	 * Assemble the one-goal action strips. Top row carries the lifecycle +
@@ -2498,7 +2494,6 @@ public class GoalPanel extends PluginPanel
 
 		// --- BOTTOM: organize ---
 		// Tags.
-		bottom.add(sep("tag"));
 		bottom.add(item("Add tag", "Add a tag to this goal", () -> openTagAddSurfaceForGoal(gid)));
 		List<Tag> removable = removableTagsFor(g);
 		if (!removable.isEmpty())
@@ -2510,7 +2505,6 @@ public class GoalPanel extends PluginPanel
 		// Requirements graph - hidden on completed goals (reference history).
 		if (!complete)
 		{
-			bottom.add(sep("requires"));
 			bottom.add(item("Requires", "Then click another goal to require it",
 				() -> enterRelationMode(gid, /*sourceRequiresTarget=*/true)));
 			bottom.add(item("Required by", "Then click another goal that should require this",
@@ -2522,7 +2516,7 @@ public class GoalPanel extends PluginPanel
 			}
 			if (!api.getDependents(gid).isEmpty())
 			{
-				bottom.add(item("Drop dependents", "Remove dependents of this goal",
+				bottom.add(item("Drop deps", "Remove dependents of this goal",
 					() -> openReqRemoveSurface(g.getId(), true)));
 			}
 		}
@@ -2530,20 +2524,19 @@ public class GoalPanel extends PluginPanel
 		// Seed a quest/diary/boss goal's game-data requirements into its section.
 		if (goalHasSeedableReqs(g))
 		{
-			bottom.add(item("Add reqs to section",
+			bottom.add(item("Add reqs",
 				"Add this goal's requirements into its section",
 				() -> dockSeedReqs(g)));
 		}
 
 		// Move / duplicate / restore.
-		bottom.add(sep("organize"));
-		bottom.add(item("Move to section", "Move this goal to another section",
+		bottom.add(item("Move", "Move this goal to another section",
 			() -> openMoveSurface(MoveMode.MOVE, Collections.singletonList(gid))));
-		bottom.add(item("Copy to section", "Duplicate this goal into another section",
+		bottom.add(item("Copy", "Duplicate this goal into another section",
 			() -> openMoveSurface(MoveMode.COPY, Collections.singletonList(gid))));
 		if (api.isGoalOverridden(gid))
 		{
-			bottom.add(item("Restore defaults", "Reset tags and color to their defaults",
+			bottom.add(item("Defaults", "Reset tags and color to their defaults",
 				() -> api.bulkRestoreDefaults(Collections.singleton(gid))));
 		}
 
@@ -2554,13 +2547,11 @@ public class GoalPanel extends PluginPanel
 			if (labState == LoadoutLabState.ENABLED)
 			{
 				final String monster = g.getBossName();
-				bottom.add(sep("lab"));
 				bottom.add(item("Loadout Lab", "Search this boss in Loadout Lab",
 					() -> searchLoadoutLab(monster)));
 			}
 			else if (labState == LoadoutLabState.INSTALLED_DISABLED)
 			{
-				bottom.add(sep("lab"));
 				bottom.add(new ActionDock.Item("Lab is off",
 					"Loadout Lab is installed but disabled", () -> {}, false));
 			}
@@ -2570,13 +2561,11 @@ public class GoalPanel extends PluginPanel
 		if (isShareAvailable())
 		{
 			final List<String> shareIds = Collections.singletonList(gid);
-			bottom.add(sep("share"));
 			bottom.add(item("Share", "Copy or save a share code for this goal",
 				() -> openShareForGoals(shareIds)));
 		}
 
 		// Deselect / Remove close out the strip.
-		bottom.add(sep("goal"));
 		bottom.add(item("Deselect", "Clear the selection", () -> api.clearGoalSelection()));
 		bottom.add(item("Remove", "Remove this goal (undoable)", () -> api.removeGoal(gid)));
 	}
@@ -2657,7 +2646,6 @@ public class GoalPanel extends PluginPanel
 		final List<Goal> recolor = new ArrayList<>(goals);
 		if (!recolor.isEmpty())
 		{
-			bottom.add(sep("edit"));
 			bottom.add(item("Color", "Change the color of every selected goal",
 				() -> openColorSurfaceForMulti()));
 		}
@@ -2668,7 +2656,6 @@ public class GoalPanel extends PluginPanel
 			api.getRemovableTagsForSelection(sel);
 		if (!tagAdd.isEmpty() || !removableOpts.isEmpty())
 		{
-			bottom.add(sep("tag"));
 			if (!tagAdd.isEmpty())
 			{
 				bottom.add(item("Add tag", "Add a tag to every selected goal",
@@ -2682,10 +2669,9 @@ public class GoalPanel extends PluginPanel
 		}
 
 		// Move / duplicate / restore.
-		bottom.add(sep("organize"));
-		bottom.add(item("Move to section", "Move the selected goals to another section",
+		bottom.add(item("Move", "Move the selected goals to another section",
 			() -> openMoveSurface(MoveMode.BULK_MOVE, sel)));
-		bottom.add(item("Copy to section", "Duplicate the selected goals into another section",
+		bottom.add(item("Copy", "Duplicate the selected goals into another section",
 			() -> openMoveSurface(MoveMode.BULK_COPY, sel)));
 		boolean anyOverridden = false;
 		for (String id : sel)
@@ -2698,7 +2684,7 @@ public class GoalPanel extends PluginPanel
 		}
 		if (anyOverridden)
 		{
-			bottom.add(item("Restore defaults",
+			bottom.add(item("Defaults",
 				"Reset tags and color to defaults for the selected goals",
 				() -> api.bulkRestoreDefaults(sel)));
 		}
@@ -2707,7 +2693,6 @@ public class GoalPanel extends PluginPanel
 		if (isShareAvailable())
 		{
 			final List<String> shareIds = new ArrayList<>(sel);
-			bottom.add(sep("share"));
 			bottom.add(item("Share", "Copy or save one share code for the selected goals",
 				() -> openShareForGoals(shareIds)));
 		}
