@@ -3520,8 +3520,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildCreateGrid()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// No "Add a goal" title and no "CREATE" indicator bar here: the Create Goal
 		// header button already names the mode, and a third label read as redundant
@@ -3595,8 +3594,7 @@ public class GoalPanel extends PluginPanel
 		nameField.addActionListener(e -> commit.run());
 
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
@@ -3765,9 +3763,7 @@ public class GoalPanel extends PluginPanel
 		JPanel body = formBody();
 
 		JLabel promptLabel = new JLabel(prompt);
-		promptLabel.setForeground(CREATE_FG_DIM);
-		promptLabel.setFont(promptLabel.getFont().deriveFont(10f));
-		promptLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(promptLabel);
 		body.add(promptLabel);
 		body.add(Box.createVerticalStrut(4));
 
@@ -3803,8 +3799,7 @@ public class GoalPanel extends PluginPanel
 		final JTextField newName = new JTextField(16);
 		styleField(newName);
 		final JPanel newRow = new JPanel(new BorderLayout(4, 0));
-		newRow.setOpaque(false);
-		newRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(newRow);
 		newRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, newName.getPreferredSize().height));
 		newRow.setVisible(false);
 		Runnable createUse = () ->
@@ -3860,8 +3855,7 @@ public class GoalPanel extends PluginPanel
 		body.add(newRow);
 
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
@@ -3892,8 +3886,7 @@ public class GoalPanel extends PluginPanel
 		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 
 		JLabel nm = new JLabel(label);
-		nm.setForeground(CREATE_FG);
-		nm.setFont(nm.getFont().deriveFont(11f));
+		formFont(nm);
 		row.add(nm, BorderLayout.CENTER);
 
 		row.addMouseListener(new MouseAdapter()
@@ -4090,9 +4083,7 @@ public class GoalPanel extends PluginPanel
 			target.setTargetXp(editing.getTargetValue());
 		}
 		JPanel oneTimePane = new JPanel();
-		oneTimePane.setLayout(new BoxLayout(oneTimePane, BoxLayout.Y_AXIS));
-		oneTimePane.setOpaque(false);
-		oneTimePane.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(oneTimePane);
 		addFormRow(oneTimePane, "Target level or XP", target);
 
 		// In update mode this pane doubles as the repeat EDITOR (pre-filled with the
@@ -4106,24 +4097,18 @@ public class GoalPanel extends PluginPanel
 			amount.setText(Integer.toString(editing.getRepeatChunk()));
 		}
 		JPanel repeatPane = new JPanel();
-		repeatPane.setLayout(new BoxLayout(repeatPane, BoxLayout.Y_AXIS));
-		repeatPane.setOpaque(false);
-		repeatPane.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(repeatPane);
 		JComponent pills = buildPeriodPills(period);
 		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
 		JLabel periodLbl = new JLabel("Repeat every");
-		periodLbl.setForeground(CREATE_FG_DIM);
-		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
-		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(periodLbl);
 		repeatPane.add(periodLbl);
 		repeatPane.add(Box.createVerticalStrut(2));
 		repeatPane.add(pills);
 		repeatPane.add(Box.createVerticalStrut(6));
 		addFormRow(repeatPane, "XP each period", amount);
 		JLabel lock = new JLabel("Lands in the Repeatable section.");
-		lock.setForeground(CREATE_FG_DIM);
-		lock.setFont(lock.getFont().deriveFont(10f));
-		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(lock);
 		repeatPane.add(lock);
 
 		// Update mode opens on the goal's CURRENT mode: a per-period chunk is
@@ -4254,8 +4239,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildSkillPickerGrid(net.runelite.api.Skill[] out, Runnable onPick)
 	{
 		JPanel grid = new JPanel(new GridLayout(0, 8, 3, 3));
-		grid.setOpaque(false);
-		grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(grid);
 
 		List<JButton> buttons = new ArrayList<>();
 		Map<JButton, net.runelite.api.Skill> owner = new HashMap<>();
@@ -4348,14 +4332,11 @@ public class GoalPanel extends PluginPanel
 		// no Client read). Tapping one fills the target field; typing a custom value
 		// still works. Rebuilt whenever the metric changes.
 		JLabel quickLbl = new JLabel("Quick fill");
-		quickLbl.setForeground(CREATE_FG_DIM);
-		quickLbl.setFont(quickLbl.getFont().deriveFont(10f));
-		quickLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(quickLbl);
 		body.add(quickLbl);
 		body.add(Box.createVerticalStrut(2));
 		JPanel presetRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-		presetRow.setOpaque(false);
-		presetRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(presetRow);
 		body.add(presetRow);
 		body.add(Box.createVerticalStrut(6));
 		Runnable rebuildPresets = () ->
@@ -4531,17 +4512,14 @@ public class GoalPanel extends PluginPanel
 		searchBtn.addActionListener(e -> doSearch.run());
 
 		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
-		searchRow.setOpaque(false);
-		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(searchRow);
 		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 			searchField.getPreferredSize().height));
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(searchBtn, BorderLayout.EAST);
 
 		JLabel bossLabel = new JLabel("Pick a boss (common bosses shown; type to search)");
-		bossLabel.setForeground(CREATE_FG_DIM);
-		bossLabel.setFont(bossLabel.getFont().deriveFont(10f));
-		bossLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(bossLabel);
 		body.add(bossLabel);
 		body.add(Box.createVerticalStrut(2));
 		body.add(searchRow);
@@ -4593,9 +4571,7 @@ public class GoalPanel extends PluginPanel
 		JPanel relativePane = formBody();
 		addFormRow(relativePane, "Kills beyond current", relField);
 		JLabel relNote = new JLabel("Target = your current kill count + this.");
-		relNote.setForeground(CREATE_FG_DIM);
-		relNote.setFont(relNote.getFont().deriveFont(10f));
-		relNote.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(relNote);
 		relativePane.add(relNote);
 
 		// Repeatable pane: period pills + a per-period kill chunk (no target). Lands
@@ -4614,18 +4590,14 @@ public class GoalPanel extends PluginPanel
 		JComponent pills = buildPeriodPills(period);
 		pills.setAlignmentX(Component.LEFT_ALIGNMENT);
 		JLabel periodLbl = new JLabel("Repeat every");
-		periodLbl.setForeground(CREATE_FG_DIM);
-		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
-		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(periodLbl);
 		repeatPane.add(periodLbl);
 		repeatPane.add(Box.createVerticalStrut(2));
 		repeatPane.add(pills);
 		repeatPane.add(Box.createVerticalStrut(6));
 		addFormRow(repeatPane, "Kills each period", chunkField);
 		JLabel lock = new JLabel("Lands in the Repeatable section.");
-		lock.setForeground(CREATE_FG_DIM);
-		lock.setFont(lock.getFont().deriveFont(10f));
-		lock.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(lock);
 		repeatPane.add(lock);
 
 		// "Add prerequisites" create option (Task 4), CHECKED by default: on = seed the
@@ -4928,9 +4900,7 @@ public class GoalPanel extends PluginPanel
 
 		// Toggles above, then the chooser.
 		JPanel toggles = new JPanel();
-		toggles.setLayout(new BoxLayout(toggles, BoxLayout.Y_AXIS));
-		toggles.setOpaque(false);
-		toggles.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(toggles);
 		toggles.add(incompleteOnly);
 		toggles.add(f2pOnly);
 		toggles.setMaximumSize(new Dimension(Integer.MAX_VALUE, toggles.getPreferredSize().height));
@@ -4970,9 +4940,7 @@ public class GoalPanel extends PluginPanel
 	{
 		JCheckBox cb = new JCheckBox(text, selected);
 		cb.setOpaque(false);
-		cb.setForeground(CREATE_FG);
-		cb.setFont(cb.getFont().deriveFont(11f));
-		cb.setAlignmentX(Component.LEFT_ALIGNMENT);
+		formLabel(cb);
 		cb.setFocusPainted(false);
 		cb.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		return cb;
@@ -5072,8 +5040,7 @@ public class GoalPanel extends PluginPanel
 		searchBtn.addActionListener(e -> doSearch.run());
 
 		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
-		searchRow.setOpaque(false);
-		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(searchRow);
 		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 			searchField.getPreferredSize().height));
 		searchRow.add(searchField, BorderLayout.CENTER);
@@ -5084,9 +5051,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(6));
 
 		JLabel itemLabel = new JLabel("Pick an item");
-		itemLabel.setForeground(CREATE_FG_DIM);
-		itemLabel.setFont(itemLabel.getFont().deriveFont(10f));
-		itemLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(itemLabel);
 		body.add(itemLabel);
 		body.add(Box.createVerticalStrut(2));
 		body.add(searchRow);
@@ -5183,14 +5148,10 @@ public class GoalPanel extends PluginPanel
 
 		final int[] selectedId = { -1 };
 		JLabel selectedLabel = new JLabel("No task selected");
-		selectedLabel.setForeground(CREATE_FG_DIM);
-		selectedLabel.setFont(selectedLabel.getFont().deriveFont(10f));
-		selectedLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(selectedLabel);
 
 		JPanel results = new JPanel();
-		results.setLayout(new BoxLayout(results, BoxLayout.Y_AXIS));
-		results.setOpaque(false);
-		results.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(results);
 
 		JTextField searchField = new JTextField(14);
 		styleField(searchField);
@@ -5225,8 +5186,7 @@ public class GoalPanel extends PluginPanel
 		searchBtn.addActionListener(e -> doSearch.run());
 
 		JPanel searchRow = new JPanel(new BorderLayout(4, 0));
-		searchRow.setOpaque(false);
-		searchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(searchRow);
 		searchRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 			searchField.getPreferredSize().height));
 		searchRow.add(searchField, BorderLayout.CENTER);
@@ -5237,9 +5197,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(6));
 
 		JLabel taskLabel = new JLabel("Task");
-		taskLabel.setForeground(CREATE_FG_DIM);
-		taskLabel.setFont(taskLabel.getFont().deriveFont(10f));
-		taskLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(taskLabel);
 		body.add(taskLabel);
 		body.add(Box.createVerticalStrut(2));
 		body.add(searchRow);
@@ -5275,9 +5233,7 @@ public class GoalPanel extends PluginPanel
 	private ScrollablePanel resultsColumn()
 	{
 		ScrollablePanel p = new ScrollablePanel(null);
-		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-		p.setOpaque(false);
-		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(p);
 		return p;
 	}
 
@@ -5357,8 +5313,7 @@ public class GoalPanel extends PluginPanel
 			row.add(new JLabel(icon), BorderLayout.WEST);
 		}
 		JLabel nm = new JLabel(label);
-		nm.setForeground(CREATE_FG);
-		nm.setFont(nm.getFont().deriveFont(11f));
+		formFont(nm);
 		row.add(nm, BorderLayout.CENTER);
 		row.addMouseListener(new MouseAdapter()
 		{
@@ -5385,8 +5340,7 @@ public class GoalPanel extends PluginPanel
 		row.setToolTipText(tooltip);
 
 		JLabel nm = new JLabel(label);
-		nm.setForeground(CREATE_FG);
-		nm.setFont(nm.getFont().deriveFont(11f));
+		formFont(nm);
 		row.add(nm, BorderLayout.CENTER);
 
 		row.addMouseListener(new MouseAdapter()
@@ -5444,8 +5398,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildSegmentedToggle(String[] labels, int[] sel, Runnable onChange)
 	{
 		JPanel row = new JPanel(new GridLayout(1, labels.length, 4, 0));
-		row.setOpaque(false);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(row);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		final JButton[] segs = new JButton[labels.length];
 		Runnable refresh = () ->
@@ -5563,8 +5516,7 @@ public class GoalPanel extends PluginPanel
 		// and the primary button saves instead of advancing to the section chooser.
 		final boolean update = dockEditFormGoalId != null;
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel header = new JPanel(new BorderLayout(6, 0));
 		header.setOpaque(false);
@@ -5618,9 +5570,7 @@ public class GoalPanel extends PluginPanel
 	private JPanel formBody()
 	{
 		JPanel p = new JPanel();
-		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-		p.setOpaque(false);
-		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(p);
 		return p;
 	}
 
@@ -5649,9 +5599,7 @@ public class GoalPanel extends PluginPanel
 	private JLabel mutedTip(String text)
 	{
 		JLabel l = new JLabel("<html>" + text + "</html>");
-		l.setForeground(CREATE_FG_DIM);
-		l.setFont(l.getFont().deriveFont(10f));
-		l.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(l);
 		return l;
 	}
 
@@ -5828,8 +5776,7 @@ public class GoalPanel extends PluginPanel
 			|| g.getType() == GoalType.DIARY
 			|| g.getType() == GoalType.COMBAT_ACHIEVEMENT;
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// Complete / Reopen as a checkbox heading the form (ADR-0008).
 		JCheckBox done = null;
@@ -5911,16 +5858,13 @@ public class GoalPanel extends PluginPanel
 		JComponent relations = buildRelationsBlock(g);
 
 		JPanel dataRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
-		dataRow.setOpaque(false);
-		dataRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(dataRow);
 		buildDataChips(g, dataRow);
 
 		JComponent chips = buildEditChips(g);
 
 		JPanel south = new JPanel();
-		south.setLayout(new BoxLayout(south, BoxLayout.Y_AXIS));
-		south.setOpaque(false);
-		south.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(south);
 		// The Selected view is read-only; "Edit goal" opens this goal's own CREATE
 		// form pre-filled in update mode (see openEditGoalForm). Types whose target
 		// is immutable (QUEST / DIARY / COMBAT_ACHIEVEMENT) have nothing to edit, so
@@ -5979,8 +5923,7 @@ public class GoalPanel extends PluginPanel
 			.toLocalDate()
 			.format(ADDED_DATE_FMT);
 		JLabel l = new JLabel("Added: " + date);
-		l.setForeground(CREATE_FG_DIM);
-		l.setFont(l.getFont().deriveFont(10f));
+		dimFont(l);
 		return l;
 	}
 
@@ -6008,9 +5951,7 @@ public class GoalPanel extends PluginPanel
 		}
 
 		JPanel p = new JPanel();
-		p.setLayout(new BoxLayout(p, BoxLayout.Y_AXIS));
-		p.setOpaque(false);
-		p.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(p);
 
 		// Requires edges: up arrow (this goal sits ON TOP of what it needs). The X
 		// drops the requirement this goal holds: removeRequirement(thisGoal, reqId).
@@ -6118,8 +6059,7 @@ public class GoalPanel extends PluginPanel
 		String removeTip, Runnable onRemove)
 	{
 		JPanel row = new JPanel(new BorderLayout(6, 0));
-		row.setOpaque(false);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(row);
 		JLabel l = new JLabel(name, icon, SwingConstants.LEFT);
 		l.setForeground(CREATE_FG);
 		l.setFont(l.getFont().deriveFont(12f));
@@ -6349,9 +6289,7 @@ public class GoalPanel extends PluginPanel
 		final com.goalplanner.model.RepeatPeriod[] period = { initialPeriod(g) };
 		final JCheckBox toggle = new JCheckBox("Repeatable");
 		toggle.setOpaque(false);
-		toggle.setForeground(CREATE_FG);
-		toggle.setFont(toggle.getFont().deriveFont(11f));
-		toggle.setAlignmentX(Component.LEFT_ALIGNMENT);
+		formLabel(toggle);
 		toggle.setSelected(g.getRepeatEvery().isRepeating());
 		toggle.setVisible(toggleable);
 
@@ -6363,14 +6301,10 @@ public class GoalPanel extends PluginPanel
 		}
 
 		JPanel detail = new JPanel();
-		detail.setLayout(new BoxLayout(detail, BoxLayout.Y_AXIS));
-		detail.setOpaque(false);
-		detail.setAlignmentX(Component.LEFT_ALIGNMENT);
+		column(detail);
 		detail.setVisible(!toggleable || toggle.isSelected());
 		JLabel periodLbl = new JLabel("Repeat every");
-		periodLbl.setForeground(CREATE_FG_DIM);
-		periodLbl.setFont(periodLbl.getFont().deriveFont(10f));
-		periodLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(periodLbl);
 		detail.add(periodLbl);
 		detail.add(Box.createVerticalStrut(2));
 		JComponent pills = buildPeriodPills(period);
@@ -6389,9 +6323,7 @@ public class GoalPanel extends PluginPanel
 		});
 
 		JLabel head = new JLabel("Repeat");
-		head.setForeground(CREATE_FG_DIM);
-		head.setFont(head.getFont().deriveFont(10f));
-		head.setAlignmentX(Component.LEFT_ALIGNMENT);
+		dimLabel(head);
 		head.setVisible(toggleable);
 		body.add(Box.createVerticalStrut(2));
 		body.add(head);
@@ -6674,8 +6606,7 @@ public class GoalPanel extends PluginPanel
 		}
 
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// Back returns to the prior surface WITHOUT changing anything.
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
@@ -6690,8 +6621,7 @@ public class GoalPanel extends PluginPanel
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
 		JPanel grid = new JPanel(new GridLayout(3, 4, 6, 6));
-		grid.setOpaque(false);
-		grid.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(grid);
 		for (Color preset : ColorPickerField.PRESETS)
 		{
 			int rgb = (preset.getRed() << 16) | (preset.getGreen() << 8) | preset.getBlue();
@@ -6724,11 +6654,9 @@ public class GoalPanel extends PluginPanel
 		hexHint.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		JPanel hexRow = new JPanel(new BorderLayout(4, 0));
-		hexRow.setOpaque(false);
-		hexRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(hexRow);
 		JLabel hexLbl = new JLabel("Hex ");
-		hexLbl.setForeground(CREATE_FG);
-		hexLbl.setFont(hexLbl.getFont().deriveFont(11f));
+		formFont(hexLbl);
 		final JTextField hexField = new JTextField();
 		styleField(hexField);
 		hexField.setToolTipText("Custom color: #RRGGBB or RRGGBB");
@@ -6939,8 +6867,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildReqRemoveSurface()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		head.setOpaque(false);
@@ -7011,8 +6938,7 @@ public class GoalPanel extends PluginPanel
 	{
 		com.goalplanner.api.SectionView sv = findSectionView(dockRenameSectionId);
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		head.setOpaque(false);
@@ -7055,8 +6981,7 @@ public class GoalPanel extends PluginPanel
 		name.addActionListener(e -> commit.run());
 
 		JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
-		actions.setOpaque(false);
-		actions.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(actions);
 		actions.add(chip("Save", "Rename this section", commit));
 		body.add(Box.createVerticalStrut(6));
 		body.add(actions);
@@ -7147,8 +7072,7 @@ public class GoalPanel extends PluginPanel
 		}
 
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// Back returns to the prior surface WITHOUT adding anything.
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
@@ -7175,8 +7099,7 @@ public class GoalPanel extends PluginPanel
 		body.add(Box.createVerticalStrut(6));
 
 		final JPanel suggest = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
-		suggest.setOpaque(false);
-		suggest.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(suggest);
 		body.add(suggest);
 
 		// Enter / the Create chip: an exact (case-insensitive) hit attaches THAT tag
@@ -7276,8 +7199,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildTagRemoveSurface()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// Back returns to the prior surface WITHOUT changing anything further.
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
@@ -7463,8 +7385,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildShareSurface()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		// Back returns to the prior surface WITHOUT changing anything.
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
@@ -7667,8 +7588,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildImportSurface()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		head.setOpaque(false);
@@ -7680,9 +7600,7 @@ public class GoalPanel extends PluginPanel
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 
 		JLabel prompt = new JLabel("Paste a share code");
-		prompt.setForeground(CREATE_FG);
-		prompt.setFont(prompt.getFont().deriveFont(11f));
-		prompt.setAlignmentX(Component.LEFT_ALIGNMENT);
+		formLabel(prompt);
 		body.add(prompt);
 		body.add(Box.createVerticalStrut(2));
 
@@ -7748,8 +7666,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildSavedPlansSurface()
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		head.setOpaque(false);
@@ -7787,8 +7704,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildSavedPlanRow(com.goalplanner.persistence.SavedPlan plan)
 	{
 		JPanel row = new JPanel(new BorderLayout(6, 0));
-		row.setOpaque(false);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(row);
 
 		JPanel text = new JPanel();
 		text.setOpaque(false);
@@ -7797,8 +7713,7 @@ public class GoalPanel extends PluginPanel
 		name.setForeground(CREATE_FG);
 		name.setFont(name.getFont().deriveFont(Font.BOLD, 11f));
 		JLabel sub = new JLabel(savedPlanPreview(plan));
-		sub.setForeground(CREATE_FG_DIM);
-		sub.setFont(sub.getFont().deriveFont(10f));
+		dimFont(sub);
 		text.add(name);
 		text.add(sub);
 		row.add(text, BorderLayout.CENTER);
@@ -7938,14 +7853,11 @@ public class GoalPanel extends PluginPanel
 	private void addSummaryRow(JPanel body, String label, String value)
 	{
 		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-		row.setOpaque(false);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(row);
 		JLabel l = new JLabel(label + ":");
-		l.setForeground(CREATE_FG_DIM);
-		l.setFont(l.getFont().deriveFont(10f));
+		dimFont(l);
 		JLabel v = new JLabel(value);
-		v.setForeground(CREATE_FG);
-		v.setFont(v.getFont().deriveFont(11f));
+		formFont(v);
 		row.add(l);
 		row.add(v);
 		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, row.getPreferredSize().height));
@@ -7957,8 +7869,7 @@ public class GoalPanel extends PluginPanel
 	private void addSummaryText(JPanel body, String label, String text)
 	{
 		JLabel v = new JLabel("<html>" + escapeHtml(text) + "</html>");
-		v.setForeground(CREATE_FG);
-		v.setFont(v.getFont().deriveFont(11f));
+		formFont(v);
 		addFormRow(body, label, v);
 	}
 
@@ -8135,8 +8046,7 @@ public class GoalPanel extends PluginPanel
 			com.goalplanner.model.RepeatPeriod.WEEKLY,
 			com.goalplanner.model.RepeatPeriod.MONTHLY };
 		JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
-		row.setOpaque(false);
-		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		loose(row);
 		List<JButton> pills = new ArrayList<>();
 		Map<JButton, com.goalplanner.model.RepeatPeriod> owner = new HashMap<>();
 		Runnable refresh = () ->
@@ -8304,8 +8214,7 @@ public class GoalPanel extends PluginPanel
 	private JComponent buildSectionDock(com.goalplanner.api.SectionView sv)
 	{
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
-		inner.setOpaque(false);
-		inner.setBorder(new EmptyBorder(6, 8, 8, 8));
+		innerPad(inner);
 
 		int goalCount = countGoalsInSection(sv.id);
 		String kind = sv.builtIn
@@ -8315,8 +8224,7 @@ public class GoalPanel extends PluginPanel
 			: "Section";
 		JLabel meta = new JLabel(kind + " - " + goalCount
 			+ (goalCount == 1 ? " goal" : " goals"));
-		meta.setForeground(CREATE_FG_DIM);
-		meta.setFont(meta.getFont().deriveFont(10f));
+		dimFont(meta);
 		inner.add(meta, BorderLayout.NORTH);
 
 		inner.add(buildSectionChips(sv), BorderLayout.CENTER);
@@ -8493,6 +8401,54 @@ public class GoalPanel extends PluginPanel
 			dockSectionGroup = null;
 			api.deleteSection(sv.id, moveInstead.isSelected());
 		}
+	}
+
+	/** Dock form-text styling, factored from ~66 repeated call sites. The
+	 *  panel builds its surfaces by hand (no layout framework), so these three
+	 *  property triples were the real duplication - not the surfaces themselves. */
+	private static void dimLabel(JComponent c)
+	{
+		dimFont(c);
+		c.setAlignmentX(Component.LEFT_ALIGNMENT);
+	}
+
+	private static void formLabel(JComponent c)
+	{
+		formFont(c);
+		c.setAlignmentX(Component.LEFT_ALIGNMENT);
+	}
+
+	private static void dimFont(JComponent c)
+	{
+		c.setForeground(CREATE_FG_DIM);
+		c.setFont(c.getFont().deriveFont(10f));
+	}
+
+	private static void formFont(JComponent c)
+	{
+		c.setForeground(CREATE_FG);
+		c.setFont(c.getFont().deriveFont(11f));
+	}
+
+	/** Transparent, left-aligned, vertically stacked. */
+	private static void column(JComponent c)
+	{
+		c.setLayout(new BoxLayout(c, BoxLayout.Y_AXIS));
+		loose(c);
+	}
+
+	/** Transparent and left-aligned - the default for anything inside a surface. */
+	private static void loose(JComponent c)
+	{
+		c.setOpaque(false);
+		c.setAlignmentX(Component.LEFT_ALIGNMENT);
+	}
+
+	/** A surface's outer panel: transparent with the standard inset. */
+	private static void innerPad(JComponent c)
+	{
+		c.setOpaque(false);
+		c.setBorder(new EmptyBorder(6, 8, 8, 8));
 	}
 
 	private JButton chip(String label, String tooltip, Runnable action)
