@@ -1227,7 +1227,7 @@ public class GoalPanel extends PluginPanel
 			// the header, so a freshly created section doesn't look broken.
 			if (sectionCount == 0 && !section.builtIn && !section.collapsed)
 			{
-				JLabel placeholder = new JLabel("Empty - right-click goals to move them here");
+				JLabel placeholder = new JLabel("Empty - select a goal, then Move");
 				placeholder.setForeground(new Color(120, 120, 120));
 				placeholder.setFont(PanelFonts.derive(Font.ITALIC, 10f));
 				placeholder.setAlignmentX(Component.CENTER_ALIGNMENT);
@@ -1510,8 +1510,8 @@ public class GoalPanel extends PluginPanel
 				"items, or collection log",
 			});
 			addHintLines(emptyPanel, 6, new String[] {
-				"Right-click any section header",
-				"to add a custom section",
+				"Or use Create Section",
+				"to organise them",
 			});
 			goalListPanel.add(emptyPanel);
 		}
@@ -4030,23 +4030,13 @@ public class GoalPanel extends PluginPanel
 			case ITEM_GRIND: return dockCreateStep == CreateStep.PICKER
 				? buildItemPicker() : buildItemDetails();
 			case COMBAT_ACHIEVEMENT: return buildCombatForm();
-			// Any type not yet wired lands on a placeholder pointing at the
-			// existing right-click add dialogs (which stay until parity).
-			default: return buildPendingForm(type);
+			// Every type CREATE_TILES offers is wired above; COLLECTION_LOG has
+			// no tile and is gated out of the edit path by hasEditableParams, so
+			// there is no unwired type left to land here.
+			default: return buildCustomForm();
 		}
 	}
 
-	private JComponent buildPendingForm(com.goalplanner.model.GoalType type)
-	{
-		JPanel body = formBody();
-		JLabel note = new JLabel("<html>The " + tileLabel(type) + " form is coming to "
-			+ "the dock.<br>For now, use right-click Add on a section header.</html>");
-		note.setForeground(CREATE_FG_DIM);
-		note.setFont(note.getFont().deriveFont(11f));
-		note.setAlignmentX(Component.LEFT_ALIGNMENT);
-		body.add(note);
-		return createFormScaffold(type, body, null);
-	}
 
 	// ----- per-type create forms -----
 

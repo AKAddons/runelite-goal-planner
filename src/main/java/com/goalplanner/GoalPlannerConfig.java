@@ -104,7 +104,7 @@ public interface GoalPlannerConfig extends Config
 		name = "Indent dependencies by default",
 		description = "Default for every section: show goals nested under the goals they require, "
 			+ "indented with a faint guide. Each section can override this (Nested / Not nested "
-			+ "/ Use default) from its right-click menu.",
+			+ "/ Use default) by selecting it and using the Nesting chip.",
 		section = appearanceSection,
 		position = 3
 	)
