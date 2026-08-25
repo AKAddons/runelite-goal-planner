@@ -416,7 +416,7 @@ public class GoalPanel extends PluginPanel
 		// favor of relying on right-click + undo/redo for reversibility.
 		JButton optionsButton = new JButton(ShapeIcons.moreDots(10, new Color(180, 180, 220)));
 		optionsButton.setToolTipText("Options...");
-		optionsButton.setMargin(new Insets(3, 6, 3, 6));
+		optionsButton.setMargin(new Insets(3, 3, 3, 3));
 		optionsButton.addActionListener(e -> {
 			JPopupMenu popup = new JPopupMenu();
 			JMenuItem joinDiscord = new JMenuItem("Join our Discord");
@@ -498,23 +498,26 @@ public class GoalPanel extends PluginPanel
 		// Undo/redo buttons. Tooltip + enable state refreshed on
 		// each panel rebuild via refreshUndoRedoButtons() (called from rebuild()).
 		undoButton = new JButton(ShapeIcons.undoArrow(12, new Color(180, 180, 220)));
-		undoButton.setMargin(new Insets(3, 6, 3, 6));
+		undoButton.setMargin(new Insets(3, 3, 3, 3));
 		// refreshEditForm() drops the same-goal edit-surface remount guard so an
 		// undo that restores a relation/tag/etc. re-renders the mounted Selected
 		// view immediately (otherwise it stayed stale until reselect).
 		undoButton.addActionListener(e -> { api.undo(); refreshEditForm(); });
 		redoButton = new JButton(ShapeIcons.redoArrow(12, new Color(180, 180, 220)));
-		redoButton.setMargin(new Insets(3, 6, 3, 6));
+		redoButton.setMargin(new Insets(3, 3, 3, 3));
 		redoButton.addActionListener(e -> { api.redo(); refreshEditForm(); });
 
 		headerButtons.add(optionsButton);
 		headerButtons.add(Box.createHorizontalStrut(6));
 		headerButtons.add(undoButton);
 		headerButtons.add(redoButton);
-		headerButtons.add(Box.createHorizontalStrut(6));
 
 		// Title in CENTER (not WEST) so it yields space to the EAST buttons and
-		// clips instead of overlapping them when a large font widens it.
+		// clips instead of overlapping them when a large font widens it. The
+		// button margins are deliberately tight (3px, not 6) and there is no
+		// trailing strut: at 225px with the DEFAULT font those cost enough
+		// width to clip "Goal Planner" to "Goal Pla..." - the defence was
+		// misfiring on the normal case, not just the large-font one.
 		header.add(title, BorderLayout.CENTER);
 		header.add(headerButtons, BorderLayout.EAST);
 
@@ -542,7 +545,7 @@ public class GoalPanel extends PluginPanel
 		});
 		JButton clearSearchBtn = new JButton(ShapeIcons.closeX(10, new Color(200, 200, 200)));
 		clearSearchBtn.setToolTipText("Clear search");
-		clearSearchBtn.setMargin(new Insets(3, 6, 3, 6));
+		clearSearchBtn.setMargin(new Insets(3, 3, 3, 3));
 		clearSearchBtn.addActionListener(e -> searchField.setText(""));
 		searchRow.add(searchField, BorderLayout.CENTER);
 		searchRow.add(clearSearchBtn, BorderLayout.EAST);
