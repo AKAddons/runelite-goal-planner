@@ -6972,18 +6972,20 @@ public class GoalPanel extends PluginPanel
 		{
 			final int idx = i;
 			boolean isCurrent = i == dockChoiceCurrent;
-			// The current option is marked, not disabled: re-picking it is a
-			// harmless no-op and disabling would hide what is in force.
-			JButton b = chip(isCurrent ? "* " + dockChoiceLabels[i] : dockChoiceLabels[i],
-				isCurrent ? "Currently in force" : "Use " + dockChoiceLabels[i],
-				() -> {
-					java.util.function.IntConsumer pick = dockChoicePick;
-					closeChoiceSurface();
-					if (pick != null)
-					{
-						pick.accept(idx);
-					}
-				});
+			// The option in force wears the dock's PRIMARY treatment - the same
+			// green fill the create-mode chips use - rather than a text marker.
+			// Colour is the panel's existing language for "this one is active";
+			// a glyph prefix would also break the ASCII-only rule.
+			JButton b = flatButton(dockChoiceLabels[i], isCurrent);
+			b.setToolTipText(isCurrent ? "Currently in force" : "Use " + dockChoiceLabels[i]);
+			b.addActionListener(e -> {
+				java.util.function.IntConsumer pick = dockChoicePick;
+				closeChoiceSurface();
+				if (pick != null)
+				{
+					pick.accept(idx);
+				}
+			});
 			body.add(b);
 		}
 		body.add(chip("< Back", "Leave the setting unchanged", this::closeChoiceSurface));
