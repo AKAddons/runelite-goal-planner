@@ -856,8 +856,7 @@ public class GoalPanel extends PluginPanel
 	{
 		infoNoticeLabel.setText(msg);
 		infoNoticeBanner.setVisible(true);
-		infoNoticeBanner.revalidate();
-		infoNoticeBanner.repaint();
+		refresh(infoNoticeBanner);
 		if (infoNoticeTimer != null)
 		{
 			infoNoticeTimer.stop();
@@ -874,8 +873,7 @@ public class GoalPanel extends PluginPanel
 			infoNoticeTimer.stop();
 		}
 		infoNoticeBanner.setVisible(false);
-		infoNoticeBanner.revalidate();
-		infoNoticeBanner.repaint();
+		refresh(infoNoticeBanner);
 	}
 
 	/** Arm a reveal for the goal a dock create just made. {@code selectAfterCreate}
@@ -1516,8 +1514,7 @@ public class GoalPanel extends PluginPanel
 			goalListPanel.add(emptyPanel);
 		}
 
-		goalListPanel.revalidate();
-		goalListPanel.repaint();
+		refresh(goalListPanel);
 		// A just-created goal may have completed-on-add and reconciled into the
 		// Completed section. Check after layout settles (bounds valid) so the
 		// reveal can scroll its card into view.
@@ -4503,8 +4500,7 @@ public class GoalPanel extends PluginPanel
 					navigateCreateStep(CreateStep.DETAILS);
 				}));
 			}
-			results.revalidate();
-			results.repaint();
+			refresh(results);
 			remeasureDock();
 		};
 		searchField.addActionListener(e -> doSearch.run());
@@ -5167,9 +5163,7 @@ public class GoalPanel extends PluginPanel
 			if (found.isEmpty() && !query.isEmpty())
 			{
 				JLabel none = new JLabel("No matches (task data still loading?)");
-				none.setForeground(CREATE_FG_DIM);
-				none.setFont(none.getFont().deriveFont(10f));
-				none.setAlignmentX(Component.LEFT_ALIGNMENT);
+				dimLabel(none);
 				results.add(none);
 			}
 			for (com.goalplanner.data.WikiCaRepository.CaInfo ca : found)
@@ -5488,8 +5482,7 @@ public class GoalPanel extends PluginPanel
 	 *  so the dock grows/shrinks to fit (ADR-0008: the form grows to fit). */
 	private void remeasureDock()
 	{
-		actionDock.revalidate();
-		actionDock.repaint();
+		refresh(actionDock);
 		revalidate();
 		repaint();
 	}
@@ -5581,9 +5574,7 @@ public class GoalPanel extends PluginPanel
 		if (label != null)
 		{
 			JLabel l = new JLabel(label);
-			l.setForeground(CREATE_FG_DIM);
-			l.setFont(l.getFont().deriveFont(10f));
-			l.setAlignmentX(Component.LEFT_ALIGNMENT);
+			dimLabel(l);
 			body.add(l);
 			body.add(Box.createVerticalStrut(2));
 		}
@@ -5806,8 +5797,7 @@ public class GoalPanel extends PluginPanel
 		{
 			final JCheckBox toggle = new JCheckBox(complete ? "Completed" : "Complete");
 			toggle.setOpaque(false);
-			toggle.setForeground(CREATE_FG);
-			toggle.setFont(toggle.getFont().deriveFont(11f));
+			formFont(toggle);
 			toggle.setSelected(complete);
 			toggle.setToolTipText(complete
 				? "Mark incomplete and let tracking re-derive it"
@@ -5875,8 +5865,7 @@ public class GoalPanel extends PluginPanel
 			editGoal.setToolTipText("Open this goal in the create form to change it");
 			editGoal.addActionListener(e -> openEditGoalForm(g));
 			JPanel editRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-			editRow.setOpaque(false);
-			editRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+			loose(editRow);
 			editRow.add(editGoal);
 			editRow.setMaximumSize(new Dimension(Integer.MAX_VALUE,
 				editRow.getPreferredSize().height));
@@ -6015,8 +6004,7 @@ public class GoalPanel extends PluginPanel
 			// swap. Picking a direction enters relation-pick mode (which rebuilds the
 			// whole surface), so the reveal never needs to survive a refresh.
 			final JPanel addHost = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
-			addHost.setOpaque(false);
-			addHost.setAlignmentX(Component.LEFT_ALIGNMENT);
+			loose(addHost);
 			final Runnable[] showCollapsed = new Runnable[1];
 			final Runnable showExpanded = () ->
 			{
@@ -6027,16 +6015,14 @@ public class GoalPanel extends PluginPanel
 					() -> enterRelationMode(gid, false)));
 				addHost.add(chip("Cancel", "Keep relations as they are",
 					() -> showCollapsed[0].run()));
-				addHost.revalidate();
-				addHost.repaint();
+				refresh(addHost);
 			};
 			showCollapsed[0] = () ->
 			{
 				addHost.removeAll();
 				addHost.add(chip("+ Add relation", "Add a requirement or dependent",
 					showExpanded));
-				addHost.revalidate();
-				addHost.repaint();
+				refresh(addHost);
 			};
 			showCollapsed[0].run();
 			addHost.setMaximumSize(new Dimension(Integer.MAX_VALUE,
@@ -6617,8 +6603,7 @@ public class GoalPanel extends PluginPanel
 
 		// The 4x3 swatch grid + a full-width Default tile beneath it.
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		JPanel grid = new JPanel(new GridLayout(3, 4, 6, 6));
 		loose(grid);
@@ -6667,8 +6652,7 @@ public class GoalPanel extends PluginPanel
 			if (rgb < 0)
 			{
 				hexHint.setText("Enter a hex color like #1F8B4C");
-				hexHint.revalidate();
-				hexHint.repaint();
+				refresh(hexHint);
 				return;
 			}
 			apply.accept(rgb);
@@ -6946,8 +6930,7 @@ public class GoalPanel extends PluginPanel
 		inner.add(head, BorderLayout.NORTH);
 
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		final JTextField name = new JTextField(sv.name, 16);
 		styleField(name);
@@ -7081,8 +7064,7 @@ public class GoalPanel extends PluginPanel
 		inner.add(head, BorderLayout.NORTH);
 
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		final List<com.goalplanner.api.TagView> all = api.queryAllTags();
 
@@ -7172,8 +7154,7 @@ public class GoalPanel extends PluginPanel
 			}
 			suggest.setMaximumSize(
 				new Dimension(Integer.MAX_VALUE, suggest.getPreferredSize().height));
-			suggest.revalidate();
-			suggest.repaint();
+			refresh(suggest);
 			remeasureDock();
 		};
 
@@ -7255,8 +7236,7 @@ public class GoalPanel extends PluginPanel
 		if (!any)
 		{
 			JLabel none = new JLabel("No tags to remove");
-			none.setForeground(CREATE_FG);
-			none.setFont(none.getFont().deriveFont(11f));
+			formFont(none);
 			chips.add(none);
 		}
 		inner.add(chips, BorderLayout.CENTER);
@@ -7410,15 +7390,12 @@ public class GoalPanel extends PluginPanel
 		}
 
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		if (bundle == null || bundle.totalGoalCount() == 0)
 		{
 			JLabel none = new JLabel("Nothing to share here.");
-			none.setForeground(CREATE_FG);
-			none.setFont(none.getFont().deriveFont(11f));
-			none.setAlignmentX(Component.LEFT_ALIGNMENT);
+			formLabel(none);
 			body.add(none);
 			inner.add(body, BorderLayout.CENTER);
 			return surfaceShell("Share", false, inner);
@@ -7460,15 +7437,12 @@ public class GoalPanel extends PluginPanel
 		{
 			body.add(Box.createVerticalStrut(8));
 			JLabel saveLbl = new JLabel("Save to your plans");
-			saveLbl.setForeground(CREATE_FG);
-			saveLbl.setFont(saveLbl.getFont().deriveFont(11f));
-			saveLbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+			formLabel(saveLbl);
 			body.add(saveLbl);
 			body.add(Box.createVerticalStrut(2));
 
 			JPanel saveRow = new JPanel(new BorderLayout(4, 0));
-			saveRow.setOpaque(false);
-			saveRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+			loose(saveRow);
 			final JTextField nameField = new JTextField(defaultSharePlanName(bundle));
 			styleField(nameField);
 			nameField.setToolTipText("Name this saved plan");
@@ -7596,8 +7570,7 @@ public class GoalPanel extends PluginPanel
 		inner.add(head, BorderLayout.NORTH);
 
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		JLabel prompt = new JLabel("Paste a share code");
 		formLabel(prompt);
@@ -7674,16 +7647,13 @@ public class GoalPanel extends PluginPanel
 		inner.add(head, BorderLayout.NORTH);
 
 		JPanel body = new JPanel();
-		body.setOpaque(false);
-		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+		stack(body);
 
 		List<com.goalplanner.persistence.SavedPlan> plans = savedPlanStore.getPlans();
 		if (plans.isEmpty())
 		{
 			JLabel none = new JLabel("No saved goals yet.");
-			none.setForeground(CREATE_FG);
-			none.setFont(none.getFont().deriveFont(11f));
-			none.setAlignmentX(Component.LEFT_ALIGNMENT);
+			formLabel(none);
 			body.add(none);
 		}
 		else
@@ -7707,8 +7677,7 @@ public class GoalPanel extends PluginPanel
 		loose(row);
 
 		JPanel text = new JPanel();
-		text.setOpaque(false);
-		text.setLayout(new BoxLayout(text, BoxLayout.Y_AXIS));
+		stack(text);
 		JLabel name = new JLabel(plan.getName() == null ? "(unnamed)" : plan.getName());
 		name.setForeground(CREATE_FG);
 		name.setFont(name.getFont().deriveFont(Font.BOLD, 11f));
@@ -8022,9 +7991,7 @@ public class GoalPanel extends PluginPanel
 		if (g.getDescription() != null && !g.getDescription().isEmpty())
 		{
 			JLabel desc = new JLabel("<html>" + escapeHtml(g.getDescription()) + "</html>");
-			desc.setForeground(CREATE_FG_DIM);
-			desc.setFont(desc.getFont().deriveFont(10f));
-			desc.setAlignmentX(Component.LEFT_ALIGNMENT);
+			dimLabel(desc);
 			body.add(desc);
 			body.add(Box.createVerticalStrut(6));
 		}
@@ -8428,6 +8395,20 @@ public class GoalPanel extends PluginPanel
 	{
 		c.setForeground(CREATE_FG);
 		c.setFont(c.getFont().deriveFont(11f));
+	}
+
+	/** Transparent and vertically stacked (the reverse-order twin of column). */
+	private static void stack(JComponent c)
+	{
+		c.setOpaque(false);
+		c.setLayout(new BoxLayout(c, BoxLayout.Y_AXIS));
+	}
+
+	/** Re-lay-out and repaint a live component after its contents change. */
+	private static void refresh(JComponent c)
+	{
+		c.revalidate();
+		c.repaint();
 	}
 
 	/** Transparent, left-aligned, vertically stacked. */

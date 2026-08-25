@@ -109,6 +109,28 @@ class HeadlessRenderTest
 			"seeded CUSTOM goal missing from the tree");
 	}
 
+	@Test
+	@DisplayName("no styling helper calls itself - a refactor once made three recurse")
+	void helpersDoNotRecurse() throws Exception
+	{
+		String src = new String(java.nio.file.Files.readAllBytes(
+			java.nio.file.Paths.get("src/main/java/com/goalplanner/ui/GoalPanel.java")),
+			java.nio.charset.StandardCharsets.UTF_8);
+		java.util.regex.Matcher m = java.util.regex.Pattern
+			.compile("\\tprivate static void (\\w+)\\(JComponent c\\)\\n\\t\\{\\n(.*?)\\n\\t\\}",
+				java.util.regex.Pattern.DOTALL)
+			.matcher(src);
+		java.util.List<String> bad = new java.util.ArrayList<>();
+		while (m.find())
+		{
+			if (m.group(2).matches("(?s).*\\b" + m.group(1) + "\\s*\\(c\\).*"))
+			{
+				bad.add(m.group(1));
+			}
+		}
+		assertTrue(bad.isEmpty(), "self-recursive styling helpers: " + bad);
+	}
+
 	/** Swing only lays out REALIZED containers; walk it ourselves. */
 	private static void layoutDeep(java.awt.Container container)
 	{
