@@ -8,8 +8,7 @@
       "anchor": "add-a-goal-from-the-panel",
       "media": "docs/img/add-goal-dialog.gif",
       "code": [
-        "ui/GoalDialogFactory.java",
-        "ui/GoalContextMenuBuilder.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "api/GoalPlannerApiImplTest.java"
@@ -58,7 +57,6 @@
         "data/QuestRequirementResolver.java",
         "data/DiaryRequirementResolver.java",
         "model/AccountMetric.java",
-        "ui/GoalContextMenuBuilder.java",
         "ui/GoalPanel.java",
         "data/BossKillData.java"
       ],
@@ -122,7 +120,7 @@
         "model/AccountMetric.java",
         "tracker/AccountTracker.java",
         "api/GoalCreationService.java",
-        "ui/GoalDialogFactory.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "model/AccountMetricMaxTest.java",
@@ -159,7 +157,7 @@
       "media": "docs/img/change-amount.gif",
       "code": [
         "api/GoalMutationService.java",
-        "ui/GoalContextMenuBuilder.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "api/GoalPlannerApiImplTest.java"
@@ -189,7 +187,7 @@
       "media": "docs/img/sections.gif",
       "code": [
         "persistence/GoalStore.java",
-        "ui/GoalContextMenuBuilder.java",
+        "ui/GoalPanel.java",
         "ui/SectionHeaderRow.java"
       ],
       "tests": [
@@ -234,7 +232,6 @@
       "media": "docs/img/nesting.gif",
       "code": [
         "ui/GoalPanel.java",
-        "ui/GoalContextMenuBuilder.java",
         "ui/nest/SectionNestContainer.java"
       ],
       "tests": [],
@@ -249,7 +246,7 @@
       "media": "docs/img/tags.gif",
       "code": [
         "api/TagService.java",
-        "ui/TagManagementDialog.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "api/GoalPlannerApiImplTest.java"
@@ -263,7 +260,7 @@
       "anchor": "colors",
       "media": "docs/img/colors.gif",
       "code": [
-        "ui/GoalDialogFactory.java",
+        "ui/GoalPanel.java",
         "ui/SectionHeaderRow.java"
       ],
       "tests": [
@@ -309,7 +306,7 @@
       "anchor": "bulk-actions",
       "media": "docs/img/bulk-actions.gif",
       "code": [
-        "ui/GoalContextMenuBuilder.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "api/GoalPlannerApiImplTest.java"
@@ -375,7 +372,6 @@
         "persistence/SavedPlanStore.java",
         "persistence/SavedPlan.java",
         "share/SavedPlanSections.java",
-        "ui/SavedPlansDialog.java",
         "ui/ShareDialogs.java",
         "ui/GoalPanel.java"
       ],
@@ -423,7 +419,6 @@
       "media": null,
       "code": [
         "GoalPlannerPlugin.java",
-        "ui/GoalContextMenuBuilder.java",
         "ui/GoalPanel.java"
       ],
       "tests": [
@@ -447,7 +442,6 @@
         "model/Section.java",
         "persistence/GoalStore.java",
         "api/GoalMutationService.java",
-        "ui/GoalContextMenuBuilder.java",
         "ui/GoalPanel.java",
         "GoalPlannerPlugin.java"
       ],
@@ -469,7 +463,7 @@
         "api/GoalCreationService.java",
         "service/RepeatResetService.java",
         "model/Goal.java",
-        "ui/GoalContextMenuBuilder.java"
+        "ui/GoalPanel.java"
       ],
       "tests": [
         "data/ItemActivityResolverTest.java",
