@@ -320,6 +320,12 @@ public class ActionDock extends JPanel
 	{
 		JPanel p = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 		p.setOpaque(false);
+		// LEFT, not the JPanel default of CENTER: BoxLayout lines its children
+		// up by their alignment points, so a centred strip beside the
+		// left-aligned "Deselect (N)" lead pushed that button to the right half
+		// of the dock. The old scroll strips hid this by declaring a preferred
+		// width of 0.
+		p.setAlignmentX(Component.LEFT_ALIGNMENT);
 		return p;
 	}
 
