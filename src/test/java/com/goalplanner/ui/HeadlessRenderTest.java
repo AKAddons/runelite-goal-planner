@@ -178,8 +178,15 @@ class HeadlessRenderTest
 			names.add("create: " + t);
 		}
 
+		// 7. the explicit choice surface (replaces tap-to-cycle chips)
+		Object[] ch = seeded();
+		GoalPanel pch = (GoalPanel) ch[0];
+		pch.openChoiceSurface("Nesting",
+			new String[]{"Default (flat)", "Nested", "Flat"}, 0, i -> { });
+		shots.add(shoot(new Object[]{pch}, 520)); names.add("choice: Nesting");
+
 		contactSheet(shots, names, "dock-contact-sheet.png");
-		assertEquals(6, shots.size());
+		assertEquals(7, shots.size());
 	}
 
 	/** A panel plus its api, seeded with one goal of each common type. */

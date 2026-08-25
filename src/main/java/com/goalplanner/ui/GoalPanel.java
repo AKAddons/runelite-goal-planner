@@ -237,6 +237,14 @@ public class GoalPanel extends PluginPanel
 	 *  (the reversed edge - goals that require it). */
 	private boolean dockReqDependents = false;
 	private boolean dockReqMounted = false;
+	/** An active three-state pick overlay: title, option labels, which one is
+	 *  current, and what to do with the choice. Null title = inactive. */
+	private String dockChoiceTitle = null;
+	private String[] dockChoiceLabels = null;
+	private int dockChoiceCurrent = -1;
+	private java.util.function.IntConsumer dockChoicePick = null;
+	private boolean dockChoiceMounted = false;
+
 	/** Section id whose inline Rename overlay is active; null = inactive. */
 	private String dockRenameSectionId = null;
 	private boolean dockRenameMounted = false;
@@ -2057,6 +2065,19 @@ public class GoalPanel extends PluginPanel
 				}
 				return;
 			}
+		}
+
+		// Inline choice surface: any setting whose outcome is a boolean or a
+		// small enum is PICKED here rather than cycled by repeated taps.
+		if (dockChoiceTitle != null)
+		{
+			actionDock.setExpanded(true);
+			if (!dockChoiceMounted)
+			{
+				actionDock.setExpandedComponent(buildChoiceSurface());
+				dockChoiceMounted = true;
+			}
+			return;
 		}
 
 		// Inline Rename-section surface: the same overlay pattern. Drops itself
@@ -6905,6 +6926,71 @@ public class GoalPanel extends PluginPanel
 		return inner;
 	}
 
+	/**
+	 * Open an explicit pick for a boolean/enum setting. Replaces tap-to-cycle
+	 * chips: a cycle hides the option set, needs up to three taps to reach a
+	 * known state, and reports only through its own changing label.
+	 */
+	// Package-private, not private: the headless render harness drives this
+	// directly so the surface can be SEEN. Section selection has no API-level
+	// entry point, and shipping an unverifiable surface is how the dock got
+	// six defects nobody spotted in review.
+	void openChoiceSurface(String title, String[] labels, int current,
+		java.util.function.IntConsumer onPick)
+	{
+		dockChoiceTitle = title;
+		dockChoiceLabels = labels;
+		dockChoiceCurrent = current;
+		dockChoicePick = onPick;
+		dockChoiceMounted = false;
+		refreshDock();
+	}
+
+	private void closeChoiceSurface()
+	{
+		dockChoiceTitle = null;
+		dockChoiceLabels = null;
+		dockChoicePick = null;
+		dockChoiceMounted = false;
+		dockSectionMounted = false;
+		refreshDock();
+	}
+
+	/** Title, one chip per option with the current one marked, and Back. */
+	private JComponent buildChoiceSurface()
+	{
+		JPanel inner = new JPanel(new BorderLayout(0, 6));
+		innerPad(inner);
+
+		JLabel head = new JLabel(dockChoiceTitle);
+		formLabel(head);
+		inner.add(head, BorderLayout.NORTH);
+
+		JPanel body = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 2));
+		body.setOpaque(false);
+		for (int i = 0; i < dockChoiceLabels.length; i++)
+		{
+			final int idx = i;
+			boolean isCurrent = i == dockChoiceCurrent;
+			// The current option is marked, not disabled: re-picking it is a
+			// harmless no-op and disabling would hide what is in force.
+			JButton b = chip(isCurrent ? "* " + dockChoiceLabels[i] : dockChoiceLabels[i],
+				isCurrent ? "Currently in force" : "Use " + dockChoiceLabels[i],
+				() -> {
+					java.util.function.IntConsumer pick = dockChoicePick;
+					closeChoiceSurface();
+					if (pick != null)
+					{
+						pick.accept(idx);
+					}
+				});
+			body.add(b);
+		}
+		body.add(chip("< Back", "Leave the setting unchanged", this::closeChoiceSurface));
+		inner.add(body, BorderLayout.CENTER);
+		return inner;
+	}
+
 	private void openRenameSectionSurface(String sectionId)
 	{
 		dockRenameSectionId = sectionId;
@@ -7783,20 +7869,6 @@ public class GoalPanel extends PluginPanel
 		return n;
 	}
 
-	/** Advance a tri-state section override: Default (null) -> On (TRUE) ->
-	 *  Off (FALSE) -> Default. Used by the nesting and archive cycle chips. */
-	private static Boolean cycleOverride(Boolean current)
-	{
-		if (current == null)
-		{
-			return Boolean.TRUE;
-		}
-		if (Boolean.TRUE.equals(current))
-		{
-			return Boolean.FALSE;
-		}
-		return null;
-	}
 
 	/** Run {@code commit} when the user finishes a text field: Enter, or blur. */
 	private void commitOnBlurOrEnter(JTextField f, Runnable commit)
@@ -8310,29 +8382,31 @@ public class GoalPanel extends PluginPanel
 
 		final boolean indentDefault = config.showDependenciesIndented();
 		final Boolean nested = sv.nestedOverride;
-		String nestState = nested == null
-			? "Default (" + (indentDefault ? "nested" : "flat") + ")"
-			: (Boolean.TRUE.equals(nested) ? "Nested" : "Flat");
-		wrap.add(chip("Nesting: " + nestState,
-			"Cycle dependency nesting: use default, always nested, or always flat",
-			() -> {
-				api.setSectionNestedOverride(sid, cycleOverride(nested));
-				refreshSectionDock();
-			}));
+		wrap.add(chip("Nesting", "Choose how this section shows dependencies",
+			() -> openChoiceSurface("Nesting",
+				new String[]{"Default (" + (indentDefault ? "nested" : "flat") + ")",
+					"Nested", "Flat"},
+				nested == null ? 0 : (Boolean.TRUE.equals(nested) ? 1 : 2),
+				i -> {
+					api.setSectionNestedOverride(sid,
+						i == 0 ? null : Boolean.valueOf(i == 1));
+					refreshSectionDock();
+				})));
 
 		if (!sv.builtIn)
 		{
 			final boolean archiveDefault = api.isAutoArchiveDefault();
 			final Boolean archive = sv.autoArchiveOverride;
-			String archState = archive == null
-				? "Default (" + (archiveDefault ? "archive" : "inline") + ")"
-				: (Boolean.TRUE.equals(archive) ? "Archive" : "Keep inline");
-			wrap.add(chip("Completed: " + archState,
-				"Cycle completed-goal handling: use default, auto-archive, or keep inline",
-				() -> {
-					api.setSectionAutoArchiveOverride(sid, cycleOverride(archive));
-					refreshSectionDock();
-				}));
+			wrap.add(chip("Completed", "Choose how completed goals are handled here",
+				() -> openChoiceSurface("Completed goals",
+					new String[]{"Default (" + (archiveDefault ? "archive" : "inline") + ")",
+						"Archive", "Keep inline"},
+					archive == null ? 0 : (Boolean.TRUE.equals(archive) ? 1 : 2),
+					i -> {
+						api.setSectionAutoArchiveOverride(sid,
+							i == 0 ? null : Boolean.valueOf(i == 1));
+						refreshSectionDock();
+					})));
 		}
 	}
 
