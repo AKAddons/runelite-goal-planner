@@ -156,10 +156,6 @@ public class GoalPanel extends PluginPanel
 	 *  goal's structure so the form re-renders to reflect them. */
 	private boolean dockEditMounted = false;
 	private String dockEditMountedGoalId = null;
-	/** Which edit-chip drill-in group is open (note 6), or null for the top-level
-	 *  Data/Relations/Actions group chips. Reset to null whenever a different goal
-	 *  mounts, so a new selection always starts at the top level. */
-	private EditGroup dockEditGroup = null;
 	/** Transient "edit goal" overlay (read-only-selected pass): the id of the goal
 	 *  whose CREATE-style form is mounted in UPDATE mode, or null when the Selected
 	 *  view shows its normal read-only summary. Mirrors the color / tag / share
@@ -2242,7 +2238,6 @@ public class GoalPanel extends PluginPanel
 		{
 			dockEditMounted = false;
 			dockEditMountedGoalId = null;
-			dockEditGroup = null;
 		}
 
 		List<com.goalplanner.ui.dock.ActionDock.Item> top = new ArrayList<>();
@@ -2274,7 +2269,6 @@ public class GoalPanel extends PluginPanel
 						// top level; a same-goal re-render (refreshEditForm) keeps it.
 						if (!gid.equals(dockEditMountedGoalId))
 						{
-							dockEditGroup = null;
 						}
 						actionDock.setExpandedComponent(buildEditSurface(g));
 						dockEditMounted = true;
@@ -8128,40 +8122,25 @@ public class GoalPanel extends PluginPanel
 
 	// ----- edit-mode lifecycle action chips -----
 
-	/** The drill-in groups the edit chips tree into. After the flatten pass (Data
-	 *  is now a direct chip row and Relations an itemized inline list), ACTIONS is
-	 *  the single remaining group - "only go deeper when necessary". */
-	private enum EditGroup { ACTIONS }
 
 	/** The drill-in groups the SECTION dock chips tree into. EDIT = rename/color/
 	 *  delete; LAYOUT = nesting + archive override; SHARE = copy/save codes. */
 	private enum SectionGroup { EDIT, LAYOUT, SHARE }
 
-	/** The remaining drill-in group for the flattened edit form: at the top level
-	 *  it is a single [Actions] chip; tapping it swaps the row for the action member
-	 *  chips plus a "< Back". Data now renders as a direct chip row and Relations as
-	 *  an itemized inline list (both above this), so only Actions still drills in.
-	 *  Group navigation is held in {@link #dockEditGroup} and re-rendered via
-	 *  {@link #refreshEditForm()}. */
+	/** The edit form's action chips, rendered flat. Nothing drills in any more:
+	 *  Data is a direct chip row, Relations an itemized inline list, and the
+	 *  former [Actions] group now shows its six chips directly. */
 	private JComponent buildEditChips(Goal g)
 	{
 		JPanel wrap = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 4));
 		wrap.setOpaque(false);
 
-		if (dockEditGroup == null)
-		{
-			wrap.add(chip("Actions", "Move, copy, share, remove",
-				() -> { dockEditGroup = EditGroup.ACTIONS; refreshEditForm(); }));
-			return wrap;
-		}
-
-		wrap.add(chip("< Back", "Back to the goal",
-			() -> { dockEditGroup = null; refreshEditForm(); }));
-		switch (dockEditGroup)
-		{
-			case ACTIONS:   buildActionsChips(g, wrap); break;
-			default:        break;
-		}
+		// Flattened: the actions show directly. "Actions" described nothing and
+		// hid six chips behind a tap - the same discoverability problem the
+		// scrolling strips had. Now that chip rows WRAP there is room to just
+		// show them, which completes the "only go deeper when necessary" pass
+		// that already flattened Data and Relations.
+		buildActionsChips(g, wrap);
 		return wrap;
 	}
 
@@ -8204,14 +8183,14 @@ public class GoalPanel extends PluginPanel
 		final String gid = g.getId();
 		final GoalType type = g.getType();
 
-		wrap.add(chip("Move to section", "Move this goal to another section",
+		wrap.add(chip("Move", "Move this goal to another section",
 			() -> openMoveSurface(MoveMode.MOVE, Collections.singletonList(gid))));
-		wrap.add(chip("Copy to section", "Duplicate this goal into another section",
+		wrap.add(chip("Copy", "Duplicate this goal into another section",
 			() -> openMoveSurface(MoveMode.COPY, Collections.singletonList(gid))));
 
 		if (goalHasSeedableReqs(g))
 		{
-			wrap.add(chip("Add reqs to section",
+			wrap.add(chip("Add reqs",
 				"Add this goal's requirements into its section", () -> dockSeedReqs(g)));
 		}
 
