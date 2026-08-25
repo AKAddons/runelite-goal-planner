@@ -131,6 +131,110 @@ class HeadlessRenderTest
 		assertTrue(bad.isEmpty(), "self-recursive styling helpers: " + bad);
 	}
 
+	/**
+	 * The DESIGN review artifact (REQ-003): paint each dock surface and lay them
+	 * out as one contact sheet. The dock has never been seen running - the
+	 * progress doc says every layout choice is provisional - so this is the
+	 * cheapest way to get eyes on it without a client.
+	 *
+	 * <p>Driven through real entry points (replaceGoalSelection,
+	 * openSeededCreate), not reflection, so what is painted is what the plugin
+	 * actually builds.
+	 */
+	@Test
+	@DisplayName("dock surfaces render into a contact sheet for design review")
+	void dockContactSheet() throws Exception
+	{
+		java.util.List<BufferedImage> shots = new java.util.ArrayList<>();
+		java.util.List<String> names = new java.util.ArrayList<>();
+
+		// 1. idle, a few goals
+		shots.add(shoot(seeded(), 520)); names.add("idle");
+
+		// 2. one goal selected - the dock's main surface
+		Object[] one = seeded();
+		GoalPanel p1 = (GoalPanel) one[0];
+		((com.goalplanner.api.GoalPlannerApiImpl) one[1])
+			.replaceGoalSelection(java.util.Collections.singletonList("skill1"));
+		p1.refreshSelection();
+		shots.add(shoot(new Object[]{p1}, 520)); names.add("one selected");
+
+		// 3. multi-selection - the bulk surface
+		Object[] two = seeded();
+		GoalPanel p2 = (GoalPanel) two[0];
+		((com.goalplanner.api.GoalPlannerApiImpl) two[1])
+			.replaceGoalSelection(java.util.Arrays.asList("skill1", "boss1"));
+		p2.refreshSelection();
+		shots.add(shoot(new Object[]{p2}, 520)); names.add("multi selected");
+
+		// 4-6. the create surface, seeded per type
+		for (GoalType t : new GoalType[]{GoalType.SKILL, GoalType.BOSS, GoalType.CUSTOM})
+		{
+			Object[] c = seeded();
+			GoalPanel pc = (GoalPanel) c[0];
+			pc.openSeededCreate(t, null, t == GoalType.BOSS ? "Zulrah" : null,
+				null, null, null);
+			shots.add(shoot(new Object[]{pc}, 520));
+			names.add("create: " + t);
+		}
+
+		contactSheet(shots, names, "dock-contact-sheet.png");
+		assertEquals(6, shots.size());
+	}
+
+	/** A panel plus its api, seeded with one goal of each common type. */
+	private static Object[] seeded()
+	{
+		TrackerTestHarness<?> h = TrackerTestHarness.forSkills(new MockGameState());
+		h.store().addGoal(goal("skill1", GoalType.SKILL, "99 Slayer"));
+		h.store().addGoal(goal("boss1", GoalType.BOSS, "500 Zulrah"));
+		h.store().addGoal(goal("cust1", GoalType.CUSTOM, "Finish the dock"));
+		GoalPanel p = new GoalPanel(h.store(),
+			mock(SkillIconManager.class, RETURNS_DEEP_STUBS),
+			mock(ItemManager.class, RETURNS_DEEP_STUBS),
+			mock(SpriteManager.class, RETURNS_DEEP_STUBS),
+			h.api(),
+			mock(GoalReorderingService.class, RETURNS_DEEP_STUBS),
+			mock(GoalPanel.ItemSearchRequest.class, RETURNS_DEEP_STUBS),
+			mock(GoalPlannerConfig.class, RETURNS_DEEP_STUBS));
+		return new Object[]{p, h.api()};
+	}
+
+	private static BufferedImage shoot(Object[] panelHolder, int height)
+	{
+		GoalPanel p = (GoalPanel) panelHolder[0];
+		p.setSize(WIDTH, height);
+		layoutDeep(p);
+		BufferedImage img = new BufferedImage(WIDTH, height, BufferedImage.TYPE_INT_ARGB);
+		java.awt.Graphics2D g = img.createGraphics();
+		p.paint(g);
+		g.dispose();
+		return img;
+	}
+
+	private static void contactSheet(java.util.List<BufferedImage> shots,
+		java.util.List<String> names, String file) throws Exception
+	{
+		int gap = 8, tall = 0, wide = gap;
+		for (BufferedImage s : shots) { tall = Math.max(tall, s.getHeight()); wide += s.getWidth() + gap; }
+		BufferedImage sheet = new BufferedImage(wide, tall + 24, BufferedImage.TYPE_INT_RGB);
+		java.awt.Graphics2D g = sheet.createGraphics();
+		g.setColor(new java.awt.Color(30, 30, 30));
+		g.fillRect(0, 0, sheet.getWidth(), sheet.getHeight());
+		g.setColor(java.awt.Color.LIGHT_GRAY);
+		int x = gap;
+		for (int i = 0; i < shots.size(); i++)
+		{
+			g.drawImage(shots.get(i), x, 20, null);
+			g.drawString(names.get(i), x, 14);
+			x += shots.get(i).getWidth() + gap;
+		}
+		g.dispose();
+		java.io.File out = new java.io.File("build/render-shots/" + file);
+		out.getParentFile().mkdirs();
+		javax.imageio.ImageIO.write(sheet, "png", out);
+	}
+
 	/** Swing only lays out REALIZED containers; walk it ourselves. */
 	private static void layoutDeep(java.awt.Container container)
 	{
