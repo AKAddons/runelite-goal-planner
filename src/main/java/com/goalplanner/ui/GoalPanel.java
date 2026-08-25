@@ -2270,7 +2270,10 @@ public class GoalPanel extends PluginPanel
 			case MULTI:
 			{
 				int n = ctx.getCount();
-				hint = n + " selected";
+				// No "N selected" hint here: the full-width "Deselect (N)" lead
+				// button directly above already carries the count, and a second
+				// copy spent strip width - on a 225px panel that is a whole chip.
+				hint = null;
 				Set<String> ids =
 					new LinkedHashSet<>(api.getSelectedGoalIds());
 				buildMultiDock(ids, top, bottom);
@@ -2593,11 +2596,28 @@ public class GoalPanel extends PluginPanel
 		}
 
 		// --- TOP: bulk lifecycle ---
-		top.add(item("Reset done",
-			"Reopen every completed goal in the selection (one undo)",
-			() -> api.bulkMarkIncomplete(sel)));
+		// Complete / Reopen are a state-aware PAIR: each appears only when it has
+		// something to act on, and both name the outcome rather than the
+		// mechanism ("Reopen", matching the single-goal dock, not "Reset done").
+		// A control that cannot do anything is noise on a 225px panel.
+		boolean anyComplete = false;
+		for (Goal g : goals)
+		{
+			if (g.isComplete())
+			{
+				anyComplete = true;
+				break;
+			}
+		}
+		if (anyComplete)
+		{
+			top.add(item("Reopen",
+				"Reopen every completed goal in the selection (one undo)",
+				() -> api.bulkMarkIncomplete(sel)));
+		}
 		// Mark complete - only when every selected goal is manually completable
-		// (all CUSTOM), matching the bulk menu.
+		// (all CUSTOM), matching the bulk menu. Auto-tracked types complete
+		// themselves, so offering it there would be a lie.
 		boolean allCustom = !goals.isEmpty();
 		for (Goal g : goals)
 		{
@@ -8470,67 +8490,4 @@ public class GoalPanel extends PluginPanel
 		@Override public boolean getScrollableTracksViewportHeight() { return false; }
 	}
 
-	/** A {@link FlowLayout} that reports a wrapped preferred size, so chips flow
-	 *  onto multiple lines and grow the dock vertically instead of overflowing a
-	 *  fixed-width, horizontal-scroll-suppressed surface. */
-	private static final class WrapLayout extends FlowLayout
-	{
-		WrapLayout(int align, int hgap, int vgap) { super(align, hgap, vgap); }
-
-		@Override public Dimension preferredLayoutSize(Container target) { return layoutSize(target, true); }
-
-		@Override public Dimension minimumLayoutSize(Container target)
-		{
-			Dimension d = layoutSize(target, false);
-			d.width -= (getHgap() + 1);
-			return d;
-		}
-
-		private Dimension layoutSize(Container target, boolean preferred)
-		{
-			synchronized (target.getTreeLock())
-			{
-				int targetWidth = target.getSize().width;
-				if (targetWidth == 0)
-				{
-					targetWidth = Integer.MAX_VALUE;
-				}
-				int hgap = getHgap();
-				int vgap = getVgap();
-				Insets insets = target.getInsets();
-				int maxWidth = targetWidth - (insets.left + insets.right + hgap * 2);
-				Dimension dim = new Dimension(0, 0);
-				int rowWidth = 0;
-				int rowHeight = 0;
-				int n = target.getComponentCount();
-				for (int i = 0; i < n; i++)
-				{
-					Component m = target.getComponent(i);
-					if (!m.isVisible())
-					{
-						continue;
-					}
-					Dimension d = preferred ? m.getPreferredSize() : m.getMinimumSize();
-					if (rowWidth + d.width > maxWidth && rowWidth > 0)
-					{
-						dim.width = Math.max(dim.width, rowWidth);
-						dim.height += rowHeight + vgap;
-						rowWidth = 0;
-						rowHeight = 0;
-					}
-					if (rowWidth != 0)
-					{
-						rowWidth += hgap;
-					}
-					rowWidth += d.width;
-					rowHeight = Math.max(rowHeight, d.height);
-				}
-				dim.width = Math.max(dim.width, rowWidth);
-				dim.height += rowHeight;
-				dim.width += insets.left + insets.right + hgap * 2;
-				dim.height += insets.top + insets.bottom + vgap * 2;
-				return dim;
-			}
-		}
-	}
 }

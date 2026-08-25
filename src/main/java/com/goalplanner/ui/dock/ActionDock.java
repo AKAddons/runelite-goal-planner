@@ -147,8 +147,8 @@ public class ActionDock extends JPanel
 		leadHost.setVisible(false);
 		leadHost.setAlignmentX(Component.LEFT_ALIGNMENT);
 		content.add(leadHost);
-		content.add(scrollStrip(topRow));
-		content.add(scrollStrip(bottomRow));
+		content.add(wrapStrip(topRow));
+		content.add(wrapStrip(bottomRow));
 
 		// Opaque dark backing so nothing behind the dock (e.g. an optional goal's
 		// diagonal hatch in the list) bleeds through the rounded, non-opaque surface
@@ -324,26 +324,18 @@ public class ActionDock extends JPanel
 	}
 
 	/** A row that scroll-overflows horizontally: wheel over the strip pans it. */
-	private JScrollPane scrollStrip(JPanel row)
+	/**
+	 * Chip strips WRAP rather than scroll. A 225px panel fits about two chips
+	 * per row, so a single scrolling row hid most actions behind a mouse-wheel
+	 * pan with no scrollbar and no affordance - reachable in theory, invisible
+	 * in practice. Vertical space is the cheaper currency here: the dock
+	 * already grows for mounted forms.
+	 */
+	private JPanel wrapStrip(JPanel row)
 	{
-		JScrollPane sp = new JScrollPane(row,
-			JScrollPane.VERTICAL_SCROLLBAR_NEVER,
-			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		sp.setBorder(null);
-		sp.setOpaque(false);
-		sp.getViewport().setOpaque(false);
-		Dimension d = new Dimension(0, ROW_H + 4);
-		sp.setPreferredSize(d);
-		sp.setMinimumSize(d);
-		sp.setMaximumSize(new Dimension(Integer.MAX_VALUE, ROW_H + 4));
-		// Wheel pans horizontally within the strip; without this, hidden
-		// overflow buttons would be unreachable (scrollbars are suppressed to
-		// keep the fixed height honest).
-		sp.addMouseWheelListener(e -> {
-			JScrollBar h = sp.getHorizontalScrollBar();
-			h.setValue(h.getValue() + e.getWheelRotation() * 24);
-		});
-		return sp;
+		row.setLayout(new com.goalplanner.ui.WrapLayout(FlowLayout.LEFT, 4, 2));
+		row.setOpaque(false);
+		return row;
 	}
 
 	private static final Color BTN_BG = new Color(0x3B, 0x3B, 0x3B);
@@ -483,7 +475,19 @@ public class ActionDock extends JPanel
 		}
 		else
 		{
-			surface = 2 * (ROW_H + 4) + 2;
+			// Wrapped strips have a real preferred height, but WrapLayout can
+			// only compute it if the row already HAS a width - an unsized row
+			// falls back to Integer.MAX_VALUE and reports a single row, which
+			// is exactly how the extra chips got clipped. Seed the width from
+			// the dock before asking.
+			int stripW = getWidth() - 8;
+			if (stripW > 0)
+			{
+				topRow.setSize(stripW, 1);
+				bottomRow.setSize(stripW, 1);
+			}
+			surface = topRow.getPreferredSize().height
+				+ bottomRow.getPreferredSize().height + 6;
 			// The optional full-width lead button (MULTI "Deselect (N)") sits above
 			// the two strips; count its height only while it is showing.
 			if (leadHost.isVisible())
