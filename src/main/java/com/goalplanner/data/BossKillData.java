@@ -1,12 +1,10 @@
 package com.goalplanner.data;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
 import net.runelite.api.gameval.VarPlayerID;
 import java.io.BufferedReader;

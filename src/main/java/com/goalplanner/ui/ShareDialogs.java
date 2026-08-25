@@ -2,17 +2,8 @@ package com.goalplanner.ui;
 
 import com.goalplanner.api.GoalPlannerApiImpl;
 import com.goalplanner.share.ShareBundle;
-import com.goalplanner.share.ShareCodec;
-import com.goalplanner.share.ShareFormatException;
-import com.goalplanner.share.ShareText;
 import java.awt.Component;
-import java.awt.Toolkit;
-import java.awt.datatransfer.StringSelection;
-import java.util.List;
-import java.util.function.Supplier;
 import javax.swing.JOptionPane;
-import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
 
 /**
  * Swing dialogs for sharing/importing goals (export to clipboard, paste-import,

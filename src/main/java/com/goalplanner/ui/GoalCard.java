@@ -40,7 +40,6 @@ public class GoalCard extends JPanel
 	private static final Color BACKGROUND = new Color(30, 30, 30);
 	private static final Color BACKGROUND_COMPLETE = new Color(50, 50, 50);
 	private static final Color TEXT_PRIMARY = new Color(230, 230, 230);
-	private static final Color TEXT_SECONDARY = new Color(160, 160, 160);
 	private static final Color ARROW_COLOR = new Color(180, 180, 180);
 	private static final Color ARROW_HOVER = Color.WHITE;
 	private static final int CARD_HEIGHT = 48;

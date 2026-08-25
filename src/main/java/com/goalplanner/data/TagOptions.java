@@ -2,7 +2,6 @@ package com.goalplanner.data;
 
 import com.goalplanner.model.TagCategory;
 
-import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
 

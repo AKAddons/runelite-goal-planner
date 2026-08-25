@@ -22,8 +22,6 @@ import java.util.Set;
 @Slf4j
 class GoalMutationService
 {
-	/** Max level supported (1-99 normal, 100-126 virtual). */
-	private static final int MAX_LEVEL = 126;
 
 	/** Max experience per skill in OSRS. */
 	private static final int MAX_XP = 200_000_000;

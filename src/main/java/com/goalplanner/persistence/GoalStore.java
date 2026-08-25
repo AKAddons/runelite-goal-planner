@@ -2,7 +2,6 @@ package com.goalplanner.persistence;
 
 import com.goalplanner.data.AchievementDiaryData;
 import com.goalplanner.model.Goal;
-import com.goalplanner.model.GoalStatus;
 import com.goalplanner.model.GoalType;
 import com.goalplanner.model.Section;
 import com.goalplanner.model.Tag;

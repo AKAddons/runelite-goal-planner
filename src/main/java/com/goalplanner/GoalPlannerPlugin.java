@@ -71,7 +71,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
@@ -1136,8 +1135,6 @@ public class GoalPlannerPlugin extends Plugin
 	/** Widget ID of the clickable list inside the quest list (InterfaceID.Questlist.LIST). */
 	private static final int QUESTLIST_LIST_WIDGET = 26148871;
 
-	/** Sprite ID for the blue quest tab icon (SpriteID.SideIcons.QUEST). */
-	private static final int QUEST_SPRITE_ID = 899;
 
 	/**
 	 * Strip &lt;col=...&gt; tags from a menu target string and trim whitespace.
