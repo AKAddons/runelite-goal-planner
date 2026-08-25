@@ -49,18 +49,8 @@ public final class ShapeIcons
 		return new CloseIcon(size, color);
 	}
 
-	/** "Add" / + icon - axis-aligned bevel cross, matches the closeX styling. */
-	public static Icon plus(int size, Color color)
-	{
-		return new PlusIcon(size, color);
-	}
 
 
-	/** Price-tag silhouette - diagonal point on the left, eyelet hole, beveled body. */
-	public static Icon tag(int size, Color color)
-	{
-		return new TagIcon(size, color);
-	}
 
 	/** Curved undo arrow - left-facing hook. */
 	public static Icon undoArrow(int size, Color color)
