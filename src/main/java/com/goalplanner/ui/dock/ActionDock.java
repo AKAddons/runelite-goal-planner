@@ -299,7 +299,12 @@ public class ActionDock extends JPanel
 	{
 		this.customView = view;
 		surfaceHost.removeAll();
-		JScrollPane sp = new JScrollPane(view,
+		// The view must TRACK the viewport width: a plain panel reports the
+		// preferred width of its widest row, and with the horizontal bar
+		// forbidden the overflow was simply clipped - the Options surface
+		// lost every chip past the dock edge (field report 2026-08-27).
+		// Width-tracked, WrapLayout learns the real width and wraps.
+		JScrollPane sp = new JScrollPane(new TracksWidth(view),
 			JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 			JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		sp.setBorder(null);
@@ -314,6 +319,48 @@ public class ActionDock extends JPanel
 		surfaceHost.add(sp, BorderLayout.CENTER);
 		revalidate();
 		repaint();
+	}
+
+	/** A viewport view pinned to the viewport's width, never wider - the
+	 * vertical-only scroll contract, made true for layout as well. */
+	private static final class TracksWidth extends JPanel implements javax.swing.Scrollable
+	{
+		TracksWidth(JComponent view)
+		{
+			super(new BorderLayout());
+			setOpaque(false);
+			add(view, BorderLayout.CENTER);
+		}
+
+		@Override
+		public Dimension getPreferredScrollableViewportSize()
+		{
+			return getPreferredSize();
+		}
+
+		@Override
+		public int getScrollableUnitIncrement(java.awt.Rectangle r, int o, int d)
+		{
+			return 16;
+		}
+
+		@Override
+		public int getScrollableBlockIncrement(java.awt.Rectangle r, int o, int d)
+		{
+			return 64;
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportWidth()
+		{
+			return true;
+		}
+
+		@Override
+		public boolean getScrollableTracksViewportHeight()
+		{
+			return false;
+		}
 	}
 
 	private static JPanel strip()

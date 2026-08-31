@@ -35,7 +35,7 @@ import static org.mockito.Mockito.mock;
  */
 class HeadlessRenderTest
 {
-	private static final int WIDTH = 225;
+	static final int WIDTH = 225;
 
 	private static Goal goal(String id, GoalType type, String name)
 	{
@@ -190,7 +190,7 @@ class HeadlessRenderTest
 	}
 
 	/** A panel plus its api, seeded with one goal of each common type. */
-	private static Object[] seeded()
+	static Object[] seeded()
 	{
 		TrackerTestHarness<?> h = TrackerTestHarness.forSkills(new MockGameState());
 		h.store().addGoal(goal("skill1", GoalType.SKILL, "99 Slayer"));
@@ -243,7 +243,7 @@ class HeadlessRenderTest
 	}
 
 	/** Swing only lays out REALIZED containers; walk it ourselves. */
-	private static void layoutDeep(java.awt.Container container)
+	static void layoutDeep(java.awt.Container container)
 	{
 		container.doLayout();
 		for (java.awt.Component child : container.getComponents())
