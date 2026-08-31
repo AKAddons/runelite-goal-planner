@@ -1,477 +1,476 @@
 {
-  "$comment": "Central feature registry. One entry per user-facing feature. Every code change that adds/alters a feature updates its entry (and the README feature guide + CHANGELOG) in the same PR. `./gradlew checkDocs` audits this file against README.md, docs/img/, and the source tree, and prints the documentation-gap report.",
-  "features": [
-    {
-      "id": "add-goal-dialog",
-      "title": "Add a goal from the panel",
-      "group": "Creating goals",
-      "anchor": "add-a-goal-from-the-panel",
-      "media": "docs/img/add-goal-dialog.gif",
-      "code": [
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "add-goal-ingame",
-      "title": "Add goals from the game",
-      "group": "Creating goals",
-      "anchor": "add-goals-from-the-game",
-      "media": "docs/img/add-goal-ingame.gif",
-      "code": [
-        "GoalPlannerPlugin.java"
-      ],
-      "tests": [],
-      "since": "0.1.0",
-      "notes": "onMenuOpened wiring has no automated coverage (needs mocked Client) — verified manually per release."
-    },
-    {
-      "id": "prereq-seeding",
-      "title": "Automatic requirement trees",
-      "group": "Creating goals",
-      "anchor": "automatic-requirement-trees",
-      "media": "docs/img/prereq-seeding.gif",
-      "code": [
-        "api/GoalCreationService.java",
-        "data/QuestRequirementResolver.java",
-        "data/DiaryRequirementResolver.java",
-        "data/BossKillData.java"
-      ],
-      "tests": [
-        "api/AddQuestGoalWithPrereqsTest.java"
-      ],
-      "since": "0.1.0",
-      "capture": "Quest list → right-click Dragon Slayer II → Add Goal → Default → watch the chain seed. ~8s."
-    },
-    {
-      "id": "add-requirements",
-      "title": "Add requirements to an existing goal",
-      "group": "Creating goals",
-      "anchor": "add-requirements-to-an-existing-goal",
-      "media": "docs/img/add-requirements.gif",
-      "code": [
-        "api/GoalCreationService.java",
-        "data/QuestRequirementResolver.java",
-        "data/DiaryRequirementResolver.java",
-        "model/AccountMetric.java",
-        "ui/GoalPanel.java",
-        "data/BossKillData.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java",
-        "data/QuestRequirementsTest.java",
-        "integration/WarriorsGuildOrPrereqTest.java"
-      ],
-      "since": "0.3.0",
-      "notes": "Quests/diaries since 0.3.0; bosses since 0.3.1. Incomplete-only reads live state on the client thread; account/skill/quest reqs pre-filtered."
-    },
-    {
-      "id": "blocked-prereqs",
-      "title": "Blocked-by-prerequisites badge",
-      "group": "Creating goals",
-      "anchor": "blocked-by-prerequisites-badge",
-      "media": "docs/img/blocked-prereqs.gif",
-      "code": [
-        "api/GoalCreationService.java",
-        "api/GoalPlannerApiImpl.java",
-        "api/GoalQueryService.java",
-        "ui/GoalCard.java",
-        "ui/GoalPanel.java",
-        "ui/ShapeIcons.java",
-        "GoalPlannerPlugin.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.3.1",
-      "capture": "A boss/quest goal with the amber ⚠ badge; hover to show the tooltip listing missing reqs, then click to add them. ~8s."
-    },
-    {
-      "id": "auto-tracking",
-      "title": "Auto-tracking",
-      "group": "Tracking",
-      "anchor": "auto-tracking",
-      "media": "docs/img/auto-tracking.gif",
-      "code": [
-        "tracker/AbstractTracker.java",
-        "tracker/SkillTracker.java",
-        "tracker/ItemTracker.java",
-        "tracker/AccountTracker.java",
-        "tracker/DiaryTracker.java"
-      ],
-      "tests": [
-        "tracker/ItemTrackerTest.java",
-        "tracker/AccountTrackerTest.java",
-        "tracker/SkillTrackerTest.java"
-      ],
-      "since": "0.1.0",
-      "capture": "Panel visible while gaining XP toward a skill goal (chop a tree). Bar/numbers tick. ~6s."
-    },
-    {
-      "id": "account-metrics",
-      "title": "Account metrics",
-      "group": "Tracking",
-      "anchor": "account-metrics",
-      "media": "docs/img/account-metrics.gif",
-      "code": [
-        "model/AccountMetric.java",
-        "tracker/AccountTracker.java",
-        "api/GoalCreationService.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "model/AccountMetricMaxTest.java",
-        "model/AccountMetricDecayTest.java",
-        "tracker/AccountTrackerTest.java",
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0",
-      "notes": "Live ceilings (quest DB sum, collection-log varp) since 0.3.0; over-max targets allowed since 0.3.0; leagues metrics hidden off-profile since 0.3.0. Each metric declares AccountMetric.decays(): the two that can lose value (Miscellania favour, spendable slayer points) have their completion re-derived from the live varbit every tick, so the goal re-opens when the value drops below target and completes again when it recovers; every other metric keeps sticky completion. A 5s post-login settle window stops the pre-sync zero read from un-completing them."
-    },
-    {
-      "id": "misc-auto-track",
-      "title": "Auto-track Miscellania",
-      "group": "Tracking",
-      "anchor": "auto-track-miscellania",
-      "media": null,
-      "code": [
-        "tracker/MiscellaniaAutoGoal.java",
-        "GoalPlannerPlugin.java",
-        "GoalPlannerConfig.java",
-        "persistence/GoalStore.java"
-      ],
-      "tests": [
-        "tracker/MiscellaniaAutoGoalTest.java"
-      ],
-      "since": "0.4.0",
-      "notes": "Auto-adds a Misc. Approval 100% goal on a real in-session approval increase when none exists (re-adds whenever the goal is missing). Decision logic is unit-tested; the varbit-event wiring is verified in-client. Config toggle, default on; skipped while a Misc. Approval goal is present."
-    },
-    {
-      "id": "change-amount",
-      "title": "Change Amount / retargeting",
-      "group": "Tracking",
-      "anchor": "change-amount--retargeting",
-      "media": "docs/img/change-amount.gif",
-      "code": [
-        "api/GoalMutationService.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0",
-      "notes": "Completed-goal retargeting with completion re-evaluation since 0.3.0."
-    },
-    {
-      "id": "manual-complete",
-      "title": "Manual completion",
-      "group": "Tracking",
-      "anchor": "manual-completion",
-      "media": "docs/img/manual-complete.gif",
-      "code": [
-        "api/GoalMutationService.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "sections",
-      "title": "Sections",
-      "group": "Organizing",
-      "anchor": "sections",
-      "media": "docs/img/sections.gif",
-      "code": [
-        "persistence/GoalStore.java",
-        "ui/GoalPanel.java",
-        "ui/SectionHeaderRow.java"
-      ],
-      "tests": [
-        "persistence/GoalStoreTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "completed-inline",
-      "title": "Completed-goal handling",
-      "group": "Organizing",
-      "anchor": "completed-goal-handling",
-      "media": "docs/img/completed-inline.gif",
-      "code": [
-        "persistence/GoalStore.java"
-      ],
-      "tests": [
-        "persistence/GoalStoreTest.java"
-      ],
-      "since": "0.3.0"
-    },
-    {
-      "id": "move-duplicate",
-      "title": "Move & duplicate across sections",
-      "group": "Organizing",
-      "anchor": "move--duplicate-across-sections",
-      "media": "docs/img/move-duplicate.gif",
-      "code": [
-        "api/GoalMutationService.java",
-        "persistence/GoalStore.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.3.0"
-    },
-    {
-      "id": "nesting",
-      "title": "Dependency nesting (guide view)",
-      "group": "Organizing",
-      "anchor": "dependency-nesting-guide-view",
-      "media": "docs/img/nesting.gif",
-      "code": [
-        "ui/GoalPanel.java",
-        "ui/nest/SectionNestContainer.java"
-      ],
-      "tests": [],
-      "since": "0.3.0",
-      "notes": "Renderer is Swing-only — no automated coverage; topo-order math covered via GoalQueryService tests. A goal with a nested prerequisite subtree can be collapsed via a chevron on its row or a right-click 'Hide/show nested prerequisites' item; the collapsed state persists per profile (Goal.nestCollapsed)."
-    },
-    {
-      "id": "tags",
-      "title": "Tags",
-      "group": "Organizing",
-      "anchor": "tags",
-      "media": "docs/img/tags.gif",
-      "code": [
-        "api/TagService.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "colors",
-      "title": "Colors",
-      "group": "Organizing",
-      "anchor": "colors",
-      "media": "docs/img/colors.gif",
-      "code": [
-        "ui/GoalPanel.java",
-        "ui/SectionHeaderRow.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "search",
-      "title": "Search",
-      "group": "Organizing",
-      "anchor": "search",
-      "media": "docs/img/search.gif",
-      "code": [
-        "ui/GoalPanel.java",
-        "api/GoalQueryService.java"
-      ],
-      "tests": [],
-      "since": "0.1.1",
-      "notes": "searchGoals has no dedicated test class — gap."
-    },
-    {
-      "id": "select-all",
-      "title": "Multi-select + section select-all",
-      "group": "Selection & safety",
-      "anchor": "multi-select--section-select-all",
-      "media": "docs/img/select-all.gif",
-      "code": [
-        "ui/SectionHeaderRow.java",
-        "ui/GoalPanel.java",
-        "api/GoalPlannerApiImpl.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.1",
-      "notes": "Header checkbox glyph since 0.3.0."
-    },
-    {
-      "id": "bulk-actions",
-      "title": "Bulk actions",
-      "group": "Selection & safety",
-      "anchor": "bulk-actions",
-      "media": "docs/img/bulk-actions.gif",
-      "code": [
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.1"
-    },
-    {
-      "id": "undo-redo",
-      "title": "Undo / redo",
-      "group": "Selection & safety",
-      "anchor": "undo--redo",
-      "media": "docs/img/undo-redo.gif",
-      "code": [
-        "command/CommandHistory.java",
-        "command/Command.java",
-        "command/CompositeCommand.java"
-      ],
-      "tests": [
-        "command/CommandHistoryTest.java",
-        "api/GoalPlannerApiImplTest.java"
-      ],
-      "since": "0.1.0"
-    },
-    {
-      "id": "share-codes",
-      "title": "Share codes",
-      "group": "Sharing",
-      "anchor": "share-codes",
-      "media": "docs/img/share-codes.gif",
-      "code": [
-        "share/ShareCodec.java",
-        "share/ShareMapper.java",
-        "api/ShareExportService.java"
-      ],
-      "tests": [
-        "share/ShareCodecTest.java",
-        "share/ShareCodecV2Test.java",
-        "api/ShareExportServiceTest.java"
-      ],
-      "since": "0.3.0"
-    },
-    {
-      "id": "importing",
-      "title": "Importing",
-      "group": "Sharing",
-      "anchor": "importing",
-      "media": "docs/img/importing.gif",
-      "code": [
-        "api/ShareImportService.java"
-      ],
-      "tests": [
-        "api/ShareImportServiceTest.java"
-      ],
-      "since": "0.3.0"
-    },
-    {
-      "id": "saved-plans",
-      "title": "Saved plans",
-      "group": "Sharing",
-      "anchor": "saved-plans",
-      "media": "docs/img/saved-plans.gif",
-      "code": [
-        "persistence/SavedPlanStore.java",
-        "persistence/SavedPlan.java",
-        "share/SavedPlanSections.java",
-        "ui/ShareDialogs.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "persistence/SavedPlanStoreTest.java",
-        "share/SavedPlanSectionsTest.java"
-      ],
-      "since": "0.4.0",
-      "capture": "⋯ → Saved plans (with a couple saved); Edit one to rename + change a section name; Import it. ~10s.",
-      "notes": "Global library (not profile-scoped). Dialog is Swing-only — store + section-override logic are unit-tested; the dialog is verified in-client."
-    },
-    {
-      "id": "cross-section",
-      "title": "Cross-section dependencies",
-      "group": "Sharing",
-      "anchor": "cross-section-dependencies",
-      "media": "docs/img/cross-section.png",
-      "code": [
-        "share/CrossEdgeDto.java",
-        "share/ShareMapper.java",
-        "api/ShareImportService.java"
-      ],
-      "tests": [
-        "share/ShareMapperTest.java",
-        "api/ShareImportServiceTest.java"
-      ],
-      "since": "0.3.0"
-    },
-    {
-      "id": "ai-crafting",
-      "title": "Crafting codes with AI",
-      "group": "Sharing",
-      "anchor": "crafting-codes-with-ai",
-      "media": null,
-      "code": [],
-      "tests": [],
-      "since": "0.3.0",
-      "notes": "Lives in the goalplanner-share-mcp repo; its parity tests decode real plugin codes both directions."
-    },
-    {
-      "id": "loadout-lab-linkin",
-      "title": "Search in Loadout Lab",
-      "group": "Sharing",
-      "anchor": "search-in-loadout-lab",
-      "media": null,
-      "code": [
-        "GoalPlannerPlugin.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "ui/GoalPanelLoadoutLabSupportTest.java"
-      ],
-      "since": "0.4.2",
-      "notes": "Outbound PluginMessage link-in: boss goal cards -> Loadout Lab (namespace loadoutlab, name search, data monster+source). Install-aware: enabled (ANY same-named copy counts - hub and sideloaded dev copies coexist) -> 'Search in Loadout Lab' posts the message, fire-and-forget; installed but disabled -> grayed non-clickable nudge; not installed -> NO menu entry (deliberate: no upsell for users without the plugin, user call 2026-07-11). Pure Swing menu wiring - verified manually against the receiver."
-    },
-    {
-      "id": "repeatable-goals",
-      "title": "Repeatable goals",
-      "group": "Organising",
-      "anchor": "repeatable-goals",
-      "media": null,
-      "code": [
-        "model/RepeatPeriod.java",
-        "ResetBoundary.java",
-        "util/RepeatSchedule.java",
-        "service/RepeatResetService.java",
-        "model/Goal.java",
-        "model/Section.java",
-        "persistence/GoalStore.java",
-        "api/GoalMutationService.java",
-        "ui/GoalPanel.java",
-        "GoalPlannerPlugin.java"
-      ],
-      "tests": [
-        "util/RepeatScheduleTest.java",
-        "service/RepeatResetServiceTest.java"
-      ],
-      "since": "0.5.0",
-      "notes": "Stage 1: manual repeat on CUSTOM goals. Goal.repeatEvery (NONE/DAILY/WEEKLY/MONTHLY) + lastPeriodKey; rollover compares integer period keys rather than differencing timestamps, so N periods offline resets once and DST is java.time's problem. Driven by a 1-minute Swing timer, NOT onGameTick - CUSTOM goals need no client data and the boundary is usually crossed while logged out. Repeatable goals live in a derived built-in section (Section.BuiltInKind.REPEATABLE, ORDER_REPEATABLE = MIN_VALUE, pinned top) that the panel hides while empty - the only built-in that hides. reconcileDerivedSections checks repeating BEFORE complete, so a checked-off daily never graduates to Completed; that mutual exclusion is what lets both mechanisms share archivedFromSectionId. Boundary configurable (game reset UTC default / local midnight / custom hour). See docs/decisions/0003 and 0004. NOT yet done: deadline group headers with a live 'resets in' countdown (RepeatSchedule.formatCountdown exists and is tested but is not wired to the panel). Auto-tracked types repeat via derived goals - see repeatable-goals-from-skills-and-items."
-    },
-    {
-      "id": "repeatable-goals-from-skills-and-items",
-      "title": "Repeatable goals from skills and items",
-      "group": "Organising",
-      "anchor": "repeatable-goals-from-skills-and-items",
-      "media": null,
-      "code": [
-        "data/ItemActivityResolver.java",
-        "api/GoalCreationService.java",
-        "service/RepeatResetService.java",
-        "model/Goal.java",
-        "ui/GoalPanel.java"
-      ],
-      "tests": [
-        "data/ItemActivityResolverTest.java",
-        "api/CreateDerivedRepeatGoalTest.java",
-        "service/RepeatResetServiceTest.java"
-      ],
-      "since": "0.5.0",
-      "notes": "Right-click a long-term goal -> 'Repeatable goal' -> period -> size, creating a repeating slice of it. A SKILL parent yields an XP chunk on the same skill; an item parent yields a kill-count goal at whatever activity drops it, resolved by ItemActivityResolver joining item-sources.tsv (itemId -> source label) with boss-killcount.tsv (boss -> KC varp). Goal.repeatChunk + derivedFromGoalId; the parent is never mutated. Key decision: NO baseline field. At rollover the target re-bases to currentValue + chunk (RepeatResetService) rather than progress being cleared, so every existing tracker works unchanged AND the rollover reads only stored state - which is what keeps resets working while logged out. Clearing progress instead would be silently undone by the next tracker tick, since trackers report a lifetime total. A missed period re-bases to one chunk, never accumulating. Creation reads live XP/KC and returns null if it cannot, rather than shipping a bogus target that self-completes. Coverage: BOSS + RAID source labels join at 90%+ after reconciling case, leading articles, group labels (Dagannoth Kings, Moons of Peril) and ' and ' pairs; the 2 residual gaps are pinned by test. MINIGAME is excluded on purpose - all 22 minigame labels resolve to nothing because their counters are the collection_minigames_* varbits the plugin does not read yet. ~48% of items are category OTHER and correctly get no menu entry at all. Repeat fields ride share codes additively (repeatEvery + repeatChunk, plugin ADR-0006): the chunk travels, the re-based target does not, and a pre-0.5.0 recipient imports a one-shot. MCP emits the same fields."
-    }
-  ]
+ "$comment": "Central feature registry. One entry per user-facing feature. Every code change that adds/alters a feature updates its entry (and the README feature guide + CHANGELOG) in the same PR. `./gradlew checkDocs` audits this file against README.md, docs/img/, and the source tree, and prints the documentation-gap report.",
+ "features": [
+  {
+   "id": "add-goal-dialog",
+   "title": "Add a goal from the panel",
+   "group": "Creating goals",
+   "anchor": "add-a-goal-from-the-panel",
+   "media": "docs/img/add-goal-dialog.gif",
+   "code": [
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "add-goal-ingame",
+   "title": "Add goals from the game",
+   "group": "Creating goals",
+   "anchor": "add-goals-from-the-game",
+   "media": "docs/img/add-goal-ingame.gif",
+   "code": [
+    "GoalPlannerPlugin.java"
+   ],
+   "tests": [],
+   "since": "0.1.0",
+   "notes": "onMenuOpened wiring has no automated coverage (needs mocked Client) — verified manually per release."
+  },
+  {
+   "id": "prereq-seeding",
+   "title": "Automatic requirement trees",
+   "group": "Creating goals",
+   "anchor": "automatic-requirement-trees",
+   "media": "docs/img/prereq-seeding.gif",
+   "code": [
+    "api/GoalCreationService.java",
+    "data/QuestRequirementResolver.java",
+    "data/DiaryRequirementResolver.java",
+    "data/BossKillData.java"
+   ],
+   "tests": [
+    "api/AddQuestGoalWithPrereqsTest.java"
+   ],
+   "since": "0.1.0",
+   "capture": "Quest list → right-click Dragon Slayer II → Add Goal → Default → watch the chain seed. ~8s."
+  },
+  {
+   "id": "add-requirements",
+   "title": "Add requirements to an existing goal",
+   "group": "Creating goals",
+   "anchor": "add-requirements-to-an-existing-goal",
+   "media": "docs/img/add-requirements.gif",
+   "code": [
+    "api/GoalCreationService.java",
+    "data/QuestRequirementResolver.java",
+    "data/DiaryRequirementResolver.java",
+    "model/AccountMetric.java",
+    "ui/GoalPanel.java",
+    "data/BossKillData.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java",
+    "data/QuestRequirementsTest.java",
+    "integration/WarriorsGuildOrPrereqTest.java"
+   ],
+   "since": "0.3.0",
+   "notes": "Quests/diaries since 0.3.0; bosses since 0.3.1. Incomplete-only reads live state on the client thread; account/skill/quest reqs pre-filtered."
+  },
+  {
+   "id": "blocked-prereqs",
+   "title": "Blocked-by-prerequisites badge",
+   "group": "Creating goals",
+   "anchor": "blocked-by-prerequisites-badge",
+   "media": "docs/img/blocked-prereqs.gif",
+   "code": [
+    "api/GoalCreationService.java",
+    "api/GoalPlannerApiImpl.java",
+    "api/GoalQueryService.java",
+    "ui/GoalCard.java",
+    "ui/GoalPanel.java",
+    "ui/ShapeIcons.java",
+    "GoalPlannerPlugin.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.3.1",
+   "capture": "A boss/quest goal with the amber ⚠ badge; hover to show the tooltip listing missing reqs, then click to add them. ~8s."
+  },
+  {
+   "id": "auto-tracking",
+   "title": "Auto-tracking",
+   "group": "Tracking",
+   "anchor": "auto-tracking",
+   "media": "docs/img/auto-tracking.gif",
+   "code": [
+    "tracker/AbstractTracker.java",
+    "tracker/SkillTracker.java",
+    "tracker/ItemTracker.java",
+    "tracker/AccountTracker.java",
+    "tracker/DiaryTracker.java"
+   ],
+   "tests": [
+    "tracker/ItemTrackerTest.java",
+    "tracker/AccountTrackerTest.java",
+    "tracker/SkillTrackerTest.java"
+   ],
+   "since": "0.1.0",
+   "capture": "Panel visible while gaining XP toward a skill goal (chop a tree). Bar/numbers tick. ~6s."
+  },
+  {
+   "id": "account-metrics",
+   "title": "Account metrics",
+   "group": "Tracking",
+   "anchor": "account-metrics",
+   "media": "docs/img/account-metrics.gif",
+   "code": [
+    "model/AccountMetric.java",
+    "tracker/AccountTracker.java",
+    "api/GoalCreationService.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "model/AccountMetricMaxTest.java",
+    "model/AccountMetricDecayTest.java",
+    "tracker/AccountTrackerTest.java",
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0",
+   "notes": "Live ceilings (quest DB sum, collection-log varp) since 0.3.0; over-max targets allowed since 0.3.0; leagues metrics hidden off-profile since 0.3.0. Each metric declares AccountMetric.decays(): the two that can lose value (Miscellania favour, spendable slayer points) have their completion re-derived from the live varbit every tick, so the goal re-opens when the value drops below target and completes again when it recovers; every other metric keeps sticky completion. A 5s post-login settle window stops the pre-sync zero read from un-completing them."
+  },
+  {
+   "id": "misc-auto-track",
+   "title": "Auto-track Miscellania",
+   "group": "Tracking",
+   "anchor": "auto-track-miscellania",
+   "media": null,
+   "code": [
+    "tracker/MiscellaniaAutoGoal.java",
+    "GoalPlannerPlugin.java",
+    "GoalPlannerConfig.java",
+    "persistence/GoalStore.java"
+   ],
+   "tests": [
+    "tracker/MiscellaniaAutoGoalTest.java"
+   ],
+   "since": "0.4.0",
+   "notes": "Auto-adds a Misc. Approval 100% goal on a real in-session approval increase when none exists (re-adds whenever the goal is missing). Decision logic is unit-tested; the varbit-event wiring is verified in-client. Config toggle, default on; skipped while a Misc. Approval goal is present."
+  },
+  {
+   "id": "change-amount",
+   "title": "Change Amount / retargeting",
+   "group": "Tracking",
+   "anchor": "change-amount--retargeting",
+   "media": "docs/img/change-amount.gif",
+   "code": [
+    "api/GoalMutationService.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0",
+   "notes": "Completed-goal retargeting with completion re-evaluation since 0.3.0."
+  },
+  {
+   "id": "manual-complete",
+   "title": "Manual completion",
+   "group": "Tracking",
+   "anchor": "manual-completion",
+   "media": "docs/img/manual-complete.gif",
+   "code": [
+    "api/GoalMutationService.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "sections",
+   "title": "Sections",
+   "group": "Organizing",
+   "anchor": "sections",
+   "media": "docs/img/sections.gif",
+   "code": [
+    "persistence/GoalStore.java",
+    "ui/GoalPanel.java",
+    "ui/SectionHeaderRow.java"
+   ],
+   "tests": [
+    "persistence/GoalStoreTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "completed-inline",
+   "title": "Completed-goal handling",
+   "group": "Organizing",
+   "anchor": "completed-goal-handling",
+   "media": "docs/img/completed-inline.gif",
+   "code": [
+    "persistence/GoalStore.java"
+   ],
+   "tests": [
+    "persistence/GoalStoreTest.java"
+   ],
+   "since": "0.3.0"
+  },
+  {
+   "id": "move-duplicate",
+   "title": "Move & duplicate across sections",
+   "group": "Organizing",
+   "anchor": "move--duplicate-across-sections",
+   "media": "docs/img/move-duplicate.gif",
+   "code": [
+    "api/GoalMutationService.java",
+    "persistence/GoalStore.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.3.0"
+  },
+  {
+   "id": "nesting",
+   "title": "Dependency nesting (guide view)",
+   "group": "Organizing",
+   "anchor": "dependency-nesting-guide-view",
+   "media": "docs/img/nesting.gif",
+   "code": [
+    "ui/GoalPanel.java",
+    "ui/nest/SectionNestContainer.java"
+   ],
+   "tests": [],
+   "since": "0.3.0",
+   "notes": "Renderer is Swing-only — no automated coverage; topo-order math covered via GoalQueryService tests. A goal with a nested prerequisite subtree can be collapsed via a chevron on its row or a right-click 'Hide/show nested prerequisites' item; the collapsed state persists per profile (Goal.nestCollapsed)."
+  },
+  {
+   "id": "tags",
+   "title": "Tags",
+   "group": "Organizing",
+   "anchor": "tags",
+   "media": "docs/img/tags.gif",
+   "code": [
+    "api/TagService.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "colors",
+   "title": "Colors",
+   "group": "Organizing",
+   "anchor": "colors",
+   "media": "docs/img/colors.gif",
+   "code": [
+    "ui/GoalPanel.java",
+    "ui/SectionHeaderRow.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "search",
+   "title": "Search",
+   "group": "Organizing",
+   "anchor": "search",
+   "media": "docs/img/search.gif",
+   "code": [
+    "ui/GoalPanel.java",
+    "api/GoalQueryService.java"
+   ],
+   "tests": [],
+   "since": "0.1.1",
+   "notes": "searchGoals has no dedicated test class — gap."
+  },
+  {
+   "id": "select-all",
+   "title": "Multi-select + section select-all",
+   "group": "Selection & safety",
+   "anchor": "multi-select--section-select-all",
+   "media": "docs/img/select-all.gif",
+   "code": [
+    "ui/SectionHeaderRow.java",
+    "ui/GoalPanel.java",
+    "api/GoalPlannerApiImpl.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.1",
+   "notes": "Header checkbox glyph since 0.3.0."
+  },
+  {
+   "id": "bulk-actions",
+   "title": "Bulk actions",
+   "group": "Selection & safety",
+   "anchor": "bulk-actions",
+   "media": "docs/img/bulk-actions.gif",
+   "code": [
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.1"
+  },
+  {
+   "id": "undo-redo",
+   "title": "Undo / redo",
+   "group": "Selection & safety",
+   "anchor": "undo--redo",
+   "media": "docs/img/undo-redo.gif",
+   "code": [
+    "command/CommandHistory.java",
+    "command/Command.java",
+    "command/CompositeCommand.java"
+   ],
+   "tests": [
+    "command/CommandHistoryTest.java",
+    "api/GoalPlannerApiImplTest.java"
+   ],
+   "since": "0.1.0"
+  },
+  {
+   "id": "share-codes",
+   "title": "Share codes",
+   "group": "Sharing",
+   "anchor": "share-codes",
+   "media": "docs/img/share-codes.gif",
+   "code": [
+    "share/ShareCodec.java",
+    "share/ShareMapper.java",
+    "api/ShareExportService.java"
+   ],
+   "tests": [
+    "share/ShareCodecTest.java",
+    "share/ShareCodecV2Test.java",
+    "api/ShareExportServiceTest.java"
+   ],
+   "since": "0.3.0"
+  },
+  {
+   "id": "importing",
+   "title": "Importing",
+   "group": "Sharing",
+   "anchor": "importing",
+   "media": "docs/img/importing.gif",
+   "code": [
+    "api/ShareImportService.java"
+   ],
+   "tests": [
+    "api/ShareImportServiceTest.java"
+   ],
+   "since": "0.3.0"
+  },
+  {
+   "id": "saved-plans",
+   "title": "Saved plans",
+   "group": "Sharing",
+   "anchor": "saved-plans",
+   "media": "docs/img/saved-plans.gif",
+   "code": [
+    "persistence/SavedPlanStore.java",
+    "persistence/SavedPlan.java",
+    "share/SavedPlanSections.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "persistence/SavedPlanStoreTest.java",
+    "share/SavedPlanSectionsTest.java"
+   ],
+   "since": "0.4.0",
+   "capture": "⋯ → Saved plans (with a couple saved); Edit one to rename + change a section name; Import it. ~10s.",
+   "notes": "Global library (not profile-scoped). Import/confirm flow lives in GoalPanel dock surfaces since the 1.0.0 no-popups pass (ShareDialogs retired)."
+  },
+  {
+   "id": "cross-section",
+   "title": "Cross-section dependencies",
+   "group": "Sharing",
+   "anchor": "cross-section-dependencies",
+   "media": "docs/img/cross-section.png",
+   "code": [
+    "share/CrossEdgeDto.java",
+    "share/ShareMapper.java",
+    "api/ShareImportService.java"
+   ],
+   "tests": [
+    "share/ShareMapperTest.java",
+    "api/ShareImportServiceTest.java"
+   ],
+   "since": "0.3.0"
+  },
+  {
+   "id": "ai-crafting",
+   "title": "Crafting codes with AI",
+   "group": "Sharing",
+   "anchor": "crafting-codes-with-ai",
+   "media": null,
+   "code": [],
+   "tests": [],
+   "since": "0.3.0",
+   "notes": "Lives in the goalplanner-share-mcp repo; its parity tests decode real plugin codes both directions."
+  },
+  {
+   "id": "loadout-lab-linkin",
+   "title": "Search in Loadout Lab",
+   "group": "Sharing",
+   "anchor": "search-in-loadout-lab",
+   "media": null,
+   "code": [
+    "GoalPlannerPlugin.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "ui/GoalPanelLoadoutLabSupportTest.java"
+   ],
+   "since": "0.4.2",
+   "notes": "Outbound PluginMessage link-in: boss goal cards -> Loadout Lab (namespace loadoutlab, name search, data monster+source). Install-aware: enabled (ANY same-named copy counts - hub and sideloaded dev copies coexist) -> 'Search in Loadout Lab' posts the message, fire-and-forget; installed but disabled -> grayed non-clickable nudge; not installed -> NO menu entry (deliberate: no upsell for users without the plugin, user call 2026-07-11). Pure Swing menu wiring - verified manually against the receiver."
+  },
+  {
+   "id": "repeatable-goals",
+   "title": "Repeatable goals",
+   "group": "Organising",
+   "anchor": "repeatable-goals",
+   "media": null,
+   "code": [
+    "model/RepeatPeriod.java",
+    "ResetBoundary.java",
+    "util/RepeatSchedule.java",
+    "service/RepeatResetService.java",
+    "model/Goal.java",
+    "model/Section.java",
+    "persistence/GoalStore.java",
+    "api/GoalMutationService.java",
+    "ui/GoalPanel.java",
+    "GoalPlannerPlugin.java"
+   ],
+   "tests": [
+    "util/RepeatScheduleTest.java",
+    "service/RepeatResetServiceTest.java"
+   ],
+   "since": "0.5.0",
+   "notes": "Stage 1: manual repeat on CUSTOM goals. Goal.repeatEvery (NONE/DAILY/WEEKLY/MONTHLY) + lastPeriodKey; rollover compares integer period keys rather than differencing timestamps, so N periods offline resets once and DST is java.time's problem. Driven by a 1-minute Swing timer, NOT onGameTick - CUSTOM goals need no client data and the boundary is usually crossed while logged out. Repeatable goals live in a derived built-in section (Section.BuiltInKind.REPEATABLE, ORDER_REPEATABLE = MIN_VALUE, pinned top) that the panel hides while empty - the only built-in that hides. reconcileDerivedSections checks repeating BEFORE complete, so a checked-off daily never graduates to Completed; that mutual exclusion is what lets both mechanisms share archivedFromSectionId. Boundary configurable (game reset UTC default / local midnight / custom hour). See docs/decisions/0003 and 0004. NOT yet done: deadline group headers with a live 'resets in' countdown (RepeatSchedule.formatCountdown exists and is tested but is not wired to the panel). Auto-tracked types repeat via derived goals - see repeatable-goals-from-skills-and-items."
+  },
+  {
+   "id": "repeatable-goals-from-skills-and-items",
+   "title": "Repeatable goals from skills and items",
+   "group": "Organising",
+   "anchor": "repeatable-goals-from-skills-and-items",
+   "media": null,
+   "code": [
+    "data/ItemActivityResolver.java",
+    "api/GoalCreationService.java",
+    "service/RepeatResetService.java",
+    "model/Goal.java",
+    "ui/GoalPanel.java"
+   ],
+   "tests": [
+    "data/ItemActivityResolverTest.java",
+    "api/CreateDerivedRepeatGoalTest.java",
+    "service/RepeatResetServiceTest.java"
+   ],
+   "since": "0.5.0",
+   "notes": "Right-click a long-term goal -> 'Repeatable goal' -> period -> size, creating a repeating slice of it. A SKILL parent yields an XP chunk on the same skill; an item parent yields a kill-count goal at whatever activity drops it, resolved by ItemActivityResolver joining item-sources.tsv (itemId -> source label) with boss-killcount.tsv (boss -> KC varp). Goal.repeatChunk + derivedFromGoalId; the parent is never mutated. Key decision: NO baseline field. At rollover the target re-bases to currentValue + chunk (RepeatResetService) rather than progress being cleared, so every existing tracker works unchanged AND the rollover reads only stored state - which is what keeps resets working while logged out. Clearing progress instead would be silently undone by the next tracker tick, since trackers report a lifetime total. A missed period re-bases to one chunk, never accumulating. Creation reads live XP/KC and returns null if it cannot, rather than shipping a bogus target that self-completes. Coverage: BOSS + RAID source labels join at 90%+ after reconciling case, leading articles, group labels (Dagannoth Kings, Moons of Peril) and ' and ' pairs; the 2 residual gaps are pinned by test. MINIGAME is excluded on purpose - all 22 minigame labels resolve to nothing because their counters are the collection_minigames_* varbits the plugin does not read yet. ~48% of items are category OTHER and correctly get no menu entry at all. Repeat fields ride share codes additively (repeatEvery + repeatChunk, plugin ADR-0006): the chunk travels, the re-based target does not, and a pre-0.5.0 recipient imports a one-shot. MCP emits the same fields."
+  }
+ ]
 }

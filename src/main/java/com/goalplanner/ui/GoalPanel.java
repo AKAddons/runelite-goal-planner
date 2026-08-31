@@ -63,7 +63,6 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JCheckBox;
-import javax.swing.JOptionPane;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
@@ -165,6 +164,8 @@ public class GoalPanel extends PluginPanel
 	 *  primary button UPDATES it instead of creating a second goal. */
 	private String dockEditFormGoalId = null;
 	private boolean dockEditFormMounted = false;
+	/** The mounted form's inline warning label; warnCreate fills it. */
+	private JLabel dockFormWarning = null;
 	/** The selection a transient overlay was opened against, so a selection change
 	 *  can drop it (see {@link #refreshDock()}). */
 	private String dockOverlaySelectionKey = "";
@@ -241,11 +242,15 @@ public class GoalPanel extends PluginPanel
 	private java.util.function.IntConsumer dockChoicePick = null;
 	private boolean dockChoiceMounted = false;
 
-	/** Section id whose inline Rename overlay is active; null = inactive. */
-	private String dockRenameSectionId = null;
-	private boolean dockRenameMounted = false;
-	/** One-shot inline hint after a failed rename (duplicate / invalid name). */
-	private boolean dockRenameFailed = false;
+	/** Title of the inline text-INPUT overlay; null = inactive. One surface
+	 *  serves every text ask (rename, new section, description, custom chunk) -
+	 *  the commit predicate returns false to keep it open with its hint. */
+	private String dockInputTitle = null;
+	private String dockInputInitial = "";
+	private String dockInputHint = null;
+	private java.util.function.Predicate<String> dockInputCommit = null;
+	private boolean dockInputMounted = false;
+	private boolean dockInputFailed = false;
 	private String dockTagTarget = null;
 	private boolean dockTagMounted = false;
 	/** Which target the inline Share surface (share-inline pass) encodes: GOALS =
@@ -421,79 +426,7 @@ public class GoalPanel extends PluginPanel
 		JButton optionsButton = new JButton(ShapeIcons.moreDots(10, new Color(180, 180, 220)));
 		optionsButton.setToolTipText("Options...");
 		optionsButton.setMargin(new Insets(3, 3, 3, 3));
-		optionsButton.addActionListener(e -> {
-			JPopupMenu popup = new JPopupMenu();
-			JMenuItem joinDiscord = new JMenuItem("Join our Discord");
-			joinDiscord.addActionListener(ev -> openDiscordInvite());
-			popup.add(joinDiscord);
-
-			// Share / import (only once share support is wired by the plugin).
-			if (shareCodec != null)
-			{
-				popup.addSeparator();
-
-				JMenuItem importShare = new JMenuItem("Import shared goals...");
-				importShare.addActionListener(ev ->
-					openImportSurfaceFromHeader());
-				popup.add(importShare);
-
-				if (isSavedPlansAvailable())
-				{
-					JMenuItem savedPlans = new JMenuItem("Saved plans...");
-					savedPlans.addActionListener(ev -> openSavedPlansSurface());
-					popup.add(savedPlans);
-				}
-				// Section sharing lives on the section-header right-click menu
-				// (consistent with goal sharing); goal sharing on goal cards.
-			}
-
-			popup.addSeparator();
-			JMenuItem removeDupes = new JMenuItem("Remove duplicate goals");
-			removeDupes.setToolTipText(
-				"Collapse same-goal duplicates within each section (keeps the most-complete one).");
-			removeDupes.addActionListener(ev -> {
-				int n = api.removeDuplicateGoals();
-				rebuild();
-				JOptionPane.showMessageDialog(GoalPanel.this,
-					n == 0 ? "No duplicate goals found." : "Removed " + n + " duplicate goal(s).",
-					"Remove Duplicates", JOptionPane.INFORMATION_MESSAGE);
-			});
-			popup.add(removeDupes);
-
-			// Bulk delete entry points. Both are undoable (single step), so the
-			// confirm dialog notes that; "delete empty sections" is low-risk and
-			// skips the prompt. (Bulk "remove all" was dropped in v0.1.0 for
-			// reversibility - it's back now that each is a single undo.)
-			popup.addSeparator();
-
-			JMenuItem deleteEmptySections = new JMenuItem("Delete empty sections");
-			deleteEmptySections.setToolTipText("Remove sections that contain no goals. Undoable.");
-			deleteEmptySections.addActionListener(ev -> {
-				int n = api.removeEmptyUserSections();
-				rebuild();
-				JOptionPane.showMessageDialog(GoalPanel.this,
-					n == 0 ? "No empty sections found." : "Deleted " + n + " empty section(s).",
-					"Delete Empty Sections", JOptionPane.INFORMATION_MESSAGE);
-			});
-			popup.add(deleteEmptySections);
-
-			JMenuItem deleteEverything = new JMenuItem("Delete all goals and sections");
-			deleteEverything.setToolTipText("Wipe every goal and section (completed goals included). Undoable.");
-			deleteEverything.addActionListener(ev -> {
-				int choice = JOptionPane.showConfirmDialog(GoalPanel.this,
-					"Delete all goals and sections?\nThis wipes every goal (completed included) and every section. This can be undone.",
-					"Delete All Goals and Sections", JOptionPane.YES_NO_OPTION,
-					JOptionPane.WARNING_MESSAGE);
-				if (choice == JOptionPane.YES_OPTION)
-				{
-					api.removeAllGoalsAndSections();
-					rebuild();
-				}
-			});
-			popup.add(deleteEverything);
-
-			popup.show(optionsButton, 0, optionsButton.getHeight());
-		});
+		optionsButton.addActionListener(e -> openOptionsSurface());
 
 		// Tag administration (rename / re-icon / recolour) is deferred to 1.1.0
 		// as a dock surface; the TagManagementDialog window went with the 1.0.0
@@ -1652,11 +1585,10 @@ public class GoalPanel extends PluginPanel
 		exitRelationMode();
 		if (succeeded == 0)
 		{
-			JOptionPane.showMessageDialog(this,
-				attempted == 1
-					? "Could not add relation - it may already exist or would create a cycle."
-					: "Could not add any of the " + attempted + " relations - each may already exist or would create a cycle.",
-				"Add Relation", JOptionPane.WARNING_MESSAGE);
+			notice(attempted == 1
+				? "Could not add relation - it may already exist or would create a cycle."
+				: "Could not add any of the " + attempted
+					+ " relations - each may already exist or would create a cycle.");
 		}
 	}
 
@@ -1753,22 +1685,28 @@ public class GoalPanel extends PluginPanel
 	private void handleMovePickToNewSection()
 	{
 		if (pendingMoveSourceId == null) return;
-		String input = JOptionPane.showInputDialog(this, "New section name:", "");
-		if (input != null && !input.trim().isEmpty())
-		{
-			String newId = api.createSection(input.trim());
-			if (newId != null)
-			{
-				api.moveGoalToSection(pendingMoveSourceId, newId);
-			}
-		}
+		final String sourceId = pendingMoveSourceId;
 		exitMoveMode();
+		openInputSurface("New section name", "",
+			"Enter a name for the new section.", t -> {
+				if (t.trim().isEmpty())
+				{
+					return false;
+				}
+				String newId = api.createSection(t.trim());
+				if (newId == null)
+				{
+					return false;
+				}
+				api.moveGoalToSection(sourceId, newId);
+				return true;
+			});
 	}
 
 	/**
-	 * Attach a left-click MouseListener that routes selection clicks through
-	 * the API. Coexists with the existing right-click context menu - only
-	 * BUTTON1 events are handled here, BUTTON3 falls through to the popup.
+	 * Attach a MouseListener that routes selection clicks through the API.
+	 * There is no context menu any more (1.0.0 no-popups rule): BUTTON3 is
+	 * just another selection gesture, handled below.
 	 *
 	 * <p>Click semantics:
 	 * <ul>
@@ -2078,24 +2016,15 @@ public class GoalPanel extends PluginPanel
 
 		// Inline Rename-section surface: the same overlay pattern. Drops itself
 		// if the section vanished (deleted elsewhere, profile switch).
-		if (dockRenameSectionId != null)
+		if (dockInputTitle != null)
 		{
-			if (findSectionView(dockRenameSectionId) == null)
+			actionDock.setExpanded(true);
+			if (!dockInputMounted)
 			{
-				dockRenameSectionId = null;
-				dockRenameMounted = false;
-				dockRenameFailed = false;
+				actionDock.setExpandedComponent(buildInputSurface());
+				dockInputMounted = true;
 			}
-			else
-			{
-				actionDock.setExpanded(true);
-				if (!dockRenameMounted)
-				{
-					actionDock.setExpandedComponent(buildRenameSectionSurface());
-					dockRenameMounted = true;
-				}
-				return;
-			}
+			return;
 		}
 
 		// Inline Share surface (share-inline pass): the same overlay pattern as the
@@ -2770,18 +2699,8 @@ public class GoalPanel extends PluginPanel
 		{
 			return;
 		}
-		Object sel = JOptionPane.showInputDialog(this, title, title,
-			JOptionPane.PLAIN_MESSAGE, null,
-			labels.toArray(), labels.get(0));
-		if (sel == null)
-		{
-			return;
-		}
-		int i = labels.indexOf(sel.toString());
-		if (i >= 0)
-		{
-			actions.get(i).run();
-		}
+		openChoiceSurface(title, labels.toArray(new String[0]), -1,
+			i -> actions.get(i).run());
 	}
 
 	/** Route Change Amount to the right editor: the shared skill-target dialog,
@@ -2789,21 +2708,23 @@ public class GoalPanel extends PluginPanel
 
 	private void dockChangeName(Goal g)
 	{
-		String input = JOptionPane.showInputDialog(this, "New name:", g.getName());
-		if (input != null && !input.trim().isEmpty())
-		{
-			api.editCustomGoal(g.getId(), input.trim(), null);
-		}
+		openInputSurface("New name", g.getName(), "Enter a name.", t -> {
+			if (t.trim().isEmpty())
+			{
+				return false;
+			}
+			api.editCustomGoal(g.getId(), t.trim(), null);
+			return true;
+		});
 	}
 
 	private void dockChangeDescription(Goal g)
 	{
-		String input = JOptionPane.showInputDialog(this, "New description:",
-			g.getDescription() != null ? g.getDescription() : "");
-		if (input != null)
-		{
-			api.editCustomGoal(g.getId(), null, input.trim());
-		}
+		openInputSurface("New description",
+			g.getDescription() != null ? g.getDescription() : "", null, t -> {
+				api.editCustomGoal(g.getId(), null, t.trim());
+				return true;
+			});
 	}
 
 	/** Tags removable from a goal: any tag for CUSTOM, else only user-added
@@ -3001,13 +2922,8 @@ public class GoalPanel extends PluginPanel
 			actions.add(() -> api.setGoalRepeatChunk(g.getId(), s));
 		}
 		labels.add("Custom...");
-		actions.add(() -> {
-			Integer chunk = promptChunk(unit);
-			if (chunk != null)
-			{
-				api.setGoalRepeatChunk(g.getId(), chunk);
-			}
-		});
+		actions.add(() -> promptChunk(unit,
+			chunk -> api.setGoalRepeatChunk(g.getId(), chunk)));
 		dockChooser("Amount per period", labels, actions);
 	}
 
@@ -3037,14 +2953,9 @@ public class GoalPanel extends PluginPanel
 						api.createDerivedRepeatGoal(g.getId(), p, s, activityName)));
 				}
 				labels.add("Custom...");
-				actions.add(() -> {
-					Integer chunk = promptChunk(unit);
-					if (chunk != null)
-					{
-						runOnClientThread(() ->
-							api.createDerivedRepeatGoal(g.getId(), p, chunk, activityName));
-					}
-				});
+				actions.add(() -> promptChunk(unit,
+					chunk -> runOnClientThread(() ->
+						api.createDerivedRepeatGoal(g.getId(), p, chunk, activityName))));
 				dockChooser("How much " + unit + " per period", labels, actions);
 			});
 		}
@@ -3077,56 +2988,34 @@ public class GoalPanel extends PluginPanel
 		dockChooser("Which activity?", labels, actions);
 	}
 
-	/** Prompt for a positive whole-number chunk, tolerating typed separators.
-	 *  Returns null on cancel or invalid input (with a nudge on invalid). */
-	private Integer promptChunk(String unit)
+	/** Ask for a positive whole-number chunk in the input surface, tolerating
+	 *  typed separators; the action runs only on a valid amount. */
+	private void promptChunk(String unit, java.util.function.IntConsumer action)
 	{
-		String input = JOptionPane.showInputDialog(this,
-			"How much " + unit + " per period?", "Repeatable goal",
-			JOptionPane.PLAIN_MESSAGE);
-		if (input == null)
-		{
-			return null;
-		}
-		String cleaned = input.trim().replace(",", "").replace(" ", "").replace("_", "");
-		int chunk;
-		try
-		{
-			chunk = Integer.parseInt(cleaned);
-		}
-		catch (NumberFormatException ex)
-		{
-			JOptionPane.showMessageDialog(this,
-				"Enter a whole number, for example 300000.",
-				"Repeatable goal", JOptionPane.WARNING_MESSAGE);
-			return null;
-		}
-		if (chunk <= 0)
-		{
-			JOptionPane.showMessageDialog(this,
-				"Enter an amount greater than zero.",
-				"Repeatable goal", JOptionPane.WARNING_MESSAGE);
-			return null;
-		}
-		return chunk;
+		openInputSurface("How much " + unit + " per period?", "",
+			"Enter a whole number greater than zero, for example 300000.", t -> {
+				String cleaned = t.trim().replace(",", "").replace(" ", "").replace("_", "");
+				int chunk;
+				try
+				{
+					chunk = Integer.parseInt(cleaned);
+				}
+				catch (NumberFormatException ex)
+				{
+					return false;
+				}
+				if (chunk <= 0)
+				{
+					return false;
+				}
+				action.accept(chunk);
+				return true;
+			});
 	}
 
 	// ----- Move / duplicate to section -----
 
-	/** Prompt for a new section name; on a non-blank name that creates cleanly,
-	 *  run the action with the new section id. Shared by move/duplicate. */
-	private void promptNewSectionThen(Consumer<String> action)
-	{
-		String input = JOptionPane.showInputDialog(this, "New section name:", "");
-		if (input != null && !input.trim().isEmpty())
-		{
-			String newId = api.createSection(input.trim());
-			if (newId != null)
-			{
-				action.accept(newId);
-			}
-		}
-	}
+
 
 
 
@@ -4026,6 +3915,25 @@ public class GoalPanel extends PluginPanel
 	}
 
 	private JComponent buildCreateForm(com.goalplanner.model.GoalType type)
+	{
+		// Every per-type form rides under a pre-built, hidden warning label.
+		// warnCreate() fills it IN PLACE - no remount, because field text
+		// lives in the components and a rebuild would erase what the player
+		// just typed. The label dies with the surface on the next remount.
+		JPanel wrap = new JPanel(new BorderLayout(0, 4));
+		wrap.setOpaque(false);
+		JLabel warning = new JLabel();
+		warning.setForeground(new Color(220, 140, 120));
+		warning.setFont(warning.getFont().deriveFont(11f));
+		warning.setBorder(BorderFactory.createEmptyBorder(2, 4, 0, 4));
+		warning.setVisible(false);
+		dockFormWarning = warning;
+		wrap.add(warning, BorderLayout.NORTH);
+		wrap.add(buildCreateFormBody(type), BorderLayout.CENTER);
+		return wrap;
+	}
+
+	private JComponent buildCreateFormBody(com.goalplanner.model.GoalType type)
 	{
 		// Tall types split into a PICKER step then a DETAILS step; the rest render
 		// their DETAILS directly (no picker).
@@ -5697,11 +5605,17 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
+	/** Inline form warning (was a modal JOptionPane): fills the mounted
+	 *  form's warning label in place, leaving everything typed untouched. */
 	private void warnCreate(String msg)
 	{
-		JOptionPane.showMessageDialog(this, msg,
-			dockEditFormGoalId != null ? "Edit goal" : "Add goal",
-			JOptionPane.WARNING_MESSAGE);
+		JLabel label = dockFormWarning;
+		if (label != null)
+		{
+			label.setText(msg);
+			label.setVisible(true);
+			remeasureDock();
+		}
 	}
 
 	// ============================================================
@@ -6989,47 +6903,161 @@ public class GoalPanel extends PluginPanel
 
 	private void openRenameSectionSurface(String sectionId)
 	{
-		dockRenameSectionId = sectionId;
-		dockRenameMounted = false;
-		dockRenameFailed = false;
+		com.goalplanner.api.SectionView sv = findSectionView(sectionId);
+		if (sv == null)
+		{
+			return;
+		}
+		openInputSurface("Rename section", sv.name,
+			"Name is invalid, duplicate, or unchanged.",
+			t -> api.renameSection(sectionId, t.trim()));
+	}
+
+	/** The header Options list as a dock surface (was a JPopupMenu with
+	 *  JOptionPane result/confirm windows - the last menu in the panel). */
+	private void openOptionsSurface()
+	{
+		List<String> labels = new ArrayList<>();
+		List<Runnable> actions = new ArrayList<>();
+		labels.add("Join our Discord");
+		actions.add(this::openDiscordInvite);
+		if (shareCodec != null)
+		{
+			labels.add("Import shared goals...");
+			actions.add(this::openImportSurfaceFromHeader);
+			if (isSavedPlansAvailable())
+			{
+				labels.add("Saved plans...");
+				actions.add(this::openSavedPlansSurface);
+			}
+		}
+		labels.add("Remove duplicate goals");
+		actions.add(() -> {
+			int n = api.removeDuplicateGoals();
+			rebuild();
+			notice(n == 0 ? "No duplicate goals found."
+				: "Removed " + n + " duplicate goal(s). Undoable.");
+		});
+		labels.add("Delete empty sections");
+		actions.add(() -> {
+			int n = api.removeEmptyUserSections();
+			rebuild();
+			notice(n == 0 ? "No empty sections found."
+				: "Deleted " + n + " empty section(s). Undoable.");
+		});
+		labels.add("Delete all goals and sections");
+		actions.add(() -> openChoiceSurface(
+			"Delete every goal and section (completed included)? Undoable.",
+			new String[]{"Delete everything"}, -1, pick -> {
+				api.removeAllGoalsAndSections();
+				rebuild();
+			}));
+		dockChooser("Options", labels, actions);
+	}
+
+	/** Import an already-decoded bundle with the standard confirmation flow, as
+	 *  dock surfaces (was ShareDialogs.doImport and its three JOptionPane
+	 *  windows). Re-import protection: pasting the same code twice silently
+	 *  duplicated every goal outside the default plan (named-section imports
+	 *  have no dedup), and the history is per character - a code you gave YOUR
+	 *  alt is still fresh for the alt. Confirming still allows the duplicate -
+	 *  sometimes two copies is what you want. */
+	private void doImport(com.goalplanner.share.ShareBundle bundle, String canonicalCode)
+	{
+		if (canonicalCode != null && api.wasCodeImported(canonicalCode))
+		{
+			openChoiceSurface(
+				"Imported before - importing again duplicates goals outside your Default plan.",
+				new String[]{"Import again"}, -1,
+				pick -> finishImport(bundle, canonicalCode));
+			return;
+		}
+		finishImport(bundle, canonicalCode);
+	}
+
+	private void finishImport(com.goalplanner.share.ShareBundle bundle, String canonicalCode)
+	{
+		String sectionId = api.importShareBundle(bundle);
+		if (sectionId == null)
+		{
+			notice("Nothing to import.");
+			return;
+		}
+		if (canonicalCode != null)
+		{
+			api.rememberImportedCode(canonicalCode);
+		}
+		rebuild();
+		int n = 0;
+		int sections = 0;
+		for (com.goalplanner.share.SectionShareDto sec : bundle.effectiveSections())
+		{
+			if (sec.getGoals() != null && !sec.getGoals().isEmpty())
+			{
+				sections++;
+				n += sec.getGoals().size();
+			}
+		}
+		notice("Imported " + n + " goal(s)"
+			+ (sections > 1 ? " across " + sections + " sections" : "") + ".");
+	}
+
+	/** An acknowledge-only surface: the message as its title, only Back. */
+	private void notice(String message)
+	{
+		openChoiceSurface(message, new String[0], -1, null);
+	}
+
+	void openInputSurface(String title, String initial, String hint,
+		java.util.function.Predicate<String> commit)
+	{
+		dockInputTitle = title;
+		dockInputInitial = initial;
+		dockInputHint = hint;
+		dockInputCommit = commit;
+		dockInputFailed = false;
+		dockInputMounted = false;
 		refreshDock();
 	}
 
-	private void closeRenameSectionSurface()
+	private void closeInputSurface()
 	{
-		dockRenameSectionId = null;
-		dockRenameMounted = false;
-		dockRenameFailed = false;
+		dockInputTitle = null;
+		dockInputCommit = null;
+		dockInputMounted = false;
+		dockInputFailed = false;
 		dockSectionMounted = false;
 		refreshDock();
 	}
 
-	/** A prefilled name field with Save / Back chips; a failed rename (duplicate
-	 *  or invalid name) shows an inline hint and stays open. Replaces the
-	 *  showRenameSectionDialog window. */
-	private JComponent buildRenameSectionSurface()
+	/** A prefilled text field with Save / Back chips; a failed commit shows the
+	 *  surface's inline hint and stays open. One surface for every text ask -
+	 *  replaces the JOptionPane input windows (1.0.0 no-popups rule). */
+	private JComponent buildInputSurface()
 	{
-		com.goalplanner.api.SectionView sv = findSectionView(dockRenameSectionId);
 		JPanel inner = new JPanel(new BorderLayout(0, 6));
 		innerPad(inner);
 
 		JPanel head = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		head.setOpaque(false);
-		head.add(chip("< Back", "Back without renaming", this::closeRenameSectionSurface));
+		head.add(chip("< Back", "Back without saving", this::closeInputSurface));
+		JLabel title = new JLabel(dockInputTitle);
+		formLabel(title);
+		head.add(title);
 		inner.add(head, BorderLayout.NORTH);
 
 		JPanel body = new JPanel();
 		stack(body);
 
-		final JTextField name = new JTextField(sv.name, 16);
-		styleField(name);
-		name.setMaximumSize(new Dimension(Integer.MAX_VALUE, name.getPreferredSize().height));
-		name.setAlignmentX(Component.LEFT_ALIGNMENT);
-		body.add(name);
+		final JTextField field = new JTextField(dockInputInitial, 16);
+		styleField(field);
+		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, field.getPreferredSize().height));
+		field.setAlignmentX(Component.LEFT_ALIGNMENT);
+		body.add(field);
 
-		if (dockRenameFailed)
+		if (dockInputFailed)
 		{
-			JLabel hint = new JLabel("Name is invalid, duplicate, or unchanged.");
+			JLabel hint = new JLabel(dockInputHint);
 			hint.setForeground(new Color(220, 140, 120));
 			hint.setFont(hint.getFont().deriveFont(11f));
 			hint.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -7038,23 +7066,23 @@ public class GoalPanel extends PluginPanel
 		}
 
 		Runnable commit = () -> {
-			boolean ok = api.renameSection(dockRenameSectionId, name.getText().trim());
-			if (ok)
+			java.util.function.Predicate<String> test = dockInputCommit;
+			if (test != null && test.test(field.getText()))
 			{
-				closeRenameSectionSurface();
+				closeInputSurface();
 			}
 			else
 			{
-				dockRenameFailed = true;
-				dockRenameMounted = false;
+				dockInputFailed = true;
+				dockInputMounted = false;
 				refreshDock();
 			}
 		};
-		name.addActionListener(e -> commit.run());
+		field.addActionListener(e -> commit.run());
 
 		JPanel actions = new JPanel(new WrapLayout(FlowLayout.LEFT, 4, 0));
 		loose(actions);
-		actions.add(chip("Save", "Rename this section", commit));
+		actions.add(chip("Save", "Apply", commit));
 		body.add(Box.createVerticalStrut(6));
 		body.add(actions);
 
@@ -7338,7 +7366,7 @@ public class GoalPanel extends PluginPanel
 	// capture the target (goal ids / section id) and refresh; refreshDock mounts
 	// buildShareSurface above the footer and returns early. Back routes through
 	// closeShareSurface, which remounts whichever surface it was opened from. The
-	// old ShareDialogs copy/save dialogs stay intact but are no longer reached
+	// the old ShareDialogs copy/save dialogs are gone (1.0.0 no-popups rule)
 	// from the dock.
 	// ------------------------------------------------------------
 
@@ -7430,7 +7458,7 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	/** The player name for a share export, mirroring ShareDialogs' safeName: the
+	/** The player name for a share export, mirroring the old share dialogs' safeName: the
 	 *  supplier's value, or "Someone" when it is empty / absent / throws. */
 	private String sharePlayerName()
 	{
@@ -7560,7 +7588,7 @@ public class GoalPanel extends PluginPanel
 		return surfaceShell("Share", false, inner);
 	}
 
-	/** The default saved-plan name for a bundle (mirrors ShareDialogs.defaultPlanName):
+	/** The default saved-plan name for a bundle (the old ShareDialogs.defaultPlanName rule):
 	 *  the first non-empty section name, else "Shared plan". */
 	private static String defaultSharePlanName(com.goalplanner.share.ShareBundle bundle)
 	{
@@ -7579,7 +7607,7 @@ public class GoalPanel extends PluginPanel
 	// pass): reached from the Import / Saved goals buttons under the create tiles
 	// (and still from the header Options popup). Both mount above the footer via
 	// the overlay pattern and return to the create grid on Back. Import reuses
-	// ShareDialogs.doImport for the per-character re-import warning + the success
+	// doImport for the per-character re-import warning + the success
 	// confirmation (the paste itself is inline). Saved goals is a genuine inline
 	// list (name + Load + Delete); the heavier Edit / Copy / section-name-override
 	// management lives in the dock's Saved goals surface.
@@ -7609,7 +7637,7 @@ public class GoalPanel extends PluginPanel
 	/** Open the inline Saved Plans surface (Load / Delete). */
 	/** The header import button opens the dock's inline Import surface (the
 	 *  promptImport window is retired; decode/warning semantics live in
-	 *  ShareDialogs.doImport, which the surface reuses unchanged). */
+	 *  doImport, which the surface reuses unchanged). */
 	private void openImportSurfaceFromHeader()
 	{
 		dockImportActive = true;
@@ -7645,7 +7673,7 @@ public class GoalPanel extends PluginPanel
 
 	/** Build the inline Import surface: a wrapping, scrollable paste area + an
 	 *  Import button. Blank / undecodable input shows a brief inline hint (no
-	 *  dialog); a valid code is handed to {@link ShareDialogs#doImport} so the
+	 *  dialog); a valid code is handed to {@link #doImport} so the
 	 *  per-character re-import warning and the "imported N goals" confirmation are
 	 *  preserved exactly. On completion the surface returns to the create grid. */
 	private JComponent buildImportSurface()
@@ -7711,7 +7739,7 @@ public class GoalPanel extends PluginPanel
 			dockImportActive = false;
 			dockImportMounted = false;
 			dockCreateMounted = false;
-			ShareDialogs.doImport(GoalPanel.this, api, bundle, shareCodec.encode(bundle), this::rebuild);
+			doImport(bundle, shareCodec.encode(bundle));
 			refreshDock();
 		});
 		body.add(hint);
@@ -7723,7 +7751,7 @@ public class GoalPanel extends PluginPanel
 
 	/** Build the inline Saved Plans surface: each saved plan as a row (name +
 	 *  decoded preview) with Load (import) and Delete actions. Empty shows a hint.
-	 *  Load reuses {@link ShareDialogs#doImport} (re-import warning + confirmation);
+	 *  Load reuses {@link #doImport} (re-import warning + confirmation);
 	 *  Delete removes and re-renders in place. */
 	private JComponent buildSavedPlansSurface()
 	{
@@ -7809,9 +7837,9 @@ public class GoalPanel extends PluginPanel
 		}
 	}
 
-	/** Import a saved plan : decode, apply its
-	 *  saved section-name overrides, then hand to {@link ShareDialogs#doImport}. An
-	 *  unreadable code shows a brief inline notice instead. */
+	/** Import a saved plan: decode, apply its saved section-name overrides,
+	 *  then hand to {@link #doImport}. An unreadable code shows a brief
+	 *  inline notice instead. */
 	private void loadSavedPlan(com.goalplanner.persistence.SavedPlan plan)
 	{
 		com.goalplanner.share.ShareBundle bundle;
@@ -7829,7 +7857,7 @@ public class GoalPanel extends PluginPanel
 		dockSavedActive = false;
 		dockSavedMounted = false;
 		dockCreateMounted = false;
-		ShareDialogs.doImport(GoalPanel.this, api, bundle, shareCodec.encode(bundle), this::rebuild);
+		doImport(bundle, shareCodec.encode(bundle));
 		refreshDock();
 	}
 
@@ -8402,34 +8430,37 @@ public class GoalPanel extends PluginPanel
 			this::openShareForAllSections));
 	}
 
-	/** The section delete confirm, reusing the menu's move-instead prompt verbatim.
-	 *  Clears the selection first since the section is about to vanish. */
+	/** The section delete confirm as a choice surface (was a JOptionPane with
+	 *  a checkbox): the move-instead option becomes its own explicit choice,
+	 *  Back cancels. Clears the selection on either pick since the section is
+	 *  about to vanish. Undoable either way. */
 	private void confirmDeleteSection(com.goalplanner.api.SectionView sv)
 	{
-		int goalCount = countGoalsInSection(sv.id);
-		String plural = goalCount == 1 ? "goal" : "goals";
-		JCheckBox moveInstead = new JCheckBox(
-			"Move " + (goalCount == 1 ? "it" : "them")
-				+ " to Default (Incomplete/Completed) instead");
-		Object[] message = goalCount > 0
-			? new Object[]{
-				"Delete section \"" + sv.name + "\"?\n"
-					+ "This also deletes its " + goalCount + " " + plural
-					+ ". (Undo restores everything.)",
-				moveInstead}
-			: new Object[]{"Delete section \"" + sv.name + "\"?"};
-		int confirm = JOptionPane.showConfirmDialog(
-			this,
-			message,
-			"Delete Section",
-			JOptionPane.YES_NO_OPTION,
-			JOptionPane.WARNING_MESSAGE);
-		if (confirm == JOptionPane.YES_OPTION)
-		{
+		final String sid = sv.id;
+		int goalCount = countGoalsInSection(sid);
+		Runnable clear = () -> {
 			selectedSectionId = null;
 			dockSectionGroup = null;
-			api.deleteSection(sv.id, moveInstead.isSelected());
+		};
+		if (goalCount == 0)
+		{
+			openChoiceSurface("Delete section \"" + sv.name + "\"? Undoable.",
+				new String[]{"Delete section"}, -1, pick -> {
+					clear.run();
+					api.deleteSection(sid, false);
+				});
+			return;
 		}
+		String plural = goalCount == 1 ? "goal" : "goals";
+		openChoiceSurface(
+			"Delete section \"" + sv.name + "\" and its " + goalCount + " "
+				+ plural + "? Undoable.",
+			new String[]{
+				"Delete section and " + plural,
+				"Move " + plural + " to Default, delete section"}, -1, pick -> {
+				clear.run();
+				api.deleteSection(sid, pick == 1);
+			});
 	}
 
 	/** Dock form-text styling, factored from ~66 repeated call sites. The
