@@ -20,4 +20,6 @@ jobs:
     with:
       project_name: "Goal Planner"
       project_description: "Goal Planner is a RuneLite (Old School RuneScape) plugin that lets players set, track, and share goals - skill levels and XP, boss kill counts, quests, achievement diaries, combat achievements, and item grinds - including repeatable daily/weekly/monthly goals and shareable goal plans."
-    secrets: inherit
+    secrets:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
