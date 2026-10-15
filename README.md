@@ -1,6 +1,6 @@
 # OSRS Goal Planner
 
-[![Discord](https://img.shields.io/discord/1494572077448040588?label=discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/CFQsA3fmh7)
+[![Discord](https://img.shields.io/discord/1524847121562468514?label=discord&logo=discord&logoColor=white&color=5865F2)](https://discord.gg/6GuS6J8em3)
 [![License](https://img.shields.io/github/license/AKAddons/runelite-goal-planner)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/AKAddons/runelite-goal-planner)](https://github.com/AKAddons/runelite-goal-planner/releases)
 

@@ -70,7 +70,7 @@ public interface GoalPlannerConfig extends Config
 
 	@ConfigSection(
 		name = "Appearance",
-		description = "Readability options (experimental). Report issues: discord.gg/CFQsA3fmh7",
+		description = "Readability options (experimental). Report issues: discord.gg/6GuS6J8em3",
 		position = 10
 	)
 	String appearanceSection = "appearance";
