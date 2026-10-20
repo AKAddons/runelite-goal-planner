@@ -127,6 +127,29 @@ class HeadlessRenderTest
 	}
 
 	@Test
+	@DisplayName("the dock's item add runs on the client thread, never the Swing thread")
+	void itemAddHopsToClientThread() throws Exception
+	{
+		// addItemGoal resolves the item name via ItemManager.getItemComposition,
+		// which asserts the client thread. Called from the dock's Swing click it
+		// threw "must be called on client thread" and the goal was never added
+		// (dev client, -ea). Every dock call must go through
+		// clientThreadCreateInSection, the same hop boss/quest/diary use.
+		String src = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(
+			"src/main/java/com/goalplanner/ui/GoalPanel.java")), java.nio.charset.StandardCharsets.UTF_8);
+		java.util.regex.Matcher m = java.util.regex.Pattern.compile("api\\.addItemGoal\\(").matcher(src);
+		int calls = 0;
+		while (m.find())
+		{
+			calls++;
+			String before = src.substring(Math.max(0, m.start() - 160), m.start());
+			assertTrue(before.contains("clientThreadCreateInSection("),
+				"api.addItemGoal called outside clientThreadCreateInSection at offset " + m.start());
+		}
+		assertTrue(calls > 0, "the dock no longer calls api.addItemGoal - update this guard");
+	}
+
+	@Test
 	@DisplayName("no styling helper calls itself - a refactor once made three recurse")
 	void helpersDoNotRecurse() throws Exception
 	{

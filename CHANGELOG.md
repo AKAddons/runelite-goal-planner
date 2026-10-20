@@ -19,7 +19,7 @@ bumps.
 ### Fixed
 - **Right-click "Add Goal" on an inventory or bank item kept losing the item** —
   the dock opened on the quantity step showing *(none)* and refused to add. The
-  item now carries through.
+  item now carries through, and adding it no longer fails silently.
 - **The panel's item search finds untradeable items** — it only knew Grand
   Exchange items before, so things like Stardust never showed up. It now
   searches every item by name.

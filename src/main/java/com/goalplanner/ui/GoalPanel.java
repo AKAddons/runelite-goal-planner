@@ -5070,11 +5070,11 @@ public class GoalPanel extends PluginPanel
 				warnCreate("Enter a quantity above zero.");
 				return;
 			}
+			// addItemGoal reads the item definition, which asserts the client
+			// thread; from this Swing click it threw and nothing was added.
 			goToSectionPick(sectionId ->
-			{
-				String id = api.addItemGoal(itemId, qty);
-				api.moveGoalToSection(id, sectionId);
-			});
+				clientThreadCreateInSection("Add item goal", sectionId,
+					() -> api.addItemGoal(itemId, qty)));
 		};
 		return createFormScaffold(com.goalplanner.model.GoalType.ITEM_GRIND, body, onAdd,
 			() -> navigateCreateStep(CreateStep.PICKER));
