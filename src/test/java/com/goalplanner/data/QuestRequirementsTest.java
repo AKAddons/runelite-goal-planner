@@ -162,6 +162,82 @@ class QuestRequirementsTest
 	}
 
 	@Nested
+	@DisplayName("QuestRequirements table coverage (content pass)")
+	class CoverageTests
+	{
+		@Test
+		@DisplayName("every Quest constant in this RuneLite API has a row")
+		void everyQuestHasARow()
+		{
+			java.util.List<String> missing = new java.util.ArrayList<>();
+			for (Quest q : Quest.values())
+			{
+				if (QuestRequirements.lookup(q) == null)
+				{
+					missing.add(q.name());
+				}
+			}
+			assertTrue(missing.isEmpty(), "quests with no row in quest-requirements.tsv: " + missing);
+		}
+
+		@Test
+		@DisplayName("Crab Quest asks for Sailing 40 and Fishing 30, awards 1 QP")
+		void crabQuest()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.CRAB_QUEST);
+			assertNotNull(r);
+			assertEquals(2, r.skills.size());
+			assertEquals(40, level(r, Skill.SAILING));
+			assertEquals(30, level(r, Skill.FISHING));
+			assertTrue(r.prereqQuests.isEmpty());
+			assertEquals(1, QuestRequirements.questPointReward(Quest.CRAB_QUEST));
+			assertFalse(QuestRequirements.isMiniquest(Quest.CRAB_QUEST));
+		}
+
+		@Test
+		@DisplayName("A Ruff Situation asks for Crafting 15, awards 1 QP")
+		void aRuffSituation()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.A_RUFF_SITUATION);
+			assertNotNull(r);
+			assertEquals(1, r.skills.size());
+			assertEquals(15, level(r, Skill.CRAFTING));
+			assertTrue(r.prereqQuests.isEmpty());
+			assertEquals(1, QuestRequirements.questPointReward(Quest.A_RUFF_SITUATION));
+		}
+
+		@Test
+		@DisplayName("Bone Voyage needs The Dig Site and 100 kudos, awards 1 QP")
+		void boneVoyage()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.BONE_VOYAGE);
+			assertNotNull(r);
+			assertTrue(r.skills.isEmpty());
+			assertEquals(java.util.List.of(Quest.THE_DIG_SITE), r.prereqQuests);
+			assertEquals(100, r.kudos);
+			assertEquals(1, QuestRequirements.questPointReward(Quest.BONE_VOYAGE));
+		}
+
+		@Test
+		@DisplayName("The Fractured Archive miniquest needs While Guthix Sleeps and awards no QP")
+		void fracturedArchiveMiniquest()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.THE_FRACTURED_ARCHIVE);
+			assertNotNull(r);
+			assertTrue(r.skills.isEmpty());
+			assertEquals(java.util.List.of(Quest.WHILE_GUTHIX_SLEEPS), r.prereqQuests);
+			assertTrue(QuestRequirements.isMiniquest(Quest.THE_FRACTURED_ARCHIVE));
+			assertEquals(0, QuestRequirements.questPointReward(Quest.THE_FRACTURED_ARCHIVE));
+		}
+
+		private int level(QuestRequirements.Reqs r, Skill skill)
+		{
+			return r.skills.stream().filter(s -> s.skill == skill)
+				.mapToInt(s -> s.level).findFirst().orElse(-1);
+		}
+	}
+
+	@Nested
 	@DisplayName("QuestRequirements.isF2P")
 	class F2PTests
 	{

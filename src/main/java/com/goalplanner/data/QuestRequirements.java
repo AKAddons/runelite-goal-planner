@@ -142,12 +142,6 @@ public final class QuestRequirements
 		return DISPLAY_NAMES.getOrDefault(quest, quest.getName());
 	}
 
-	private static void put(Quest quest, List<SkillReq> skills, List<Quest> prereqQuests,
-		int questPoints, int combatLevel)
-	{
-		TABLE.put(quest, new Reqs(skills, prereqQuests, questPoints, combatLevel));
-	}
-
 	/**
 	 * Look up the requirements for a quest.
 	 *
@@ -250,6 +244,7 @@ public final class QuestRequirements
 					}
 					// quest \t skills \t prereqs \t questPoints \t combatLevel
 					//   \t xpRewards \t qpReward \t recSkills \t recCombat \t displayOverride \t flags(M=mini,F=f2p,L=lamp)
+					//   \t kudos
 					String[] f = line.split("\t", -1);
 					// A row may name a quest the current RuneLite API doesn't ship
 					// yet (a just-released quest forward-declared here before the
@@ -278,8 +273,9 @@ public final class QuestRequirements
 							}
 						}
 					}
-					put(quest, parseSkillReqs(f[1]), prereqs,
-						Integer.parseInt(f[3]), Integer.parseInt(f[4]));
+					int kudos = f.length > 11 && !f[11].isEmpty() ? Integer.parseInt(f[11]) : 0;
+					TABLE.put(quest, new Reqs(parseSkillReqs(f[1]), prereqs,
+						Integer.parseInt(f[3]), Integer.parseInt(f[4]), kudos));
 
 					if (f.length > 5 && !f[5].isEmpty())
 					{

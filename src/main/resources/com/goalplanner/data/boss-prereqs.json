@@ -897,5 +897,16 @@
     "accountReqs": [],
     "bossKills": [],
     "alternatives": []
+  },
+  "The Fractured Archive": {
+    "skills": [],
+    "unlocks": [],
+    "quests": [
+      "WHILE_GUTHIX_SLEEPS"
+    ],
+    "itemReqs": [],
+    "accountReqs": [],
+    "bossKills": [],
+    "alternatives": []
   }
 }

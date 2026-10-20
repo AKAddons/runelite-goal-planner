@@ -274,6 +274,24 @@ class BossKillDataTest
 		}
 
 		@Test
+		@DisplayName("The Fractured Archive is a known raid with its completion varp, pet and While Guthix Sleeps")
+		void fracturedArchive()
+		{
+			// Released 2026-10-20; RuneLite 1.13.3 gameval
+			// VarPlayerID.TOTAL_COMPLETED_THEFRACTUREDARCHIVE = 5894, pet Orion 34646.
+			String raid = "The Fractured Archive";
+			assertTrue(BossKillData.isKnownBoss(raid));
+			assertEquals(5894, BossKillData.getVarpId(raid));
+			assertEquals(34646, BossKillData.getPetItemId(raid));
+			BossPrereqs p = BossKillData.getPrereqs(raid);
+			assertNotNull(p);
+			assertEquals(List.of(Quest.WHILE_GUTHIX_SLEEPS), p.quests);
+			assertTrue(p.skills.isEmpty() && p.bossKills.isEmpty() && p.itemReqs.isEmpty());
+			// Collection log name equals the boss name: no alias row needed.
+			assertEquals(List.of(raid), BossKillData.resolveCollectionLogName(raid));
+		}
+
+		@Test
 		@DisplayName("Amoxliatl requires The Heart of Darkness")
 		void amoxliatlQuest()
 		{

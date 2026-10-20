@@ -34,6 +34,16 @@ class ItemActivityResolverTest
 		}
 
 		@Test
+		@DisplayName("a Fractured Archive unique resolves to the raid")
+		void orion()
+		{
+			List<ItemActivityResolver.Activity> found = ItemActivityResolver.resolve(34646);
+			assertEquals(1, found.size(), "expected exactly one activity for Orion");
+			assertEquals("The Fractured Archive", found.get(0).getName());
+			assertEquals(5894, found.get(0).getVarpId());
+		}
+
+		@Test
 		@DisplayName("a slayer-boss unique resolves too")
 		void abyssalWhip()
 		{
