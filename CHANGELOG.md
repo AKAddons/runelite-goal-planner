@@ -8,6 +8,8 @@ bumps.
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-10-20
+
 ### Added
 - **The Fractured Archive** is a boss goal: completions count live, Orion is
   the card pet, While Guthix Sleeps seeds as the prerequisite, and every
@@ -26,6 +28,19 @@ bumps.
 - **The panel's item search finds untradeable items** — it only knew Grand
   Exchange items before, so things like Stardust never showed up. It now
   searches every item by name.
+
+### Changed
+- **The Discord link points at the AK Addons server**, where all my plugins
+  now live. The old Goal Planner server has moved there.
+
+## [1.0.0] — 2026-09-03
+
+### Changed
+- **The action dock replaces every popup.** Creating, editing, tagging,
+  sharing and section management all happen in one panel at the bottom of the
+  list instead of right-click menus and dialog windows.
+
+### Fixed
 - **A Miscellania favour goal now un-completes when your favour decays** — the
   two account metrics that can actually lose value (Kingdom approval and
   spendable slayer points) are judged purely on the live game value, so the
