@@ -691,6 +691,15 @@ public class GoalPanel extends PluginPanel
 	 *  die on the EDT (see CONTRIBUTING "EDT vs client thread"). */
 	private Consumer<Runnable> clientThreadExec = Runnable::run;
 
+	/** Runs a task after the pending layout pass (Swing: invokeLater queues it
+	 *  behind revalidate's validation). Tests run it after their own layout. */
+	private Consumer<Runnable> afterLayoutExec = SwingUtilities::invokeLater;
+
+	void setAfterLayoutExecutor(Consumer<Runnable> exec)
+	{
+		this.afterLayoutExec = exec != null ? exec : SwingUtilities::invokeLater;
+	}
+
 	/** Wire the client-thread executor (plugin: {@code clientThread::invokeLater}). */
 	public void setClientThreadExecutor(Consumer<Runnable> exec)
 	{
@@ -792,6 +801,39 @@ public class GoalPanel extends PluginPanel
 		}
 		refreshUndoRedoButtons();
 		refreshDock();
+		revealSelectionIfChanged(selected);
+	}
+
+	/** Last selection the reveal acted on, so an unchanged selection never
+	 *  scrolls the list out from under the user. */
+	private Set<String> lastRevealedSelection = Collections.emptySet();
+
+	/** The dock sits below the list, so opening or growing it shrinks the list
+	 *  from the bottom while the scroll position holds - a card near the bottom
+	 *  ends up out of view. After the layout pass, scroll the clicked card back
+	 *  into the visible list. */
+	private void revealSelectionIfChanged(Set<String> selected)
+	{
+		if (selected.equals(lastRevealedSelection))
+		{
+			return;
+		}
+		lastRevealedSelection = new HashSet<>(selected);
+		final String target = selectionAnchorId != null && selected.contains(selectionAnchorId)
+			? selectionAnchorId
+			: selected.size() == 1 ? selected.iterator().next() : null;
+		if (target == null)
+		{
+			return;
+		}
+		afterLayoutExec.accept(() ->
+		{
+			GoalCard card = cardMap.get(target);
+			if (card != null)
+			{
+				card.scrollRectToVisible(new Rectangle(0, 0, card.getWidth(), card.getHeight()));
+			}
+		});
 	}
 
 	/** Show the transient green info banner with {@code msg} and (re)start its

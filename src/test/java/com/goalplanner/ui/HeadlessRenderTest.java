@@ -127,6 +127,80 @@ class HeadlessRenderTest
 	}
 
 	@Test
+	@DisplayName("selecting a card the dock would cover scrolls it back into view")
+	void selectedCardStaysVisibleAboveTheDock()
+	{
+		// The dock takes the panel's bottom slot, so selecting shrinks the list
+		// viewport from below while its scroll position holds: a card near the
+		// bottom ends up hidden behind where the dock now sits.
+		Goal[] goals = new Goal[12];
+		for (int i = 0; i < goals.length; i++)
+		{
+			goals[i] = goal("g" + i, GoalType.CUSTOM, "Goal " + i);
+		}
+		TrackerTestHarness<?> h = TrackerTestHarness.forSkills(new MockGameState());
+		for (Goal g : goals)
+		{
+			h.store().addGoal(g);
+		}
+		GoalPanel p = new GoalPanel(h.store(),
+			mock(SkillIconManager.class, RETURNS_DEEP_STUBS),
+			mock(ItemManager.class, RETURNS_DEEP_STUBS),
+			mock(SpriteManager.class, RETURNS_DEEP_STUBS),
+			h.api(),
+			mock(GoalReorderingService.class, RETURNS_DEEP_STUBS),
+			mock(GoalPanel.ItemSearchRequest.class, RETURNS_DEEP_STUBS),
+			mock(GoalPlannerConfig.class, RETURNS_DEEP_STUBS));
+		java.util.List<Runnable> afterLayout = new java.util.ArrayList<>();
+		p.setAfterLayoutExecutor(afterLayout::add);
+		p.setSize(WIDTH, 700);
+		layoutDeep(p);
+
+		javax.swing.JScrollPane list = null;
+		for (java.awt.Component c : p.getComponents())
+		{
+			if (c instanceof javax.swing.JScrollPane) list = (javax.swing.JScrollPane) c;
+		}
+		assertNotNull(list, "goal list scroll pane not found");
+		javax.swing.JViewport vp = list.getViewport();
+		java.awt.Component view = vp.getView();
+		int bottom = Math.max(0, view.getHeight() - vp.getExtentSize().height);
+		vp.setViewPosition(new java.awt.Point(0, bottom));
+
+		GoalCard last = findCard(p, "g11");
+		assertNotNull(last, "card g11 not rendered");
+		assertTrue(vp.getViewRect().contains(rectIn(last, view)), "precondition: g11 visible at the bottom");
+
+		h.api().replaceGoalSelection(java.util.Collections.singletonList("g11"));
+		p.refreshSelection();
+		layoutDeep(p);
+		afterLayout.forEach(Runnable::run);
+
+		GoalCard after = findCard(p, "g11");
+		assertTrue(vp.getViewRect().contains(rectIn(after, view)),
+			"selected card hidden behind the dock: card " + rectIn(after, view) + " view " + vp.getViewRect());
+	}
+
+	private static java.awt.Rectangle rectIn(java.awt.Component c, java.awt.Component ancestor)
+	{
+		return javax.swing.SwingUtilities.convertRectangle(c.getParent(), c.getBounds(), ancestor);
+	}
+
+	private static GoalCard findCard(java.awt.Container root, String goalId)
+	{
+		for (java.awt.Component c : root.getComponents())
+		{
+			if (c instanceof GoalCard && goalId.equals(((GoalCard) c).getGoalId())) return (GoalCard) c;
+			if (c instanceof java.awt.Container)
+			{
+				GoalCard found = findCard((java.awt.Container) c, goalId);
+				if (found != null) return found;
+			}
+		}
+		return null;
+	}
+
+	@Test
 	@DisplayName("the dock's item add runs on the client thread, never the Swing thread")
 	void itemAddHopsToClientThread() throws Exception
 	{

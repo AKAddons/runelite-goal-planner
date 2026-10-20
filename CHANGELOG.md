@@ -20,6 +20,9 @@ bumps.
 - **Right-click "Add Goal" on an inventory or bank item kept losing the item** —
   the dock opened on the quantity step showing *(none)* and refused to add. The
   item now carries through, and adding it no longer fails silently.
+- **Selecting a goal keeps it in view** — when the action dock opens or grows
+  below the list, the goal you clicked scrolls back up into sight instead of
+  ending up hidden where the dock now sits.
 - **The panel's item search finds untradeable items** — it only knew Grand
   Exchange items before, so things like Stardust never showed up. It now
   searches every item by name.
