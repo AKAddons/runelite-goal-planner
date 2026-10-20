@@ -19,10 +19,12 @@ import re
 import sys
 
 CAP = 200_000          # the bot's hard limit
-FAIL_AT = 195_000      # block submit here. The bot's tokenizer counts a touch
-                       # LOWER than ours (~260k vs our 268k pre-reduction), so a
-                       # 195k reading here is comfortably under the bot's 200k.
-WARN_AT = 188_000      # getting close; plan a data externalization soon
+FAIL_AT = 204_000      # block submit here. The bot's tokenizer counts ~3%
+                       # LOWER than ours (~260k vs our 268k pre-reduction), and
+                       # the hub accepted 1.0.0 (023b9ba) at ~202.5k here, so
+                       # 204k local is the owner's line (2026-10-20): "we are
+                       # probably fine if we are under 204k".
+WARN_AT = 200_000      # getting close; plan a data externalization soon
 CHARS_PER_TOKEN = 3.6  # calibrated on this Java codebase (real ratio ~3.66); low = conservative
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

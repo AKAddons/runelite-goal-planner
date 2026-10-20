@@ -8,7 +8,21 @@ bumps.
 
 ## [Unreleased]
 
+### Added
+- **The Fractured Archive** is a boss goal: completions count live, Orion is
+  the card pet, While Guthix Sleeps seeds as the prerequisite, and every
+  collection-log unique from the raid links back to it for item grinds.
+- **Crab Quest, A Ruff Situation and Bone Voyage** are in the quest table with
+  their requirements. Bone Voyage carries its 100 Museum Kudos, so that shows
+  up as a prerequisite goal like quest points and combat level already did.
+
 ### Fixed
+- **Right-click "Add Goal" on an inventory or bank item kept losing the item** —
+  the dock opened on the quantity step showing *(none)* and refused to add. The
+  item now carries through.
+- **The panel's item search finds untradeable items** — it only knew Grand
+  Exchange items before, so things like Stardust never showed up. It now
+  searches every item by name.
 - **A Miscellania favour goal now un-completes when your favour decays** — the
   two account metrics that can actually lose value (Kingdom approval and
   spendable slayer points) are judged purely on the live game value, so the
