@@ -131,6 +131,11 @@ public class GoalPanel extends PluginPanel
 		 *  Points, CA Points) - preselect it rather than making the user
 		 *  re-pick what they just clicked. */
 		String accountMetric;
+		/** In-game right-click seeded an ITEM (inventory / bank / collection
+		 *  log). Carried on the seed so navigateCreate's pick reset cannot
+		 *  lose it - the 1.0.0 "(none)" bug. */
+		Integer itemId;
+		String itemName;
 	}
 	private CreateSeed dockCreateSeed = null;
 	/** Whether the create surface is currently mounted in the dock, and for which
@@ -3348,15 +3353,12 @@ public class GoalPanel extends PluginPanel
 		seed.skill = skill;
 		seed.bossName = bossName;
 		seed.accountMetric = accountMetric;
+		seed.itemId = itemId;
+		seed.itemName = itemName;
 		dockCreateSeed = seed;
 		resetCreatePicks();
 		dockPickedSkill = skill;
 		dockPickedBoss = bossName;
-		if (itemId != null)
-		{
-			dockPickedItemId = itemId;
-			dockPickedItemName = itemName;
-		}
 		api.clearGoalSelection();
 		navigateCreate(type);
 		// Past the picker when the widget already told us what it is.
@@ -3399,6 +3401,12 @@ public class GoalPanel extends PluginPanel
 				else if (type == com.goalplanner.model.GoalType.BOSS && dockCreateSeed.bossName != null)
 				{
 					dockPickedBoss = dockCreateSeed.bossName;
+					dockCreateStep = CreateStep.DETAILS;
+				}
+				else if (type == com.goalplanner.model.GoalType.ITEM_GRIND && dockCreateSeed.itemId != null)
+				{
+					dockPickedItemId = dockCreateSeed.itemId;
+					dockPickedItemName = dockCreateSeed.itemName;
 					dockCreateStep = CreateStep.DETAILS;
 				}
 			}
@@ -4930,20 +4938,26 @@ public class GoalPanel extends PluginPanel
 		{
 			String query = searchField.getText().trim();
 			results.removeAll();
-			if (!query.isEmpty() && itemManager != null)
+			if (query.isEmpty() || itemManager == null || client == null)
 			{
-				try
+				results.revalidate();
+				remeasureDock();
+				return;
+			}
+			// Item definitions, not the GE price list (ItemManager.search), so
+			// untradeables are found. Definitions need the client thread; the
+			// rows are built back on Swing. Capped; the pane scrolls past the cap.
+			runOnClientThread(() ->
+			{
+				final List<ItemNameSearch.Hit> found =
+					ItemNameSearch.search(client, itemManager, query, 15);
+				SwingUtilities.invokeLater(() ->
 				{
-					// Same source the icon picker uses; cap the list, and it scrolls
-					// inside the bounded results pane past that cap.
-					List<net.runelite.http.api.item.ItemPrice> found =
-						itemManager.search(query);
-					int max = Math.min(found.size(), 15);
-					for (int i = 0; i < max; i++)
+					results.removeAll();
+					for (ItemNameSearch.Hit it : found)
 					{
-						net.runelite.http.api.item.ItemPrice it = found.get(i);
-						final int itemId = it.getId();
-						final String name = it.getName();
+						final int itemId = it.id;
+						final String name = it.name;
 						Icon icon = null;
 						try { icon = new ImageIcon(itemManager.getImage(itemId)); }
 						catch (Exception ignored) { }
@@ -4954,11 +4968,10 @@ public class GoalPanel extends PluginPanel
 							navigateCreateStep(CreateStep.DETAILS);
 						}));
 					}
-				}
-				catch (Exception ignored) { }
-			}
-			results.revalidate();
-			remeasureDock();
+					results.revalidate();
+					remeasureDock();
+				});
+			});
 		};
 		searchField.addActionListener(e -> doSearch.run());
 		JButton searchBtn = flatButton("Search", false);

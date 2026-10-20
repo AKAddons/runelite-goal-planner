@@ -110,6 +110,23 @@ class HeadlessRenderTest
 	}
 
 	@Test
+	@DisplayName("a right-click seeded item survives into the DETAILS step")
+	void seededItemSurvivesIntoDetails()
+	{
+		// The 1.0.0 hub build lost the item here: openSeededCreate stashed the
+		// pick, then navigateCreate reset it, so every inventory/bank "Add Goal"
+		// landed on DETAILS as "(none)" and "Pick an item first."
+		GoalPanel p = panel();
+		p.openSeededCreate(GoalType.ITEM_GRIND, null, null, 25527, "Stardust", null);
+		p.setSize(WIDTH, 900);
+		layoutDeep(p);
+
+		String tree = structure(p);
+		assertTrue(tree.contains("Stardust"), "seeded item missing from DETAILS:\n" + tree);
+		assertFalse(tree.contains("(none)"), "DETAILS shows (none) for a seeded item:\n" + tree);
+	}
+
+	@Test
 	@DisplayName("no styling helper calls itself - a refactor once made three recurse")
 	void helpersDoNotRecurse() throws Exception
 	{
