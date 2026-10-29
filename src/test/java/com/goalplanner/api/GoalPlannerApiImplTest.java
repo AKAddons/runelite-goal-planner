@@ -1506,6 +1506,24 @@ class GoalPlannerApiImplTest
 		}
 
 		@Test
+		@DisplayName("CA task ids on the 21st varplayer (up to 671) are accepted; 672 is rejected")
+		void caTaskIdsPastTheTwentiethVarplayer() throws Exception
+		{
+			com.goalplanner.data.WikiCaRepository.CaInfo info =
+				new com.goalplanner.data.WikiCaRepository.CaInfo();
+			info.id = 671;
+			info.name = "Last slot";
+			info.task = "Fills the final bit of CA_TASK_COMPLETED_20";
+			info.tier = "Elite";
+			info.monster = "Mad Angel";
+			info.type = "Kill Count";
+			when(api.wikiCaRepository.getById(671)).thenReturn(info);
+
+			assertNotNull(api.addCombatAchievementGoal(671));
+			assertNull(api.addCombatAchievementGoal(672));
+		}
+
+		@Test
 		@DisplayName("Existing boss tag updates color when BOSS category color changes again")
 		void existingBossTagUpdatesOnSecondRecolor() throws Exception
 		{

@@ -44,7 +44,7 @@ public class Goal
 	private String archivedFromSectionId;
 
 	// For COMBAT_ACHIEVEMENT goals: the wiki / in-game CA task id. Used to look up
-	// the bit-packed completion state from one of the 20 CA_TASK_COMPLETED varplayers.
+	// the bit-packed completion state from one of the 21 CA_TASK_COMPLETED varplayers.
 	// Sentinel -1 = not set; tracker skips when negative.
 	@Builder.Default
 	private int caTaskId = -1;

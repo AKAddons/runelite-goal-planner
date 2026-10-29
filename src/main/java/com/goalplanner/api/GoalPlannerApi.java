@@ -91,7 +91,7 @@ public interface GoalPlannerApi
 	 * Add a combat achievement goal by wiki/in-game task id. Auto-tracks via the
 	 * bit-packed CA_TASK_COMPLETED varplayers.
 	 *
-	 * @param caTaskId the wiki/in-game task id (0 .. 639)
+	 * @param caTaskId the wiki/in-game task id (0 .. 671)
 	 * @return the created or existing goal's id, or {@code null} if validation failed
 	 */
 	String addCombatAchievementGoal(int caTaskId);
