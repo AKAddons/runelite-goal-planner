@@ -16,6 +16,8 @@ bumps.
   goal with several requirements (like an achievement diary) used to nest
   under its first one and show above the rest. It now sits beneath the last,
   with the others listed in its "Also needs" tooltip (#5).
+- **A collapsed goal in nested view can be expanded again** — collapsing a
+  top-level goal could hide its expand arrow under the card, leaving it stuck.
 
 ## [1.0.1] — 2026-10-20
 
