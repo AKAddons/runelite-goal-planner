@@ -49,17 +49,43 @@ class AccountBindingGateTest
 		}
 
 		@Test
-		@DisplayName("any non-positive live hash is 'no account', whatever sentinel the client uses")
-		void nonPositiveIsNoAccount()
+		@DisplayName("the logged-out -1 and the unbound 0 are 'no account'")
+		void sentinelsAreNoAccount()
 		{
 			AccountBindingGate gate = new AccountBindingGate();
-			for (long sentinel : new long[]{-1L, 0L, Long.MIN_VALUE})
+			for (long sentinel : new long[]{-1L, 0L})
 			{
 				assertEquals(Decision.NO_ACCOUNT, gate.evaluate(sentinel, MAIN),
 					"sentinel " + sentinel + " must not fall through");
 				assertEquals(Decision.NO_ACCOUNT, gate.evaluate(sentinel, UNBOUND),
 					"and must never trigger adoption, which would unbind the goal set");
 			}
+		}
+
+		@Test
+		@DisplayName("a negative hash is a real account - it adopts, tracks and pauses like any other")
+		void negativeHashIsARealAccount()
+		{
+			// Issue #2: half of all account hashes are negative. Treating them as
+			// logged out froze tracking for those players entirely.
+			AccountBindingGate gate = new AccountBindingGate();
+			long negative = -4_611_686_018_427_387_904L;
+			assertEquals(Decision.ADOPT, gate.evaluate(negative, UNBOUND));
+			assertEquals(Decision.TRACK, gate.evaluate(negative, negative));
+			assertEquals(Decision.TRACK, gate.evaluate(Long.MIN_VALUE, Long.MIN_VALUE));
+			assertEquals(Decision.PAUSE, gate.evaluate(negative, MAIN));
+			assertEquals(Decision.PAUSE, gate.evaluate(MAIN, negative));
+		}
+
+		@Test
+		@DisplayName("only -1 and 0 are invalid account hashes")
+		void validAccountHash()
+		{
+			assertFalse(AccountBindingGate.isValidAccountHash(-1L));
+			assertFalse(AccountBindingGate.isValidAccountHash(0L));
+			assertTrue(AccountBindingGate.isValidAccountHash(MAIN));
+			assertTrue(AccountBindingGate.isValidAccountHash(-2L));
+			assertTrue(AccountBindingGate.isValidAccountHash(Long.MIN_VALUE));
 		}
 
 		@Test

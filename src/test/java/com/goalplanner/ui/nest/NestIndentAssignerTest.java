@@ -2,6 +2,7 @@ package com.goalplanner.ui.nest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -112,7 +113,7 @@ class NestIndentAssignerTest
 	}
 
 	@Test
-	@DisplayName("a diamond goal nests under its deepest prerequisite; the rest are 'extra'")
+	@DisplayName("a diamond goal nests under its lowest-placed prerequisite; the rest are 'extra'")
 	void diamondNestsUnderPrimaryAndCountsExtras()
 	{
 		NestIndentAssigner.Result r = NestIndentAssigner.assign(Arrays.asList(
@@ -124,22 +125,85 @@ class NestIndentAssignerTest
 			node("fire"), node("inferno"),
 			node("gm", "qpc", "fire", "inferno")));
 
-		// Quest Cape's three prereqs are all level 1 → primary is the first (mm2),
-		// the other two are extras. It sits one level past mm2.
-		assertEquals("mm2", r.primaryParent.get("qpc"));
+		// Outline: agility, combat, mm2, ranged, dt2, sote, qpc, fire, inferno, gm.
+		// Quest Cape's lowest prereq is sote → it nests there; mm2 + dt2 are extras.
+		assertEquals("sote", r.primaryParent.get("qpc"));
 		assertEquals(2, r.level.get("qpc"));
 		assertEquals(2, r.extraPrereqs.get("qpc"));
 
-		// Grandmaster nests under Quest Cape (depth 2), not Fire/Infernal (depth 0).
-		assertEquals("qpc", r.primaryParent.get("gm"));
-		assertEquals(3, r.level.get("gm"));
-		assertEquals(2, r.extraPrereqs.get("gm")); // fire + inferno
+		// Grandmaster's lowest prereq is inferno, appended after Quest Cape's subtree.
+		assertEquals("inferno", r.primaryParent.get("gm"));
+		assertEquals(1, r.level.get("gm"));
+		assertEquals(2, r.extraPrereqs.get("gm")); // qpc + fire
 
-		// Spine reads parent-then-child: agility → mm2 → qpc → gm.
-		List<String> o = r.ordered;
-		assertEquals(true, o.indexOf("agility") < o.indexOf("mm2"));
-		assertEquals(true, o.indexOf("mm2") < o.indexOf("qpc"));
-		assertEquals(true, o.indexOf("qpc") < o.indexOf("gm"));
+		assertPrereqsAbove(r, Arrays.asList(
+			node("mm2", "agility", "combat"), node("dt2", "combat", "ranged"),
+			node("sote", "agility", "ranged"), node("qpc", "mm2", "dt2", "sote"),
+			node("gm", "qpc", "fire", "inferno")));
+	}
+
+	@Test
+	@DisplayName("a diary renders below ALL of its requirements, not just the first (issue #5)")
+	void diaryRendersBelowEveryRequirement()
+	{
+		NestIndentAssigner.Node diary = node("ardyElite", "fletching", "fishing", "agility",
+			"cooking", "smithing", "magic", "hauntedMine");
+		NestIndentAssigner.Result r = NestIndentAssigner.assign(Arrays.asList(
+			node("fletching"), node("fishing"), node("agility"), node("cooking"),
+			node("smithing"), node("magic"), node("hauntedMine"), diary));
+
+		assertEquals(Arrays.asList("fletching", "fishing", "agility", "cooking",
+			"smithing", "magic", "hauntedMine", "ardyElite"), r.ordered);
+		assertEquals("hauntedMine", r.primaryParent.get("ardyElite"));
+		assertEquals(1, r.level.get("ardyElite"));
+		assertEquals(6, r.extraPrereqs.get("ardyElite"));
+	}
+
+	@Test
+	@DisplayName("on any DAG, every prerequisite renders above the goal that needs it")
+	void prereqsAlwaysAboveOnRandomDags()
+	{
+		java.util.Random rnd = new java.util.Random(5);
+		for (int trial = 0; trial < 500; trial++)
+		{
+			int n = 2 + rnd.nextInt(14);
+			List<NestIndentAssigner.Node> nodes = new ArrayList<>();
+			for (int i = 0; i < n; i++)
+			{
+				List<String> prereqs = new ArrayList<>();
+				for (int j = 0; j < i; j++)
+				{
+					if (rnd.nextInt(3) == 0) prereqs.add("g" + j);
+				}
+				java.util.Collections.shuffle(prereqs, rnd);
+				nodes.add(new NestIndentAssigner.Node("g" + i, prereqs));
+			}
+			NestIndentAssigner.Result r = NestIndentAssigner.assign(nodes);
+			assertEquals(n, r.ordered.size(), "trial " + trial + " dropped or duplicated a goal");
+			assertPrereqsAbove(r, nodes);
+			// Pre-order shape: a goal's parent is the nearest shallower row above it.
+			for (int i = 0; i < r.ordered.size(); i++)
+			{
+				String id = r.ordered.get(i);
+				String parent = r.primaryParent.get(id);
+				if (parent == null) continue;
+				int k = i - 1;
+				while (r.level.get(r.ordered.get(k)) >= r.level.get(id)) k--;
+				assertEquals(parent, r.ordered.get(k), "trial " + trial + ": " + id + " is not under its parent");
+			}
+		}
+	}
+
+	private static void assertPrereqsAbove(NestIndentAssigner.Result r, List<NestIndentAssigner.Node> nodes)
+	{
+		for (NestIndentAssigner.Node n : nodes)
+		{
+			for (String p : n.prereqs)
+			{
+				assertTrue(r.ordered.indexOf(p) < r.ordered.indexOf(n.id),
+					p + " must render above " + n.id + " but order was " + r.ordered);
+			}
+		}
 	}
 
 	@Test

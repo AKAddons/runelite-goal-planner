@@ -72,10 +72,13 @@ public final class SectionNestContainer extends JPanel
 	private final int indentW; // widest indent at full step, for preferred-size bookkeeping
 	/**
 	 * Left gutter before level-0 cards. LEFT_PAD when anything actually nests
-	 * (the gutter holds collapse chevrons and guide lines); 0 when the whole
-	 * section is level-0 - a degenerate outline, common since repeatable goals
-	 * auto-move out of their import section and can leave only flat cards
-	 * behind. Without this, those cards render inset for no visible reason.
+	 * or any row has a chevron (the gutter holds collapse chevrons and guide
+	 * lines); 0 when the whole section is flat with no chevrons - a degenerate
+	 * outline, common since repeatable goals auto-move out of their import
+	 * section and can leave only flat cards behind. Without this, those cards
+	 * render inset for no visible reason. The chevron check matters: collapsing
+	 * a root hides every indented row, and a 0 gutter then slid the card over
+	 * its own expand chevron so it could never be expanded again.
 	 */
 	private final int basePad;
 	private int stepPx = INDENT_STEP; // effective per-level indent, width-adapted each doLayout()
@@ -89,9 +92,14 @@ public final class SectionNestContainer extends JPanel
 		setLayout(null); // manual layout in doLayout()
 
 		int maxLevel = 0;
-		for (Row r : rows) maxLevel = Math.max(maxLevel, capped(r.level));
+		boolean anyChevron = false;
+		for (Row r : rows)
+		{
+			maxLevel = Math.max(maxLevel, capped(r.level));
+			anyChevron |= r.parent && onToggleCollapse != null;
+		}
 		this.deepestLevel = maxLevel;
-		this.basePad = maxLevel > 0 ? LEFT_PAD : 0;
+		this.basePad = maxLevel > 0 || anyChevron ? LEFT_PAD : 0;
 		this.indentW = basePad + maxLevel * INDENT_STEP;
 
 		for (Row r : rows)

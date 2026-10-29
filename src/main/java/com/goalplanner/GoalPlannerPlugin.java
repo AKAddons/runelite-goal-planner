@@ -900,7 +900,8 @@ public class GoalPlannerPlugin extends Plugin
 		// binding gate evaluates, so the gate compares against the right plan.
 		// setAccount no-ops when unchanged; on a real switch it migrates,
 		// reloads, and this drain sits out the settle window like a profile hop.
-		if (live > 0 && live != goalStore.getActiveAccount())
+		if (com.goalplanner.util.AccountBindingGate.isValidAccountHash(live)
+			&& live != goalStore.getActiveAccount())
 		{
 			goalStore.setAccount(live);
 			trackingSuspendedUntil = System.currentTimeMillis() + PROFILE_SWITCH_SUSPEND_MS;

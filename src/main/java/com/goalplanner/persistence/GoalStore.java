@@ -6,6 +6,7 @@ import com.goalplanner.model.GoalType;
 import com.goalplanner.model.Section;
 import com.goalplanner.model.Tag;
 import com.goalplanner.model.TagCategory;
+import com.goalplanner.util.AccountBindingGate;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import lombok.extern.slf4j.Slf4j;
@@ -130,7 +131,7 @@ public class GoalStore
 	/** Prefix a config key with the active profile + account namespace. */
 	private String profileKey(String key)
 	{
-		return activeAccount > 0
+		return AccountBindingGate.isValidAccountHash(activeAccount)
 			? activeProfile + ".a" + activeAccount + "." + key
 			: activeProfile + "." + key;
 	}
@@ -555,12 +556,13 @@ public class GoalStore
 	 * the account binding's adoption), records the character as this profile's
 	 * last-seen, and reloads.
 	 *
-	 * <p>Non-positive hashes are ignored rather than unscoping: a logged-out
-	 * sentinel must never silently switch whose plan is in memory.
+	 * <p>Invalid hashes ({@code -1}, {@code 0}) are ignored rather than
+	 * unscoping: a logged-out sentinel must never silently switch whose plan is
+	 * in memory. Negative hashes are real accounts and DO switch.
 	 */
 	public void setAccount(long accountHash)
 	{
-		if (accountHash <= 0 || accountHash == activeAccount) return;
+		if (!AccountBindingGate.isValidAccountHash(accountHash) || accountHash == activeAccount) return;
 		log.info("Switching account namespace: {} → {} (profile {})",
 			activeAccount, accountHash, activeProfile);
 		activeAccount = accountHash;
@@ -583,7 +585,7 @@ public class GoalStore
 	 */
 	private boolean migrateProfileIntoActiveAccount()
 	{
-		if (activeAccount <= 0) return false;
+		if (!AccountBindingGate.isValidAccountHash(activeAccount)) return false;
 		if (getCfg(SCHEMA_KEY) != null) return false; // account already has data
 		String src = activeProfile + ".";
 		if (configManager.getConfiguration(CONFIG_GROUP, src + SCHEMA_KEY) == null)
