@@ -8,6 +8,8 @@ bumps.
 
 ## [Unreleased]
 
+## [1.0.2] — 2026-10-28
+
 ### Fixed
 - **Progress updates live on every account** — on some accounts, goals only
   refreshed their percentage when you reordered the list. They now track every
