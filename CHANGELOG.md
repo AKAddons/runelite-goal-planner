@@ -8,6 +8,10 @@ bumps.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Newer combat achievements track.** Tasks numbered 640 and up (the Maggot King and Mad Angel tasks, e.g. Cordoned Off) can now be added as goals and tick off when completed. The game stores them in a new 21st progress slot that the planner didn't read.
+
 ## [1.0.2] — 2026-10-28
 
 ### Fixed
