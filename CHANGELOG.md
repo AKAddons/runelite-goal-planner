@@ -12,6 +12,10 @@ bumps.
 - **Progress updates live on every account** — on some accounts, goals only
   refreshed their percentage when you reordered the list. They now track every
   game tick like everyone else's (#2).
+- **Nested view keeps every requirement above the goal that needs it** — a
+  goal with several requirements (like an achievement diary) used to nest
+  under its first one and show above the rest. It now sits beneath the last,
+  with the others listed in its "Also needs" tooltip (#5).
 
 ## [1.0.1] — 2026-10-20
 

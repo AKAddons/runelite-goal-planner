@@ -18,9 +18,12 @@ import java.util.function.Predicate;
  * <p>Goals form a DAG, not a tree - a "diamond" goal can depend on several others
  * (Quest Cape needs three quests; Grandmaster CA needs Quest Cape AND a cape).
  * Indentation can only nest a goal under <em>one</em> parent, so each goal is
- * placed under its <b>primary parent</b>: the in-section prerequisite with the
- * greatest dependency depth (ties broken by input order), so the longest chain
- * forms the spine. Any remaining prerequisites are reported via
+ * placed under its <b>primary parent</b>: the in-section prerequisite that sits
+ * LOWEST in the outline at the moment the goal is placed. That is the only choice
+ * that keeps every prerequisite above the goal - nesting a diary under its first
+ * skill rendered it above the other seven (issue #5). Placement only ever inserts,
+ * never reorders, so the guarantee holds as later goals arrive. Any remaining
+ * prerequisites are reported via
  * {@link Result#extraPrereqs} (count) and {@link Result#primaryParent} so the UI
  * can hint at them (e.g. a tooltip) without drawing connector lines.
  *
@@ -121,78 +124,48 @@ public final class NestIndentAssigner
 		Set<String> present = new HashSet<>();
 		for (Node n : nodes) present.add(n.id);
 
-		// 1) dependency depth (max over prereqs + 1) - used to choose the primary parent.
-		Map<String, Integer> depth = new HashMap<>();
-		for (Node n : nodes)
-		{
-			int d = 0;
-			for (String p : n.prereqs)
-			{
-				if (!present.contains(p)) continue;
-				Integer pd = depth.get(p);
-				if (pd != null) d = Math.max(d, pd + 1);
-			}
-			depth.put(n.id, d);
-		}
-
-		// 2) primary parent = deepest in-section prereq (ties → first in input order);
-		//    build child lists (preserving input order) and the root list.
 		Map<String, String> primaryParent = new HashMap<>();
 		Map<String, Integer> extraPrereqs = new HashMap<>();
-		Map<String, List<String>> children = new HashMap<>();
-		for (Node n : nodes) children.put(n.id, new ArrayList<>());
-		List<String> roots = new ArrayList<>();
+		List<String> ordered = new ArrayList<>(nodes.size());
+		Map<String, Integer> level = new HashMap<>();
 
+		// Place each goal in input order. Primary parent = the already-placed
+		// in-section prereq lowest in the outline; the goal becomes that parent's
+		// last child (end of its subtree). A goal with no placed prereq - a root,
+		// or input that wasn't strictly topo-ordered - is appended at level 0, so
+		// nothing is ever dropped.
 		for (Node n : nodes)
 		{
+			if (level.containsKey(n.id)) continue; // defensive against duplicate ids
 			String best = null;
-			int bestDepth = -1;
+			int bestPos = -1;
 			int inSection = 0;
 			for (String p : n.prereqs)
 			{
 				if (!present.contains(p)) continue;
 				inSection++;
-				int pd = depth.getOrDefault(p, 0);
-				if (pd > bestDepth)
+				int pos = ordered.indexOf(p);
+				if (pos > bestPos)
 				{
-					bestDepth = pd;
+					bestPos = pos;
 					best = p;
 				}
 			}
 			primaryParent.put(n.id, best);
 			extraPrereqs.put(n.id, Math.max(0, inSection - 1));
-			if (best == null) roots.add(n.id);
-			else children.get(best).add(n.id);
-		}
-
-		// 3) pre-order walk: each parent immediately followed by its children.
-		List<String> ordered = new ArrayList<>(nodes.size());
-		Map<String, Integer> level = new HashMap<>();
-		for (String root : roots) walk(root, 0, children, ordered, level);
-
-		// Safety net: if the input wasn't strictly topo-ordered and something
-		// wasn't reached, append it at level 0 so nothing is silently dropped.
-		for (Node n : nodes)
-		{
-			if (!level.containsKey(n.id))
+			if (best == null)
 			{
 				ordered.add(n.id);
 				level.put(n.id, 0);
+				continue;
 			}
+			int parentLevel = level.get(best);
+			int at = bestPos + 1;
+			while (at < ordered.size() && level.get(ordered.get(at)) > parentLevel) at++;
+			ordered.add(at, n.id);
+			level.put(n.id, parentLevel + 1);
 		}
 
 		return new Result(ordered, level, primaryParent, extraPrereqs);
-	}
-
-	private static void walk(String id, int lvl, Map<String, List<String>> children,
-							 List<String> ordered, Map<String, Integer> level)
-	{
-		if (level.containsKey(id)) return; // defensive against accidental re-entry
-		ordered.add(id);
-		level.put(id, lvl);
-		for (String c : children.getOrDefault(id, new ArrayList<>()))
-		{
-			walk(c, lvl + 1, children, ordered, level);
-		}
 	}
 }
