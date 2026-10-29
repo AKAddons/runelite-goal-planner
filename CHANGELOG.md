@@ -8,6 +8,11 @@ bumps.
 
 ## [Unreleased]
 
+### Fixed
+- **Progress updates live on every account** — on some accounts, goals only
+  refreshed their percentage when you reordered the list. They now track every
+  game tick like everyone else's (#2).
+
 ## [1.0.1] — 2026-10-20
 
 ### Added

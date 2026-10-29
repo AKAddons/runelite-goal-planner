@@ -1446,7 +1446,29 @@ class GoalStoreTest
 	}
 
 	@Test
-	@DisplayName("non-positive hashes never switch the namespace")
+	@DisplayName("a negative hash is a real character with its own namespace")
+	void negativeHashSwitches()
+	{
+		Goal existing = Goal.builder().type(GoalType.CUSTOM).name("Pre-upgrade goal").build();
+		store.addGoal(existing);
+		store.save();
+
+		long negative = -8_765_432_109_876L;
+		store.setAccount(negative);
+		assertEquals(negative, store.getActiveAccount(),
+			"issue #2: a negative hash was treated as logged out and never scoped");
+		assertNotNull(store.findGoalById(existing.getId()),
+			"a negative-hash player adopts their existing plan like anyone else");
+
+		GoalStore fresh = new GoalStore(configManager, new com.google.gson.Gson());
+		fresh.load();
+		fresh.setAccount(negative);
+		assertNotNull(fresh.findGoalById(existing.getId()),
+			"the adopted plan must persist under the negative-hash namespace");
+	}
+
+	@Test
+	@DisplayName("the -1 and 0 sentinels never switch the namespace")
 	void sentinelsIgnored()
 	{
 		store.setAccount(111L);

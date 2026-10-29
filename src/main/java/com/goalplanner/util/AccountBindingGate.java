@@ -41,17 +41,13 @@ public final class AccountBindingGate
 	 * Classify a pairing. Called on every tracker drain, so it must be cheap and
 	 * side-effect-free beyond the announce latch.
 	 *
-	 * @param liveAccountHash  the logged-in account, or any non-positive value
-	 *                         when logged out. Deliberately not just {@code -1}:
-	 *                         the guard must not depend on which sentinel the
-	 *                         client uses, because falling through would unbind
-	 *                         the goal set and re-enable the very bug this
-	 *                         prevents.
+	 * @param liveAccountHash  the logged-in account, or {@code -1} when logged
+	 *                         out (see {@link #isValidAccountHash})
 	 * @param boundAccountHash the account this goal set belongs to, or 0 if unbound
 	 */
 	public Decision evaluate(long liveAccountHash, long boundAccountHash)
 	{
-		if (liveAccountHash <= 0L)
+		if (!isValidAccountHash(liveAccountHash))
 		{
 			// Logged out is not a mismatch - leave the latch alone so logging
 			// out and back in on the wrong account does not re-announce.
@@ -83,6 +79,18 @@ public final class AccountBindingGate
 		}
 		mismatchAnnounced = true;
 		return true;
+	}
+
+	/**
+	 * Whether a hash names a real account. Only {@code -1} (core's
+	 * {@code ACCOUNT_HASH_INVALID}, logged out) and {@code 0} (our "unbound")
+	 * are not. Real hashes are arbitrary 64-bit values, so about half of them
+	 * are NEGATIVE - a {@code > 0} check silently disabled all tracking for
+	 * those players (issue #2: progress only moved when the list was reordered).
+	 */
+	public static boolean isValidAccountHash(long accountHash)
+	{
+		return accountHash != -1L && accountHash != 0L;
 	}
 
 	/** Whether tracking may proceed for this decision. */

@@ -112,6 +112,29 @@ class WrongAccountTrackingTest
 	}
 
 	@Test
+	@DisplayName("a negative-hash account adopts and tracks on every drain, not only on a reorder")
+	void negativeHashAccountTracks()
+	{
+		// Issue #2: the gate read a negative hash as logged out, so the per-tick
+		// drain never ran and progress only moved on the reorder path.
+		long negative = -3_141_592_653_589_793L;
+		TrackerTestHarness<SkillTracker> h = TrackerTestHarness.forSkills(
+			new MockGameState().skillXp(Skill.PRAYER, 6_000_000));
+		Goal goal = prayerGoal();
+		h.store().addGoal(goal);
+
+		AccountBindingGate gate = new AccountBindingGate();
+		Decision first = gate.evaluate(negative, h.store().getBoundAccountHash());
+		assertEquals(Decision.ADOPT, first);
+		h.store().setBoundAccountHash(negative);
+		h.tracker().checkGoals(h.store().getGoals());
+		assertEquals(6_000_000, goal.getCurrentValue());
+
+		assertTrue(drainAllowed(gate, negative, h.store().getBoundAccountHash()),
+			"the next drain must still run for the bound negative-hash account");
+	}
+
+	@Test
 	@DisplayName("the right account still tracks normally - the gate must not break the common case")
 	void matchingAccountStillTracks()
 	{
