@@ -8,6 +8,8 @@ bumps.
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-10-31
+
 ### Fixed
 - **Item goals no longer forget your bank.** A goal could drop to just what you
   were carrying partway through a session, so 20 new Dragon nails showed as 20
