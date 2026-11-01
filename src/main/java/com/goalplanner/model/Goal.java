@@ -2,6 +2,7 @@ package com.goalplanner.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Data;
@@ -35,6 +36,12 @@ public class Goal
 	private String bossName;      // For BOSS goals - matches BossKillData display name
 	private int varbitId;         // For DIARY/COMBAT_ACHIEVEMENT goals
 	private int itemId;           // For ITEM_GRIND goals
+	/**
+	 * For ITEM_GRIND goals: the last known count per container id, so a
+	 * container the client can't read right now still counts. Null until the
+	 * goal first sees the bank.
+	 */
+	private Map<Integer, Integer> containerCounts;
 	private int spriteId;         // Optional sprite icon (e.g. CA tier sword); 0 = unset
 	private String tooltip;       // Optional hover tooltip text (e.g. CA full description)
 	private String sectionId;     // Section this goal belongs to; null = unassigned (migrated on load)

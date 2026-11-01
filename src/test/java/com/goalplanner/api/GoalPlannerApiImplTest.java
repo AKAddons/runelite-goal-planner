@@ -1078,6 +1078,25 @@ class GoalPlannerApiImplTest
 		}
 	}
 
+	@Test
+	@DisplayName("recordGoalContainerCounts stores a copy and detects no-ops and bad input")
+	void recordGoalContainerCounts()
+	{
+		Goal g = Goal.builder().type(GoalType.ITEM_GRIND).name("Cannonballs").itemId(2).targetValue(100).build();
+		store.addGoal(g);
+		String id = g.getId();
+		java.util.Map<Integer, Integer> counts = new java.util.HashMap<>();
+		counts.put(95, 80);
+
+		assertTrue(api.recordGoalContainerCounts(id, counts));
+		assertFalse(api.recordGoalContainerCounts(id, counts));
+		assertFalse(api.recordGoalContainerCounts(id, null));
+		assertFalse(api.recordGoalContainerCounts("no-such-goal", counts));
+
+		counts.put(95, 1);
+		assertEquals(80, g.getContainerCounts().get(95));
+	}
+
 	// ====================================================================
 	// Internal API: recordGoalProgress
 	// ====================================================================

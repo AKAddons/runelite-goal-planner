@@ -25,10 +25,9 @@ import static org.mockito.Mockito.*;
 /**
  * Tests for {@link ItemTracker}, the inventory+bank quantity tracker.
  *
- * <p>Covers the bank-null guard: pre-bank-visit, only growth past the
- * persisted value is allowed (so a partial inventory snapshot can't
- * wipe a persisted higher value). After the first bank visit, full
- * bank+inventory counts apply normally.
+ * <p>Covers the per-container memory: once a goal has seen the bank, a
+ * container that can't be read keeps its last known count. Before that, only
+ * growth past the persisted value is allowed.
  *
  * <p>Uses a real GoalStore + GoalPlannerApiImpl + ItemTracker against
  * Mockito-mocked Client / ItemContainer. The api is the canonical
@@ -132,25 +131,129 @@ class ItemTrackerTest
 	}
 
 	@Test
-	@DisplayName("After logout, a bank-less relog does not reset a persisted goal to 0")
-	void logoutReArmsBankGuard()
+	@DisplayName("A relog with no containers loaded keeps the persisted total")
+	void relogKeepsPersistedTotal()
 	{
 		Goal g = makeItemGoal(CANNONBALL_ID, 200);
-		// Session 1: bank seen, goal reaches 150 (50 inventory + 100 bank).
 		stubInventoryItems(mockItem(CANNONBALL_ID, 50));
 		stubBankItems(mockItem(CANNONBALL_ID, 100));
 		assertTrue(tracker.checkGoals(store.getGoals()));
 		assertEquals(150, g.getCurrentValue());
 
-		// Relog: the bank container is cleared (null) and the items live in the
-		// bank, so a count now sees only the (empty) inventory = 0.
-		tracker.onLogout();
 		stubBankNull();
-		stubInventoryItems();
+		when(client.getItemContainer(InventoryID.INVENTORY)).thenReturn(null);
 
-		// Without the re-armed guard this records 0; with it, the persisted 150 holds.
 		tracker.checkGoals(store.getGoals());
 		assertEquals(150, g.getCurrentValue());
+	}
+
+	@Test
+	@DisplayName("New loot adds to the banked count when the bank can't be read")
+	void lootAddsToRememberedBank()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+		assertEquals(80, g.getCurrentValue());
+
+		stubBankNull();
+		stubInventoryItems(mockItem(CANNONBALL_ID, 20));
+
+		assertTrue(tracker.checkGoals(store.getGoals()));
+		assertEquals(100, g.getCurrentValue());
+	}
+
+	@Test
+	@DisplayName("A bank read holding no items does not wipe the banked count")
+	void emptyBankReadKeepsRememberedCount()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+
+		stubBankItems();
+		stubInventoryItems(mockItem(CANNONBALL_ID, 20));
+		tracker.checkGoals(store.getGoals());
+		assertEquals(100, g.getCurrentValue());
+	}
+
+	@Test
+	@DisplayName("A bank of only placeholders does not wipe the banked count")
+	void placeholderBankReadKeepsRememberedCount()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+
+		stubBankItems(mockItem(CANNONBALL_ID, 0));
+		tracker.checkGoals(store.getGoals());
+		assertEquals(80, g.getCurrentValue());
+	}
+
+	@Test
+	@DisplayName("A real bank read replaces the remembered count, including going to zero")
+	void bankReadWithOtherItemsLowersCount()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+
+		stubBankItems(mockItem(999, 1));
+		assertTrue(tracker.checkGoals(store.getGoals()));
+		assertEquals(0, g.getCurrentValue());
+	}
+
+	@Test
+	@DisplayName("Depositing items keeps the total but marks the new split for saving")
+	void depositSavesNewSplit()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems(mockItem(CANNONBALL_ID, 20));
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+		store.saveDirtyGoals();
+
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 100));
+
+		assertTrue(tracker.checkGoals(store.getGoals()));
+		assertEquals(100, g.getCurrentValue());
+		assertTrue(store.getDirtyGoalIds().contains(g.getId()));
+		assertEquals(100, g.getContainerCounts().get(InventoryID.BANK.getId()));
+	}
+
+	@Test
+	@DisplayName("Remembered counts survive a save and reload")
+	void containerCountsSurviveJson()
+	{
+		com.google.gson.Gson gson = new com.google.gson.Gson();
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 80));
+		tracker.checkGoals(store.getGoals());
+
+		Goal reloaded = gson.fromJson(gson.toJson(g), Goal.class);
+		assertEquals(80, reloaded.getContainerCounts().get(InventoryID.BANK.getId()));
+	}
+
+	@Test
+	@DisplayName("A storage container read once keeps counting after a later bank read")
+	void unreadStorageStillCounts()
+	{
+		Goal g = makeItemGoal(CANNONBALL_ID, 300);
+		stubInventoryItems();
+		stubBankItems(mockItem(CANNONBALL_ID, 10));
+		stubContainer(InventoryID.SEED_VAULT, mockItem(CANNONBALL_ID, 5));
+		tracker.checkGoals(store.getGoals());
+		assertEquals(15, g.getCurrentValue());
+
+		when(client.getItemContainer(InventoryID.SEED_VAULT)).thenReturn(null);
+		tracker.checkGoals(store.getGoals());
+		assertEquals(15, g.getCurrentValue());
 	}
 
 	@Test
@@ -229,25 +332,19 @@ class ItemTrackerTest
 	}
 
 	@Test
-	@DisplayName("After first bank visit, full counts apply (sticky)")
-	void bankSeenIsSticky()
+	@DisplayName("After a bank read, losing the bank keeps it counted and carried items can still drop")
+	void carriedDropsWhileBankRemembered()
 	{
 		Goal g = makeItemGoal(CANNONBALL_ID, 200);
-		// First call: bank present → flag flips
 		stubInventoryItems(mockItem(CANNONBALL_ID, 50));
 		stubBankItems(mockItem(CANNONBALL_ID, 100));
 		tracker.checkGoals(store.getGoals());
 		assertEquals(150, g.getCurrentValue());
 
-		// Second call: bank container would return null (edge case) but the
-		// session flag should stay true
 		stubBankNull();
 		stubInventoryItems(mockItem(CANNONBALL_ID, 30));
-		// countItem returns 30 from inventory, 0 from bank (null) = 30.
-		// canTrustFullCount is true (sticky), so the update applies even though
-		// it's a decrease — bank is just empty as far as the tracker can see.
 		assertTrue(tracker.checkGoals(store.getGoals()));
-		assertEquals(30, g.getCurrentValue());
+		assertEquals(130, g.getCurrentValue());
 	}
 
 	// ====================================================================

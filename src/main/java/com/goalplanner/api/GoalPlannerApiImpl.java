@@ -274,6 +274,7 @@ public class GoalPlannerApiImpl implements GoalPlannerApi, GoalPlannerInternalAp
 	public void rememberImportedCode(String canonicalCode) { goalStore.rememberImportedCode(canonicalCode); }
 	@Override public boolean changeTarget(String goalId, int newTarget) { autoDeselectIfNotMember(goalId); return mutationService.changeTarget(goalId, newTarget); }
 	@Override public boolean recordGoalProgress(String goalId, int newValue) { return mutationService.recordGoalProgress(goalId, newValue); }
+	@Override public boolean recordGoalContainerCounts(String goalId, java.util.Map<Integer, Integer> counts) { return mutationService.recordGoalContainerCounts(goalId, counts); }
 	@Override public boolean isGoalOverridden(String goalId) { return mutationService.isGoalOverridden(goalId); }
 	@Override public int bulkRestoreDefaults(Set<String> goalIds) { return mutationService.bulkRestoreDefaults(goalIds); }
 	@Override public int bulkRemoveGoals(Set<String> goalIds) { return mutationService.bulkRemoveGoals(goalIds); }

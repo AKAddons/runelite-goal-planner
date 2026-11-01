@@ -815,6 +815,15 @@ class GoalMutationService
 		return true;
 	}
 
+	boolean recordGoalContainerCounts(String goalId, java.util.Map<Integer, Integer> counts)
+	{
+		Goal g = api.findGoal(goalId);
+		if (g == null || counts == null || counts.equals(g.getContainerCounts())) return false;
+		g.setContainerCounts(new java.util.HashMap<>(counts));
+		api.goalStore.markGoalDirty(goalId);
+		return true;
+	}
+
 	/**
 	 * When an OR-prereq completes, check if any parent goal should
 	 * auto-complete. A parent with OR-prereqs completes when ANY
