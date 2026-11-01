@@ -8,6 +8,13 @@ bumps.
 
 ## [Unreleased]
 
+### Fixed
+- **Item goals no longer forget your bank.** A goal could drop to just what you
+  were carrying partway through a session, so 20 new Dragon nails showed as 20
+  even with more in the bank. Each goal now remembers its count per container
+  and adds new items to what was banked. Open your bank once to correct a goal
+  that is already wrong.
+
 ## [1.0.2] — 2026-10-28
 
 ### Fixed

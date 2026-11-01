@@ -1079,11 +1079,6 @@ public class GoalPlannerPlugin extends Plugin
 			// Left the logged-in state: drop any seeding queued for the
 			// previous session so it can't seed into a different profile.
 			skillSyncGate.onLogout();
-			// Re-arm the item tracker's pre-bank guard. The bank container is
-			// cleared on leaving a world, so a relog must reopen the bank before
-			// a full count is trustworthy again - otherwise a bank-less count
-			// overwrites persisted item-goal values with 0 right after login.
-			itemTracker.onLogout();
 		}
 	}
 

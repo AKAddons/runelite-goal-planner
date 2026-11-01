@@ -310,6 +310,15 @@ public interface GoalPlannerInternalApi
 	 */
 	boolean recordGoalProgress(String goalId, int newValue);
 
+	/**
+	 * Tracker-only: remember an item goal's per-container counts. Like
+	 * {@link #recordGoalProgress}, this only marks the goal dirty for the
+	 * plugin's flush.
+	 *
+	 * @return true if the goal was mutated, false if no change
+	 */
+	boolean recordGoalContainerCounts(String goalId, java.util.Map<Integer, Integer> counts);
+
 	// ---------------------------------------------------------------------
 	// Selection (Phase 5) - ephemeral, not persisted
 	// ---------------------------------------------------------------------

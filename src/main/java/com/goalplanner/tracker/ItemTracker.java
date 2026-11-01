@@ -4,6 +4,7 @@ import com.goalplanner.api.GoalPlannerApiImpl;
 import com.goalplanner.model.Goal;
 import com.goalplanner.model.GoalStatus;
 import com.goalplanner.model.GoalType;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.InventoryID;
 import net.runelite.api.Item;
@@ -18,18 +19,14 @@ import java.util.Map;
 
 /**
  * Tracks item/resource quantity goals by checking inventory and bank.
- * Overrides the base checkGoals() because of the pre-bank-visit guard
- * and terminal completion logic that don't fit the standard loop.
+ * Overrides the base checkGoals() because each goal remembers its count per
+ * container, and because of terminal completion logic that doesn't fit the
+ * standard loop.
  */
+@Slf4j
 @Singleton
 public class ItemTracker extends AbstractTracker
 {
-	/**
-	 * Sticky for the lifetime of the plugin session: true once we've ever
-	 * seen a non-null bank container.
-	 */
-	private boolean bankSeenThisSession = false;
-
 	/**
 	 * Persistent storage containers we sum across when counting items.
 	 * Transient reward chests are intentionally excluded.
@@ -42,6 +39,9 @@ public class ItemTracker extends AbstractTracker
 		InventoryID.GROUP_STORAGE,
 		InventoryID.KINGDOM_OF_MISCELLANIA,
 	};
+
+	/** Last bank read state logged: "missing", "empty" or "read". */
+	private String lastBankRead;
 
 	@Inject
 	public ItemTracker(Client client, GoalPlannerApiImpl api)
@@ -62,35 +62,23 @@ public class ItemTracker extends AbstractTracker
 	}
 
 	/**
-	 * Reset per-session bank visibility. Call on logout / world-hop: the bank
-	 * ItemContainer is cleared when leaving a world, so until the player reopens
-	 * the bank in the new session a full count is missing the bank. Without this
-	 * reset the (sticky) "bank seen" flag stays true across a relog and lets a
-	 * bank-less count overwrite a persisted item-goal value with 0 - the goals
-	 * "reset to 0 on login" bug. After the reset the pre-bank guard re-engages,
-	 * holding each goal's persisted value until the bank is seen again.
-	 */
-	public void onLogout()
-	{
-		bankSeenThisSession = false;
-	}
-
-	/**
-	 * Overrides the base loop to add pre-bank-visit guard and terminal
-	 * completion logic.
+	 * Overrides the base loop so a goal's total is the sum of its remembered
+	 * per-container counts. A container the client can't read right now keeps
+	 * its last known count, so a missing or empty bank read can't wipe a total
+	 * and new loot adds to what was banked.
+	 *
+	 * <p>Until a goal has seen the bank it has nothing to sum, so it only grows
+	 * past its stored value. That covers new goals and goals saved before
+	 * per-container counts existed.
 	 */
 	@Override
 	public boolean checkGoals(List<Goal> goals)
 	{
-		boolean bankAvailable = client.getItemContainer(InventoryID.BANK) != null;
-		if (bankAvailable) bankSeenThisSession = true;
-		boolean canTrustFullCount = bankSeenThisSession;
-
 		boolean anyUpdated = false;
-		// Sum every container ONCE into base-variation-id → quantity, then each
-		// goal is a single lookup, so N item goals cost one container scan rather
-		// than N. Built lazily so a tick with no active item goals scans nothing.
-		Map<Integer, Integer> variantCounts = null;
+		// Read every container ONCE, then each goal is a lookup per container, so
+		// N item goals cost one container scan rather than N. Built lazily so a
+		// tick with no active item goals scans nothing.
+		Map<Integer, Map<Integer, Integer>> readable = null;
 
 		for (Goal goal : goals)
 		{
@@ -111,20 +99,36 @@ public class ItemTracker extends AbstractTracker
 				continue;
 			}
 
-			if (variantCounts == null)
+			if (readable == null)
 			{
-				variantCounts = snapshotVariantCounts();
+				readable = snapshotReadableContainers();
 			}
-			int totalCount = variantCounts.getOrDefault(ItemVariationMapping.map(goal.getItemId()), 0);
+			int base = ItemVariationMapping.map(goal.getItemId());
 
-			// Pre-bank-visit guard: only allow upward updates so we never
-			// shrink a persisted value with a partial inventory-only snapshot.
-			if (!canTrustFullCount && totalCount <= goal.getCurrentValue())
+			Map<Integer, Integer> counts = new HashMap<>();
+			if (goal.getContainerCounts() != null)
+			{
+				counts.putAll(goal.getContainerCounts());
+			}
+			for (Map.Entry<Integer, Map<Integer, Integer>> container : readable.entrySet())
+			{
+				counts.put(container.getKey(), container.getValue().getOrDefault(base, 0));
+			}
+			int total = counts.values().stream().mapToInt(Integer::intValue).sum();
+
+			if (counts.containsKey(InventoryID.BANK.getId()))
+			{
+				if (api.recordGoalContainerCounts(goal.getId(), counts))
+				{
+					anyUpdated = true;
+				}
+			}
+			else if (total <= goal.getCurrentValue())
 			{
 				continue;
 			}
 
-			if (api.recordGoalProgress(goal.getId(), totalCount))
+			if (api.recordGoalProgress(goal.getId(), total))
 			{
 				anyUpdated = true;
 			}
@@ -134,14 +138,16 @@ public class ItemTracker extends AbstractTracker
 	}
 
 	/**
-	 * Sum every counted container once into {@code base variation id → total
-	 * quantity}. Variations of one item (charge/degrade states) collapse to a
-	 * single base id via {@link ItemVariationMapping}, so a goal looks up its
-	 * total in O(1). Null (unseen) containers contribute nothing.
+	 * Read every counted container once into {@code container id → base
+	 * variation id → quantity}. Variations of one item (charge/degrade states)
+	 * collapse to a single base id via {@link ItemVariationMapping}. Null
+	 * containers are left out, and so are storage containers holding nothing:
+	 * an empty read is not evidence the items are gone. Inventory and equipment
+	 * really can be empty, so those count as read.
 	 */
-	private Map<Integer, Integer> snapshotVariantCounts()
+	private Map<Integer, Map<Integer, Integer>> snapshotReadableContainers()
 	{
-		Map<Integer, Integer> counts = new HashMap<>();
+		Map<Integer, Map<Integer, Integer>> readable = new HashMap<>();
 		for (InventoryID id : COUNTED_CONTAINERS)
 		{
 			ItemContainer container = client.getItemContainer(id);
@@ -149,12 +155,32 @@ public class ItemTracker extends AbstractTracker
 			{
 				continue;
 			}
+			Map<Integer, Integer> counts = new HashMap<>();
 			for (Item item : container.getItems())
 			{
-				counts.merge(ItemVariationMapping.map(item.getId()), item.getQuantity(), Integer::sum);
+				if (item.getId() > 0 && item.getQuantity() > 0)
+				{
+					counts.merge(ItemVariationMapping.map(item.getId()), item.getQuantity(), Integer::sum);
+				}
+			}
+			if (!counts.isEmpty() || id == InventoryID.INVENTORY || id == InventoryID.EQUIPMENT)
+			{
+				readable.put(id.getId(), counts);
 			}
 		}
-		return counts;
+		logBankRead(readable.containsKey(InventoryID.BANK.getId()));
+		return readable;
+	}
+
+	/** Log bank read changes, to show what a bad read looks like in the field. */
+	private void logBankRead(boolean read)
+	{
+		String state = read ? "read" : client.getItemContainer(InventoryID.BANK) == null ? "missing" : "empty";
+		if (!state.equals(lastBankRead))
+		{
+			log.debug("Bank container {} -> {} (game state {})", lastBankRead, state, client.getGameState());
+			lastBankRead = state;
+		}
 	}
 
 	/**
