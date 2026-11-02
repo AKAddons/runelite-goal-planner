@@ -2350,7 +2350,7 @@ public class GoalPanel extends PluginPanel
 	{
 		boolean hasSelection = !api.getSelectedGoalIds().isEmpty();
 		// Toggle closed only when the create-goal surface is what is already open.
-		if (!hasSelection && dockCreateOpen && actionDock.isExpanded()
+		if (!hasSelection && !dockCreateCovered() && dockCreateOpen && actionDock.isExpanded()
 			&& (dockCreateNav == CreateNav.GRID || dockCreateNav == CreateNav.FORM
 				|| dockCreateNav == CreateNav.SECTION_PICK))
 		{
@@ -2358,6 +2358,7 @@ public class GoalPanel extends PluginPanel
 			actionDock.setExpanded(false);
 			return;
 		}
+		clearSurfacesCoveringCreate();
 		if (hasSelection)
 		{
 			// Leave the edit/multi surface for create; the list stops highlighting.
@@ -2374,6 +2375,7 @@ public class GoalPanel extends PluginPanel
 		resetCreatePicks();
 		mountCreateSurface();
 		actionDock.setExpanded(true);
+		refreshDock();
 	}
 
 	/**
@@ -2384,13 +2386,14 @@ public class GoalPanel extends PluginPanel
 	private void onFooterCreateSection()
 	{
 		boolean hasSelection = !api.getSelectedGoalIds().isEmpty();
-		if (!hasSelection && dockCreateOpen && actionDock.isExpanded()
+		if (!hasSelection && !dockCreateCovered() && dockCreateOpen && actionDock.isExpanded()
 			&& dockCreateNav == CreateNav.SECTION_NEW)
 		{
 			dockCreateOpen = false;
 			actionDock.setExpanded(false);
 			return;
 		}
+		clearSurfacesCoveringCreate();
 		if (hasSelection)
 		{
 			api.clearGoalSelection();
@@ -2402,6 +2405,28 @@ public class GoalPanel extends PluginPanel
 		dockCreateTargetSection = null;
 		mountCreateSurface();
 		actionDock.setExpanded(true);
+		refreshDock();
+	}
+
+	/** True while refreshDock would route to something other than the create
+	 *  surface even with no goal selected: an overlay, or a selected section. */
+	private boolean dockCreateCovered()
+	{
+		return dockOverlayActive()
+			|| dockReqRemoveTarget != null
+			|| dockChoiceTitle != null
+			|| dockInputTitle != null
+			|| selectedSectionId != null;
+	}
+
+	/** The footer mounts the create surface directly, so whatever refreshDock would
+	 *  route to ahead of it has to go first. Left armed, it wins the next refresh:
+	 *  already "mounted", it returns without touching the dock and the create
+	 *  surface's tiles appear to do nothing (field report 2026-11-01). */
+	private void clearSurfacesCoveringCreate()
+	{
+		clearTransientOverlays();
+		selectedSectionId = null;
 	}
 
 	// ============================================================
@@ -3144,6 +3169,17 @@ public class GoalPanel extends PluginPanel
 		dockImportMounted = false;
 		dockSavedActive = false;
 		dockSavedMounted = false;
+		dockReqRemoveTarget = null;
+		dockReqMounted = false;
+		dockChoiceTitle = null;
+		dockChoiceLabels = null;
+		dockChoicePick = null;
+		dockChoiceMounted = false;
+		dockInputTitle = null;
+		dockInputCommit = null;
+		dockInputMounted = false;
+		dockInputFailed = false;
+		dockSectionMounted = false;
 	}
 
 	private boolean moveTargetValid()
@@ -6372,8 +6408,7 @@ public class GoalPanel extends PluginPanel
 		dockSectionGroup = null;
 		// A dismiss from update mode ("Edit goal") leaves it unsaved, like any other
 		// overlay the grab handle drops.
-		dockEditFormGoalId = null;
-		dockEditFormMounted = false;
+		clearTransientOverlays();
 		dockCreateOpen = false;
 		dockCreateNav = CreateNav.GRID;
 		dockCreateType = null;

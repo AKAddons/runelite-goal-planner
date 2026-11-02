@@ -8,6 +8,11 @@ bumps.
 
 ## [Unreleased]
 
+### Fixed
+- **Create Goal works after opening the "..." menu.** Pressing Create Goal with
+  Options open, or with a section selected, showed the goal types but none of
+  them responded to clicks. The dock's grab handle also closes Options now.
+
 ## [1.0.3] — 2026-10-31
 
 ### Fixed
