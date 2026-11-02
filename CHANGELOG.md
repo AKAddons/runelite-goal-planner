@@ -8,6 +8,8 @@ bumps.
 
 ## [Unreleased]
 
+## [1.0.4] — 2026-11-01
+
 ### Fixed
 - **Create Goal works after opening the "..." menu.** Pressing Create Goal with
   Options open, or with a section selected, showed the goal types but none of
