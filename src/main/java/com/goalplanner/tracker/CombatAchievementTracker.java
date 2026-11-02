@@ -11,8 +11,8 @@ import javax.inject.Singleton;
 
 /**
  * Tracks combat achievement completion via bit-packed CA_TASK_COMPLETED
- * varplayers. OSRS stores CA completion across 20 varplayers (32 bits
- * each = 640 task slots).
+ * varplayers. OSRS stores CA completion across 21 varplayers (32 bits
+ * each = 672 task slots).
  */
 @Singleton
 public class CombatAchievementTracker extends AbstractTracker
@@ -38,9 +38,11 @@ public class CombatAchievementTracker extends AbstractTracker
 		VarPlayerID.CA_TASK_COMPLETED_17,
 		VarPlayerID.CA_TASK_COMPLETED_18,
 		VarPlayerID.CA_TASK_COMPLETED_19,
+		VarPlayerID.CA_TASK_COMPLETED_20,
 	};
 
-	private static final int MAX_TASK_ID = CA_VARPS.length * 32 - 1;
+	/** Highest task id a varplayer covers (671). */
+	public static final int MAX_TASK_ID = CA_VARPS.length * 32 - 1;
 
 	@Inject
 	public CombatAchievementTracker(Client client, GoalPlannerApiImpl api)

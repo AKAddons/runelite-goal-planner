@@ -10,6 +10,7 @@ import com.goalplanner.model.GoalType;
 import com.goalplanner.model.ItemTag;
 import com.goalplanner.model.Tag;
 import com.goalplanner.model.TagCategory;
+import com.goalplanner.tracker.CombatAchievementTracker;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -1834,9 +1835,9 @@ class GoalCreationService
 	String addCombatAchievementGoal(int caTaskId)
 	{
 		log.debug("API.public addCombatAchievementGoal(caTaskId={})", caTaskId);
-		if (caTaskId < 0 || caTaskId > 639)
+		if (caTaskId < 0 || caTaskId > CombatAchievementTracker.MAX_TASK_ID)
 		{
-			log.warn("addCombatAchievementGoal: caTaskId {} out of range [0, 639]", caTaskId);
+			log.warn("addCombatAchievementGoal: caTaskId {} out of range [0, {}]", caTaskId, CombatAchievementTracker.MAX_TASK_ID);
 			return null;
 		}
 

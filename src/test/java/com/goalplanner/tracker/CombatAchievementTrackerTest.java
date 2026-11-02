@@ -4,6 +4,7 @@ import com.goalplanner.model.Goal;
 import com.goalplanner.model.GoalType;
 import com.goalplanner.testsupport.MockGameState;
 import com.goalplanner.testsupport.TrackerTestHarness;
+import net.runelite.api.gameval.VarPlayerID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -40,6 +41,29 @@ class CombatAchievementTrackerTest
 		assertTrue(h.tracker().checkGoals(h.store().getGoals()));
 		assertEquals(1, goal.getCurrentValue());
 		assertTrue(goal.isComplete());
+	}
+
+	@Test
+	@DisplayName("tasks 640-671 read from CA_TASK_COMPLETED_20 (Cordoned Off, id 644 = bit 4)")
+	void readsTheTwentyFirstVarplayer()
+	{
+		MockGameState state = new MockGameState()
+			.caTaskComplete(644)
+			.caTaskComplete(671);
+
+		var h = TrackerTestHarness.forCombatAchievements(state);
+		Goal cordonedOff = makeCaGoal(644);
+		Goal lastSlot = makeCaGoal(671);
+		Goal notDone = makeCaGoal(645);
+		h.store().addGoal(cordonedOff);
+		h.store().addGoal(lastSlot);
+		h.store().addGoal(notDone);
+
+		assertTrue(h.tracker().checkGoals(h.store().getGoals()));
+		assertEquals(1, cordonedOff.getCurrentValue());
+		assertEquals(1, lastSlot.getCurrentValue());
+		assertEquals(0, notDone.getCurrentValue());
+		assertEquals(VarPlayerID.CA_TASK_COMPLETED_20, 5673, "gameval id the game added in 1.13.4");
 	}
 
 	@Test

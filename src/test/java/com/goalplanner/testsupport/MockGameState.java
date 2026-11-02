@@ -166,6 +166,7 @@ public final class MockGameState
 			case 17: return VarPlayerID.CA_TASK_COMPLETED_17;
 			case 18: return VarPlayerID.CA_TASK_COMPLETED_18;
 			case 19: return VarPlayerID.CA_TASK_COMPLETED_19;
+			case 20: return VarPlayerID.CA_TASK_COMPLETED_20;
 			default:
 				throw new IllegalArgumentException("CA varp index out of range: " + index);
 		}

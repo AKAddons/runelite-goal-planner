@@ -12,6 +12,7 @@ bumps.
 - **Create Goal works after opening the "..." menu.** Pressing Create Goal with
   Options open, or with a section selected, showed the goal types but none of
   them responded to clicks. The dock's grab handle also closes Options now.
+- **Newer combat achievements track.** Tasks numbered 640 and up (the Maggot King and Mad Angel tasks, e.g. Cordoned Off) can now be added as goals and tick off when completed. The game stores them in a new 21st progress slot that the planner didn't read.
 
 ## [1.0.3] — 2026-10-31
 
