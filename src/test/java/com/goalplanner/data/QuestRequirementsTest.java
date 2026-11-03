@@ -195,6 +195,47 @@ class QuestRequirementsTest
 		}
 
 		@Test
+		@DisplayName("Mudfoot's Big Adventure is free-to-play with no requirements and lamp rewards")
+		void mudfootsBigAdventure()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.MUDFOOTS_BIG_ADVENTURE);
+			assertNotNull(r);
+			assertTrue(r.skills.isEmpty());
+			assertTrue(r.prereqQuests.isEmpty());
+			assertEquals(1, QuestRequirements.questPointReward(Quest.MUDFOOTS_BIG_ADVENTURE));
+			assertTrue(QuestRequirements.isF2P(Quest.MUDFOOTS_BIG_ADVENTURE));
+			assertTrue(QuestRequirements.rewardsLamp(Quest.MUDFOOTS_BIG_ADVENTURE));
+		}
+
+		@Test
+		@DisplayName("The Writings on the Wall asks for Agility 22 and Thieving 20, awards 1 QP")
+		void writingsOnTheWall()
+		{
+			QuestRequirements.Reqs r = QuestRequirements.lookup(Quest.THE_WRITINGS_ON_THE_WALL);
+			assertNotNull(r);
+			assertEquals(2, r.skills.size());
+			assertEquals(22, level(r, Skill.AGILITY));
+			assertEquals(20, level(r, Skill.THIEVING));
+			assertTrue(r.prereqQuests.isEmpty());
+			assertEquals(1, QuestRequirements.questPointReward(Quest.THE_WRITINGS_ON_THE_WALL));
+			assertFalse(QuestRequirements.isF2P(Quest.THE_WRITINGS_ON_THE_WALL));
+			assertEquals(java.util.List.of(Skill.AGILITY, Skill.THIEVING),
+				QuestRequirements.xpRewards(Quest.THE_WRITINGS_ON_THE_WALL));
+		}
+
+		@Test
+		@DisplayName("the four free-to-play quests given lamps on 3 Nov 2026 reward a lamp")
+		void novemberLampQuests()
+		{
+			for (Quest q : new Quest[]{Quest.BLACK_KNIGHTS_FORTRESS, Quest.DEMON_SLAYER,
+				Quest.ERNEST_THE_CHICKEN, Quest.ROMEO__JULIET})
+			{
+				assertTrue(QuestRequirements.rewardsLamp(q), q.name());
+				assertTrue(QuestRequirements.isF2P(q), q.name());
+			}
+		}
+
+		@Test
 		@DisplayName("A Ruff Situation asks for Crafting 15, awards 1 QP")
 		void aRuffSituation()
 		{

@@ -8,6 +8,14 @@ bumps.
 
 ## [Unreleased]
 
+### Added
+- **Mudfoot's Big Adventure and The Writing's on the Wall** (3 November 2026)
+  can be added as quest goals, with their requirements and rewards.
+
+### Changed
+- Black Knights' Fortress, Demon Slayer, Ernest the Chicken and Romeo &
+  Juliet now note their new experience lamp rewards.
+
 ## [1.0.4] — 2026-11-01
 
 ### Fixed
