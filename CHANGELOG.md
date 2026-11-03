@@ -8,6 +8,8 @@ bumps.
 
 ## [Unreleased]
 
+## [1.0.5] — 2026-11-03
+
 ### Added
 - **Mudfoot's Big Adventure and The Writing's on the Wall** (3 November 2026)
   can be added as quest goals, with their requirements and rewards.
